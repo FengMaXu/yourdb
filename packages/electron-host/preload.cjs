@@ -25,7 +25,6 @@ contextBridge.exposeInMainWorld('dataAgent', {
     quitAndInstallUpdate: () => ipcRenderer.invoke('data-agent:quit-and-install-update'),
     selectPythonExecutable: () => ipcRenderer.invoke('data-agent:select-python-executable'),
     uploadWorkspaceFile: (payload) => ipcRenderer.invoke('data-agent:workspace-upload', payload),
-    showMenu: (menuName, position) => ipcRenderer.invoke('data-agent:show-menu', { menuName, position }),
     getBackendPort: () => ipcRenderer.invoke('data-agent:get-backend-port'),
     onUpdateEvent: (listener) => {
         const handler = (_event, payload) => listener(payload);

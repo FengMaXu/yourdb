@@ -53,6 +53,7 @@ export interface MainDeps {
     webContents?: { executeJavaScript(script: string): Promise<unknown> };
   };
   ipcMain: unknown;
+  Menu?: { setApplicationMenu(menu: null): void };
   safeStorage?: ElectronSafeStorageLike;
   dialog?: ElectronDialogLike;
   autoUpdater?: ElectronUpdateServiceLike;
@@ -152,7 +153,6 @@ export function registerDesktopCapabilities(
     await options.workspace.writeBytes(storagePath, bytes);
     return { filename: fileName, session_id: sessionId, relative_path: fileName, size: bytes.byteLength };
   });
-  handle("data-agent:show-menu", async () => false);
   handle("data-agent:get-backend-port", async () => null);
   handle("data-agent:check-for-updates", async () => options.autoUpdater ? options.autoUpdater.checkForUpdates() : { ok: false, reason: "UPDATES_NOT_CONFIGURED" });
   handle("data-agent:download-update", async () => options.autoUpdater ? options.autoUpdater.downloadUpdate() : { ok: false, reason: "UPDATES_NOT_CONFIGURED" });
@@ -491,6 +491,11 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
     await queryExecutor.close();
     await mcpPlugins.close();
   };
+  const isDev = process.env.DATA_AGENT_DEV === "1" || process.argv.includes("--dev");
+  // Electron's stock File/Edit/View menu is English and exposes reload and DevTools; the
+  // packaged app has no menu bar. Dev keeps it for those shortcuts. Windows clipboard keys
+  // work without a menu.
+  if (!isDev) deps.Menu?.setApplicationMenu(null);
   const window = new deps.BrowserWindow({
     width: 1440,
     height: 900,
@@ -501,7 +506,7 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
     },
   });
   const devServerUrl = process.env.DATA_AGENT_DEV_URL?.trim() || "http://localhost:5173";
-  if (process.env.DATA_AGENT_DEV === "1" || process.argv.includes("--dev")) {
+  if (isDev) {
     await window.loadURL(devServerUrl);
   } else {
     await window.loadFile(path.join(paths.rendererDist, "index.html"));

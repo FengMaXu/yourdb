@@ -20,7 +20,6 @@ export interface DataAgentDesktopBridge {
     quitAndInstallUpdate: () => Promise<unknown>;
     selectPythonExecutable: () => Promise<string | null>;
     uploadWorkspaceFile: (payload: { fileName: string; bytes: Uint8Array; sessionId?: string }) => Promise<{ filename: string; session_id: string; relative_path: string; size: number }>;
-    showMenu: (menuName: string, position: { x: number; y: number }) => Promise<boolean>;
     onUpdateEvent: (callback: (event: unknown) => void) => () => void;
 }
 

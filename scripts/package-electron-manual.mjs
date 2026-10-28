@@ -8,7 +8,8 @@
  * steps deterministically:
  *
  *   1. copy the local Electron runtime into <out>/win-unpacked
- *   2. rename electron.exe -> <productName>.exe
+ *   2. rename electron.exe -> <productName>.exe and stamp the app icon and
+ *      version details into it (frontend/scripts/after-pack.cjs)
  *   3. pack the application (package.json + dist + electron + electron-host)
  *      into resources/app.asar
  *   4. stage extraResources (python-runtime)
@@ -16,6 +17,7 @@
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 const root = path.resolve(new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
@@ -71,8 +73,15 @@ for (const file of readdirSync(path.join(out, "locales"))) {
   if (!keptLocales.has(file)) rmSync(path.join(out, "locales", file), { force: true });
 }
 
-// 2. Product executable name
+// 2. Product executable name. Without the afterPack stamp the exe, its shortcuts and the
+// taskbar keep Electron's own icon and "Electron" file details.
 renameSync(path.join(out, "electron.exe"), path.join(out, exeName));
+const afterPack = createRequire(import.meta.url)(path.join(frontend, "scripts", "after-pack.cjs"));
+await afterPack({
+  electronPlatformName: "win32",
+  appOutDir: out,
+  packager: { appInfo: { productFilename: productName, version: pkg.version } },
+});
 
 // 3. Application archive
 const staging = path.join(root, ".tmp", "electron-app-stage");
@@ -176,6 +185,7 @@ if (process.env.SKIP_INSTALLER !== "1") {
     const nsi = template
       .replace("{{APP_NAME}}", productName)
       .replace("{{APP_VERSION}}", pkg.version)
+      .replaceAll("{{ICON}}", path.join(frontend, "resources", "icon.ico"))
       .replace("{{SRC_DIR}}", path.resolve(out))
       .replace("{{OUT_FILE}}", path.resolve(releaseDir, installerName));
     const nsiPath = path.join(releaseDir, "data-agent.nsi");
