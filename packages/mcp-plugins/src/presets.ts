@@ -64,14 +64,14 @@ export const QCC_PRESET: McpPreset = {
       label: "API Key",
       kind: "secret",
       required: true,
-      placeholder: "粘贴企查查智能体数据平台的 API Key",
-      help: "在 agent.qcc.com 注册登录后，于个人中心获取。按调用计费，费用由该 Key 所属账户承担。",
+      placeholder: "Bearer 开头的 API Key，原样粘贴即可",
+      help: "在 agent.qcc.com 注册登录后，于个人中心复制 API Key，带不带 Bearer 前缀都可以。按调用计费，费用由该 Key 所属账户承担。",
       link: { label: "获取 API Key", url: "https://agent.qcc.com/profile/api-key" },
     },
     { key: "groups", label: "数据分组", kind: "choices", required: true, choices: QCC_GROUPS, defaultValue: DEFAULT_QCC_GROUPS },
   ],
   connections(values) {
-    // The platform shows the key as a header value; a pasted "Bearer " prefix must not be sent twice.
+    // The platform shows the key as a header value: users paste it whole, prefix included, and it is sent once.
     const apiKey = text(values, "apiKey").replace(/^bearer\s+/i, "");
     const known = new Set<string>(QCC_GROUPS.map((group) => group.value));
     return list(values, "groups", DEFAULT_QCC_GROUPS).filter((group) => known.has(group)).map((group) => ({
