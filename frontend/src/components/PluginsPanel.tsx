@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, Plus, Loader2 } from './icons/Typicons';
 import {
     type MCPConfig,
-    type MCPPreset,
     type MCPServerConfig,
     type MCPServerRequest,
     type MCPServerStatus,
@@ -11,6 +10,7 @@ import {
 } from '../api/client';
 import { getMcpConfigViaRuntime, getMcpServersViaRuntime, listSkillsViaRuntime, restartMcpServerViaRuntime, saveMcpConfigViaRuntime, testMcpServerViaRuntime } from '../api/runtime-client';
 import { useLanguage } from '../context/LanguageContext';
+import McpSettings from './plugins/McpSettings';
 
 export type PluginsTab = 'MCP' | 'Skills';
 
@@ -264,67 +264,6 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
         }));
     };
 
-    const presetLabelStyle: React.CSSProperties = { display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' };
-    const presetHelpStyle: React.CSSProperties = { fontSize: '0.8rem', color: '#6b7280', marginTop: '6px' };
-
-    const renderPresetFields = (index: number, preset: MCPPreset) => {
-        const server = mcpConfig.servers[index];
-        return (
-            <>
-                <p style={{ margin: 0, fontSize: '0.9rem', color: '#4b5563' }}>{preset.description}</p>
-                {preset.fields.map((field) => {
-                    const id = `mcp-preset-${preset.id}-${field.key}`;
-                    const required = field.required ? <span aria-hidden="true" style={{ color: '#b91c1c' }}> *</span> : null;
-                    if (field.kind === 'choices') {
-                        const saved = server.field_values?.[field.key];
-                        const chosen = Array.isArray(saved) ? saved : (field.defaultValue || []);
-                        return (
-                            <fieldset key={field.key} style={{ border: 'none', margin: 0, padding: 0 }}>
-                                <legend style={presetLabelStyle}>{field.label}{required}</legend>
-                                <div style={{ display: 'grid', gap: '6px' }}>
-                                    {(field.choices || []).map((choice) => (
-                                        <label key={choice.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.9rem', color: '#374151', cursor: 'pointer' }}>
-                                            <input
-                                                type="checkbox"
-                                                checked={chosen.includes(choice.value)}
-                                                onChange={(e) => updatePresetValue(index, field.key, e.target.checked ? [...chosen, choice.value] : chosen.filter((value) => value !== choice.value), false)}
-                                                style={{ width: '16px', height: '16px' }}
-                                            />
-                                            {choice.label}
-                                        </label>
-                                    ))}
-                                </div>
-                                {field.help && <div style={presetHelpStyle}>{field.help}</div>}
-                            </fieldset>
-                        );
-                    }
-                    const secret = field.kind === 'secret';
-                    const value = secret ? (server.field_inputs?.[field.key] ?? '') : String(server.field_values?.[field.key] ?? '');
-                    return (
-                        <div key={field.key}>
-                            <label htmlFor={id} style={{ ...presetLabelStyle, display: 'flex', justifyContent: 'space-between' }}>
-                                <span>{field.label}{required}</span>
-                                {secret && field.configured && <span style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 400 }}>{t('plugins.secretConfigured')}</span>}
-                            </label>
-                            <div className="plugins-input-group">
-                                <input
-                                    id={id}
-                                    type={secret ? 'password' : 'text'}
-                                    autoComplete="off"
-                                    value={value}
-                                    onChange={(e) => updatePresetValue(index, field.key, e.target.value, secret)}
-                                    placeholder={secret && field.configured ? t('plugins.secretKeep') : (field.placeholder || '')}
-                                    style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }}
-                                />
-                            </div>
-                            {field.help && <div style={presetHelpStyle}>{field.help}</div>}
-                        </div>
-                    );
-                })}
-            </>
-        );
-    };
-
     const loadSkills = async () => {
         setIsLoadingSkills(true);
         setSkillsError(null);
@@ -347,9 +286,6 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
         tool_count: server.enabled ? (server.tool_count ?? 0) : 0,
     }));
     const filteredSkills = skills.filter((skill) => !skillQuery || skill.name.toLowerCase().includes(skillQuery.toLowerCase()) || (skill.description || '').toLowerCase().includes(skillQuery.toLowerCase()));
-    const selectedServerStatus = selectedMcpServer === null ? null : displayedMcpServers.find(
-        server => server.name === mcpConfig.servers[selectedMcpServer]?.name,
-    );
 
     const isHostManaged = (server: MCPServerStatus) => Boolean(server.host_managed);
 
@@ -519,212 +455,25 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
                         )}
 
                         {mcpTab === '设置' && (
-                            <div className="plugins-server-settings-layout" style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '24px', flex: 1 }}>
-                                <div style={{ display: 'grid', gap: '12px', alignContent: 'start' }}>
-                                    {mcpConfig.servers.length === 0 && (
-                                        <div style={{ background: '#fff', border: '1px dashed #d1d5db', borderRadius: '12px', padding: '18px', color: '#6b7280', textAlign: 'center' }}>
-                                            {t('plugins.noSrvHint')}
-                                        </div>
-                                    )}
-                                    {mcpConfig.servers.map((server, index) => (
-                                        <button
-                                            key={`${server.name || 'new'}-${index}`}
-                                            onClick={() => setSelectedMcpServer(index)}
-                                            style={{
-                                                textAlign: 'left',
-                                                background: selectedMcpServer === index ? '#eef2ff' : '#fff',
-                                                border: selectedMcpServer === index ? '1px solid #a5b4fc' : '1px solid #e5e7eb',
-                                                borderRadius: '12px',
-                                                padding: '14px',
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            <div style={{ fontWeight: 600, color: '#111827', marginBottom: '4px' }}>{server.preset?.title ?? (server.name || t('plugins.unnamedSrv'))}</div>
-                                            <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{server.transport} · {server.server_type || 'service'}</div>
-                                        </button>
-                                    ))}
-                                </div>
-
-                                <div>
-                                    {selectedMcpServer === null || !mcpConfig.servers[selectedMcpServer] ? (
-                                        <div style={{ background: '#fff', border: '1px dashed #d1d5db', borderRadius: '12px', padding: '24px', color: '#6b7280' }}>
-                                            {t('plugins.selectHint')}
-                                        </div>
-                                    ) : (
-                                        <div style={{ background: '#fff', borderRadius: '16px', padding: '24px', border: '1px solid #f3f4f6' }}>
-                                            <div style={{ marginBottom: '24px' }}>
-                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                                                    <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600, color: '#111827' }}>{t('plugins.serverSettings')}</h4>
-                                                    {selectedServerStatus && (
-                                                        <span style={{
-                                                            fontSize: '0.75rem',
-                                                            color: getServerStatusMeta(selectedServerStatus).fg,
-                                                            background: getServerStatusMeta(selectedServerStatus).bg,
-                                                            padding: '2px 8px',
-                                                            borderRadius: '999px'
-                                                        }}>
-                                                            {getServerStatusMeta(selectedServerStatus).label}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                <p style={{ fontSize: '0.9rem', color: '#4b5563' }}>{t('plugins.serverHint')}</p>
-                                            </div>
-
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                                                {mcpConfig.servers[selectedMcpServer].preset ? renderPresetFields(selectedMcpServer, mcpConfig.servers[selectedMcpServer].preset!) : (<>
-                                                {/* Name & Transport */}
-                                                <div className="plugins-form-grid" style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px' }}>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-name" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.name')} <span aria-hidden="true" style={{ color: '#b91c1c' }}>*</span></label>
-                                                        <div className="plugins-input-group">
-                                                            <input id="mcp-server-name" value={mcpConfig.servers[selectedMcpServer].name || ''} onChange={e => updateMcpServerField(selectedMcpServer, 'name', e.target.value)} placeholder="如: my-database" style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }} />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-transport" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.transport')}</label>
-                                                        <div className="plugins-input-group">
-                                                            <select id="mcp-server-transport" value={mcpConfig.servers[selectedMcpServer].transport} onChange={e => updateMcpServerField(selectedMcpServer, 'transport', e.target.value as MCPServerConfig['transport'])} style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }}>
-                                                                <option value="stdio">stdio</option>
-                                                                <option value="http">http</option>
-                                                                <option value="sse">sse</option>
-                                                            </select>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Command & Script */}
-                                                <div className="plugins-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '16px' }}>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-command" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.command')}</label>
-                                                        <div className="plugins-input-group">
-                                                            <input id="mcp-server-command" value={mcpConfig.servers[selectedMcpServer].command || ''} onChange={e => updateMcpServerField(selectedMcpServer, 'command', e.target.value)} placeholder="python / npx" style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }} />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-script-or-url" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{mcpConfig.servers[selectedMcpServer].transport === 'stdio' ? t('plugins.scriptArgs') : t('plugins.url')}</label>
-                                                        <div className="plugins-input-group">
-                                                            <input id="mcp-server-script-or-url" value={mcpConfig.servers[selectedMcpServer].transport === 'stdio' ? (mcpConfig.servers[selectedMcpServer].script || '') : (mcpConfig.servers[selectedMcpServer].url || '')} onChange={e => updateMcpServerField(selectedMcpServer, mcpConfig.servers[selectedMcpServer].transport === 'stdio' ? 'script' : 'url', e.target.value)} placeholder={mcpConfig.servers[selectedMcpServer].transport === 'stdio' ? 'server.py' : 'https://...'} style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {mcpConfig.servers[selectedMcpServer].transport === 'stdio' && (
-                                                    <div>
-                                                        <label htmlFor="mcp-server-args" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.arguments')}</label>
-                                                        <textarea
-                                                            id="mcp-server-args"
-                                                            value={mcpConfig.servers[selectedMcpServer].args_input ?? JSON.stringify(mcpConfig.servers[selectedMcpServer].args || [], null, 2)}
-                                                            onChange={e => updateMcpServerField(selectedMcpServer, 'args_input', e.target.value)}
-                                                            placeholder='["mcp", "stdio"]'
-                                                            style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', margin: 0, width: '100%', minHeight: '72px', padding: '12px', resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
-                                                        />
-                                                    </div>
-                                                )}
-
-                                                {/* Env & Headers */}
-                                                <div className="plugins-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-env" style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151', display: 'flex', justifyContent: 'space-between' }}>
-                                                            <span>{t('plugins.environment')}</span>
-                                                            {mcpConfig.servers[selectedMcpServer].env?.configured && <span style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 400 }}>{t('plugins.configured').replace('{count}', String(mcpConfig.servers[selectedMcpServer].env?.count ?? 0))}</span>}
-                                                        </label>
-                                                        <textarea
-                                                            id="mcp-server-env"
-                                                            style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', margin: 0, width: '100%', minHeight: '80px', padding: '12px', resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
-                                                            value={mcpConfig.servers[selectedMcpServer].env_input ?? ''}
-                                                            onChange={e => updateMcpServerField(selectedMcpServer, 'env_input', e.target.value)}
-                                                            placeholder='{"KEY": "value"}'
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-headers" style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151', display: 'flex', justifyContent: 'space-between' }}>
-                                                            <span>{t('plugins.headers')}</span>
-                                                            {mcpConfig.servers[selectedMcpServer].headers?.configured && <span style={{ fontSize: '0.75rem', color: '#047857', fontWeight: 400 }}>{t('plugins.configured').replace('{count}', String(mcpConfig.servers[selectedMcpServer].headers?.count ?? 0))}</span>}
-                                                        </label>
-                                                        <textarea
-                                                            id="mcp-server-headers"
-                                                            style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', margin: 0, width: '100%', minHeight: '80px', padding: '12px', resize: 'vertical', fontFamily: 'var(--font-mono)', fontSize: '0.85rem' }}
-                                                            value={mcpConfig.servers[selectedMcpServer].headers_input ?? ''}
-                                                            onChange={e => updateMcpServerField(selectedMcpServer, 'headers_input', e.target.value)}
-                                                            placeholder='{"Authorization": "Bearer..."}'
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                {/* prefix and type */}
-                                                <div className="plugins-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-tool-prefix" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.toolPrefix')}</label>
-                                                        <div className="plugins-input-group">
-                                                            <input id="mcp-server-tool-prefix" value={mcpConfig.servers[selectedMcpServer].tool_prefix || ''} onChange={e => updateMcpServerField(selectedMcpServer, 'tool_prefix', e.target.value)} placeholder="如: db_" style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }} />
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <label htmlFor="mcp-server-type" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.serverType')}</label>
-                                                        <div className="plugins-input-group">
-                                                            <input id="mcp-server-type" value={mcpConfig.servers[selectedMcpServer].server_type || ''} onChange={e => updateMcpServerField(selectedMcpServer, 'server_type', e.target.value)} placeholder="如: service / database" style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }} />
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                {/* Description */}
-                                                <div>
-                                                    <label htmlFor="mcp-server-description" style={{ display: 'block', fontSize: '0.9rem', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>{t('plugins.description')}</label>
-                                                    <div className="plugins-input-group">
-                                                        <input id="mcp-server-description" value={mcpConfig.servers[selectedMcpServer].description || ''} onChange={e => updateMcpServerField(selectedMcpServer, 'description', e.target.value)} placeholder="用途说明" style={{ width: '100%', border: 'none', background: 'transparent', outline: 'none' }} />
-                                                    </div>
-                                                </div>
-                                                </>)}
-
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', paddingTop: '16px', borderTop: '1px solid #f3f4f6' }}>
-                                                    <label style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#374151', fontSize: '0.9rem', cursor: 'pointer', fontWeight: 500 }}>
-                                                        <input type="checkbox" checked={mcpConfig.servers[selectedMcpServer].enabled} onChange={e => updateMcpServerField(selectedMcpServer, 'enabled', e.target.checked)} style={{ width: '16px', height: '16px' }} />
-                                                        {t('plugins.enableServer')}
-                                                    </label>
-                                                    {!mcpConfig.servers[selectedMcpServer].preset && <button
-                                                        type="button"
-                                                        onClick={() => removeMcpServer(selectedMcpServer)}
-                                                        style={{ background: '#fff0f2', border: '1px solid #ffccd5', color: '#be123c', borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}
-                                                    >
-                                                        {t('plugins.deleteConfig')}
-                                                    </button>}
-                                                </div>
-                                            </div>
-
-                                                {mcpTestResult && (
-                                                    <div role={mcpTestResult.success ? 'status' : 'alert'} aria-live={mcpTestResult.success ? 'polite' : 'assertive'} style={{ padding: '16px', borderRadius: '8px', marginTop: '20px', background: mcpTestResult.success ? '#ecfdf5' : '#fef2f2', border: `1px solid ${mcpTestResult.success ? '#6ee7b7' : '#fca5a5'}`, color: mcpTestResult.success ? '#065f46' : '#991b1b' }}>
-                                                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>{mcpTestResult.success ? `✓ ${t('settings.dbTestSuccess')}` : `✗ ${t('settings.dbTestFailed')}`}</div>
-                                                        <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{mcpTestResult.message}</div>
-                                                        {mcpTestResult.tools && mcpTestResult.tools.length > 0 && (
-                                                            <div style={{ marginTop: '8px', fontSize: '0.85rem' }}>{t('plugins.discoveredTools')}: {mcpTestResult.tools.map(tool => tool.name).join(', ')}</div>
-                                                        )}
-                                                    </div>
-                                                )}
-
-                                            <div className="plugins-action-row" style={{ display: 'flex', gap: '16px', justifyContent: 'flex-end', marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #f3f4f6' }}>
-                                                {selectedServerStatus?.enabled && (
-                                                    <button
-                                                        onClick={() => void handleRestartMCPServer(selectedServerStatus.name)}
-                                                        disabled={pendingRestartServer === selectedServerStatus.name}
-                                                        style={{ width: '180px', padding: '12px 24px', background: '#eff6ff', color: '#1d4ed8', border: '1px solid #bfdbfe', borderRadius: '8px', fontWeight: 600, cursor: pendingRestartServer === selectedServerStatus.name ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
-                                                    >
-                                                        {pendingRestartServer === selectedServerStatus.name ? <Loader2 size={16} className="animate-spin" /> : null}
-                                                        {t('plugins.reconnect')} MCP
-                                                    </button>
-                                                )}
-                                                <button onClick={handleTestMCP} disabled={isTestingMCP} style={{ width: '180px', padding: '12px 24px', background: '#f3f4f6', color: '#1f2937', border: '1px solid #e5e7eb', borderRadius: '8px', fontWeight: 600, cursor: isTestingMCP ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                                    {isTestingMCP ? <Loader2 size={16} className="animate-spin" /> : null}
-                                                    {t('plugins.test')}
-                                                </button>
-                                                <button onClick={handleSaveMCP} disabled={isSavingMCP} style={{ width: '180px', padding: '12px 24px', background: '#1f2937', color: '#fff', border: 'none', borderRadius: '8px', fontWeight: 600, cursor: isSavingMCP ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                                    {isSavingMCP ? <Loader2 size={16} className="animate-spin" /> : null}
-                                                    {t('plugins.saveConfig')}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
+                            <McpSettings
+                                servers={mcpConfig.servers}
+                                selected={selectedMcpServer}
+                                onSelect={setSelectedMcpServer}
+                                onAdd={addMcpServer}
+                                statusOf={(server) => {
+                                    const status = displayedMcpServers.find((item) => item.name === server.name);
+                                    return status ? getServerStatusMeta(status) : undefined;
+                                }}
+                                onField={updateMcpServerField}
+                                onPresetValue={updatePresetValue}
+                                onRemove={removeMcpServer}
+                                onSave={() => void handleSaveMCP()}
+                                onTest={() => void handleTestMCP()}
+                                saving={isSavingMCP}
+                                testing={isTestingMCP}
+                                testResult={mcpTestResult}
+                                t={t}
+                            />
                         )}
                     </div>
                 )}
