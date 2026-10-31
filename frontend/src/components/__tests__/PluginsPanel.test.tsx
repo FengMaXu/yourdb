@@ -55,15 +55,23 @@ describe('PluginsPanel MCP presets', () => {
         api.listSkillsViaRuntime.mockResolvedValue([]);
     });
 
-    it('lists the database as pre-installed and on, with its status and where to configure it', async () => {
-        render(<PluginsPanel tab="MCP" />);
+    it('lists the database with its status, without controls while it is connected', async () => {
+        render(<PluginsPanel tab="MCP" onOpenDatabaseSettings={vi.fn()} />);
         expect(await screen.findByText('数据库')).toBeInTheDocument();
-        expect(screen.getByText('默认启用')).toBeInTheDocument();
-        expect(screen.getByText('在「设置 → 数据库」中配置')).toBeInTheDocument();
         await waitFor(() => expect(screen.getAllByText('已连接').length).toBeGreaterThan(0));
+        expect(screen.queryByRole('button', { name: '前往配置数据库' })).toBeNull();
+        // Plugins are edited in the settings tab, not from their cards.
+        expect(screen.queryByRole('button', { name: /编辑|Edit/ })).toBeNull();
         fireEvent.click(screen.getAllByRole('tab')[1]!);
-        // Not editable on this page.
         expect(screen.queryByRole('button', { name: '数据库' })).toBeNull();
+    });
+
+    it('offers database settings when the database is not connected', async () => {
+        api.getMcpServersViaRuntime.mockResolvedValue([{ name: 'database', enabled: true, connected: false, toolCount: 0, hostManaged: true }]);
+        const open = vi.fn();
+        render(<PluginsPanel tab="MCP" onOpenDatabaseSettings={open} />);
+        fireEvent.click(await screen.findByRole('button', { name: '前往配置数据库' }));
+        expect(open).toHaveBeenCalledOnce();
     });
 
     it('lists presets by title and enables one without sending masked secrets back', async () => {

@@ -16,10 +16,12 @@ export type PluginsTab = 'MCP' | 'Skills';
 
 interface PluginsPanelProps {
     tab: PluginsTab;
+    /** Opens Settings → Database, where the database server is configured. */
+    onOpenDatabaseSettings?: () => void;
 }
 
 /** MCP and Skills management shown in the main pane; the sidebar picks the tab. */
-const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
+const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings }) => {
     const { t } = useLanguage();
     // States for sub-tabs
     const [mcpTab, setMcpTab] = useState('已安装');
@@ -32,6 +34,8 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
     const [isLoadingMCP, setIsLoadingMCP] = useState(false);
     const [isSavingMCP, setIsSavingMCP] = useState(false);
     const [isTestingMCP, setIsTestingMCP] = useState(false);
+    // Until statuses arrive an enabled server shows as connecting, not as down.
+    const [statusesLoaded, setStatusesLoaded] = useState(false);
     const [mcpTestResult, setMcpTestResult] = useState<MCPTestResult | null>(null);
     const [mcpError, setMcpError] = useState<string | null>(null);
     const [pendingToggleServer, setPendingToggleServer] = useState<string | null>(null);
@@ -79,10 +83,13 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
             setMcpConfig(configRes);
             setMcpServers(listed);
             // Reading statuses connects the enabled plugins, which can take a while; show them when they arrive.
-            void getMcpServersViaRuntime().then((statuses) => setMcpServers(listed.map((server) => {
-                const status = statuses.find((item) => item.name === server.name);
-                return status ? { ...server, connected: status.connected, tool_count: status.toolCount, host_managed: status.hostManaged } : server;
-            }))).catch((err) => console.error('Failed to load MCP status:', err));
+            void getMcpServersViaRuntime().then((statuses) => {
+                setMcpServers(listed.map((server) => {
+                    const status = statuses.find((item) => item.name === server.name);
+                    return status ? { ...server, connected: status.connected, tool_count: status.toolCount, host_managed: status.hostManaged } : server;
+                }));
+                setStatusesLoaded(true);
+            }).catch((err) => console.error('Failed to load MCP status:', err));
             setSelectedMcpServer(prev => {
                 if ((configRes.servers || []).length === 0) return null;
                 if (prev === null || prev >= configRes.servers.length) return 0;
@@ -369,89 +376,51 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab }) => {
                         )}
 
                         {mcpTab === '已安装' && (
-                            <div style={{ display: 'grid', gap: '16px' }}>
+                            <ul className="mcp-cards">
                                 {displayedMcpServers.length === 0 && (
-                                    <div role="status" style={{ textAlign: 'center', color: '#6b7280', marginTop: '64px' }}>{t('plugins.noServers')}</div>
+                                    <li role="status" className="mcp-cards-empty">{t('plugins.noServers')}</li>
                                 )}
-                                {displayedMcpServers.map((server, index) => {
+                                {displayedMcpServers.map((server) => {
                                     const isToggling = pendingToggleServer === server.name;
                                     const isRestarting = pendingRestartServer === server.name;
-                                    const hostManaged = isHostManaged(server);
-                                    const statusMeta = getServerStatusMeta(server);
+                                    const statusMeta = !statusesLoaded && server.enabled
+                                        ? { label: t('plugins.connecting'), fg: '#1d4ed8', bg: '#eff6ff' }
+                                        : getServerStatusMeta(server);
                                     return (
-                                        <div key={server.key} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px 18px' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
-                                                <div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
-                                                        <span style={{ fontWeight: 600, color: '#111827' }}>{server.preset?.title ?? server.name}</span>
-                                                        {server.preset && <span style={{ fontSize: '0.75rem', color: '#4338ca', background: '#eef2ff', padding: '2px 8px', borderRadius: '999px' }}>{t('plugins.preset')}</span>}
-                                                        {server.default_enabled && <span style={{ fontSize: '0.75rem', color: '#047857', background: '#ecfdf5', padding: '2px 8px', borderRadius: '999px' }}>{t('plugins.defaultEnabled')}</span>}
-                                                        <span style={{ fontSize: '0.75rem', color: statusMeta.fg, background: statusMeta.bg, padding: '2px 8px', borderRadius: '999px' }}>
-                                                            {statusMeta.label}
-                                                        </span>
-                                                    </div>
-                                                    <div style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '4px' }}>{server.description || t('plugins.noDesc')}</div>
-                                                    <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                                                        {t('plugins.transportSummary')}: {server.transport} · {t('plugins.typeSummary')}: {server.server_type || 'service'} · {t('plugins.toolsSummary')}: {server.tool_count ?? 0}
-                                                    </div>
+                                        <li key={server.key} className="mcp-card">
+                                            <div className="mcp-card-main">
+                                                <div className="mcp-card-title">
+                                                    <span>{server.preset?.title ?? server.name}</span>
+                                                    <span className="mcp-status" style={{ color: statusMeta.fg, background: statusMeta.bg }}>{statusMeta.label}</span>
                                                 </div>
-                                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                    {hostManaged ? (
-                                                        <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                                                            {server.settings_hint || t('plugins.hostManaged')}
-                                                        </span>
-                                                    ) : (
-                                                        <>
-                                                            {server.enabled && (
-                                                                <button
-                                                                    onClick={() => void handleRestartMCPServer(server.name)}
-                                                                    disabled={isRestarting || isToggling}
-                                                                    style={{
-                                                                        background: '#eff6ff',
-                                                                        border: '1px solid #bfdbfe',
-                                                                        borderRadius: '8px',
-                                                                        padding: '8px 12px',
-                                                                        minWidth: '78px',
-                                                                        cursor: (isRestarting || isToggling) ? 'not-allowed' : 'pointer',
-                                                                        color: '#1d4ed8'
-                                                                    }}
-                                                                >
-                                                                    {isRestarting ? <Loader2 size={16} className="animate-spin" /> : t('plugins.reconnect')}
-                                                                </button>
-                                                            )}
-                                                            <button
-                                                                onClick={() => void handleToggleMCPEnabled(server.name, !server.enabled)}
-                                                                disabled={isToggling || isRestarting}
-                                                                style={{
-                                                                    background: server.enabled ? '#fff7ed' : '#ecfdf5',
-                                                                    border: `1px solid ${server.enabled ? '#fdba74' : '#86efac'}`,
-                                                                    borderRadius: '8px',
-                                                                    padding: '8px 12px',
-                                                                    minWidth: '78px',
-                                                                    cursor: (isToggling || isRestarting) ? 'not-allowed' : 'pointer',
-                                                                    color: server.enabled ? '#c2410c' : '#166534'
-                                                                }}
-                                                            >
-                                                                {isToggling ? <Loader2 size={16} className="animate-spin" /> : (server.enabled ? t('plugins.disable') : t('plugins.enable'))}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const targetIndex = mcpConfig.servers.findIndex(item => item.name === server.name);
-                                                                    setSelectedMcpServer(targetIndex >= 0 ? targetIndex : index);
-                                                                    setMcpTab('设置');
-                                                                }}
-                                                                style={{ background: 'none', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 12px', cursor: 'pointer', color: '#374151' }}
-                                                            >
-                                                                {t('plugins.edit')}
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
+                                                <p className="mcp-card-desc">{server.description || t('plugins.noDesc')}</p>
                                             </div>
-                                        </div>
+                                            <div className="mcp-card-actions">
+                                                {isHostManaged(server) ? (
+                                                    statusesLoaded && !server.connected && onOpenDatabaseSettings && (
+                                                        <button type="button" className="mcp-btn" onClick={onOpenDatabaseSettings}>
+                                                            {t('plugins.configureDatabase')}
+                                                        </button>
+                                                    )
+                                                ) : (
+                                                    <>
+                                                        {server.enabled && (
+                                                            <button type="button" className="mcp-btn" onClick={() => void handleRestartMCPServer(server.name)} disabled={isRestarting || isToggling}>
+                                                                {isRestarting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                                                                {t('plugins.reconnect')}
+                                                            </button>
+                                                        )}
+                                                        <button type="button" className="mcp-btn" onClick={() => void handleToggleMCPEnabled(server.name, !server.enabled)} disabled={isToggling || isRestarting}>
+                                                            {isToggling && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                                                            {server.enabled ? t('plugins.disable') : t('plugins.enable')}
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </li>
                                     );
                                 })}
-                            </div>
+                            </ul>
                         )}
 
                         {mcpTab === '设置' && (

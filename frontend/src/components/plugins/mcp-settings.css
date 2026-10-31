@@ -19,6 +19,81 @@
   overflow: hidden;
 }
 
+/* Installed cards */
+
+.mcp-cards {
+  --mcp-ink: #1c1917;
+  --mcp-muted: #78716c;
+  --mcp-line: var(--hairline, #ecebe8);
+  --mcp-hover: #f5f5f4;
+  --mcp-accent: var(--accent-strong, #c2410c);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.mcp-cards-empty {
+  margin-top: 64px;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--mcp-muted);
+}
+
+.mcp-card {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 20px;
+  border: 1px solid var(--mcp-line);
+  border-radius: 12px;
+  background: #fff;
+  transition: border-color var(--duration-quick, 140ms) ease;
+}
+
+.mcp-card:hover {
+  border-color: #e7e5e4;
+}
+
+.mcp-card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.mcp-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--mcp-ink);
+}
+
+.mcp-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--mcp-muted);
+}
+
+.mcp-card-actions {
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+
+.mcp-cards .mcp-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.6;
+}
+
 /* List */
 
 .mcp-list {
@@ -579,6 +654,9 @@ textarea.mcp-input {
 }
 
 .mcp-btn {
+  --mcp-ink: #1c1917;
+  --mcp-hover: #f5f5f4;
+  --mcp-accent: var(--accent-strong, #c2410c);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -649,6 +727,10 @@ textarea.mcp-input {
 
   .mcp-row {
     grid-template-columns: 1fr;
+  }
+
+  .mcp-card {
+    flex-wrap: wrap;
   }
 
   .mcp-editor-foot {
