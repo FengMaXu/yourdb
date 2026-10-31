@@ -71,7 +71,8 @@ export const QCC_PRESET: McpPreset = {
     { key: "groups", label: "数据分组", kind: "choices", required: true, choices: QCC_GROUPS, defaultValue: DEFAULT_QCC_GROUPS },
   ],
   connections(values) {
-    const apiKey = text(values, "apiKey");
+    // The platform shows the key as a header value; a pasted "Bearer " prefix must not be sent twice.
+    const apiKey = text(values, "apiKey").replace(/^bearer\s+/i, "");
     const known = new Set<string>(QCC_GROUPS.map((group) => group.value));
     return list(values, "groups", DEFAULT_QCC_GROUPS).filter((group) => known.has(group)).map((group) => ({
       id: `qcc_${group}`,
