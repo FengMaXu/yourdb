@@ -287,7 +287,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           >
             <div
               ref={chatMainPaneRef}
-              className="relative flex min-h-0 min-w-[560px] flex-auto overflow-hidden max-[1100px]:min-w-0 [&_.chat-area]:min-w-0 [&_.chat-area]:flex-auto"
+              className="relative flex min-h-0 min-w-[560px] flex-auto overflow-hidden max-[1100px]:min-w-0"
               style={isToolPanelOpen && chatPaneWidth ? { flex: `0 0 ${chatPaneWidth}px`, width: chatPaneWidth } : undefined}
             >
               {isToolPanelOpen && (

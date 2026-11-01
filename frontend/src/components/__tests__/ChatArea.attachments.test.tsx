@@ -77,7 +77,7 @@ describe('ChatArea attachments', () => {
         await waitFor(() => expect(calls.sent).toEqual([{ prompt: '按区域汇总', attachments: ['sales.csv'] }]));
         const lists = screen.getAllByRole('list', { name: '已附加的文件' });
         expect(lists).toHaveLength(1);
-        expect(lists[0].closest('.user-message-stack')?.textContent).toContain('按区域汇总');
+        expect(lists[0].closest('[data-message-role="user"]')?.textContent).toContain('按区域汇总');
         expect(lists[0].textContent).toContain('sales.csv');
     });
 
