@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { UI } from './workspace-ui';
+import { cn } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { createChannelBindCodeViaRuntime, decideChannelAccessViaRuntime, disconnectChannelViaRuntime, listChannelAccessViaRuntime, listChannelsViaRuntime, provisionChannelViaRuntime, revokeChannelAccessViaRuntime, type ChannelAccessView, type ChannelStatusView } from '../api/runtime-client';
@@ -27,12 +29,12 @@ const QrLink: React.FC<{ url: string; expiresAt: number }> = ({ url, expiresAt }
     }, []);
     const seconds = Math.max(0, Math.round((expiresAt - now) / 1000));
     return (
-        <div className="channel-qr">
-            {image ? <img src={image} width={168} height={168} alt="用飞书扫码接入" /> : <Loader2 size={24} className="legacy-animate-spin" />}
-            <div className="channel-qr-text">
+        <div className="mt-1 flex items-center gap-6 rounded-xl bg-[#fafaf9] p-4 max-[720px]:flex-col max-[720px]:items-start [&_img]:flex-none [&_img]:rounded-[10px] [&_img]:bg-white [&_img]:shadow-[0_0_0_1px_var(--border),0_8px_24px_-16px_rgba(28,25,23,0.3)]">
+            {image ? <img src={image} width={168} height={168} alt="用飞书扫码接入" /> : <Loader2 size={24} className="animate-spin" />}
+            <div className="grid gap-1 text-[0.875rem] leading-[1.7] text-[#44403c] [&_a]:text-brand">
                 <div>用手机飞书扫码，按页面提示创建机器人并确认授权。</div>
                 <div>也可以 <a href={url} target="_blank" rel="noreferrer">在本机飞书中打开</a>。</div>
-                <div className="channel-meta">{seconds > 0 ? `二维码 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒后过期` : '二维码已过期，请重新扫码'}</div>
+                <div className="text-[0.8rem] text-muted-foreground">{seconds > 0 ? `二维码 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒后过期` : '二维码已过期，请重新扫码'}</div>
             </div>
         </div>
     );
@@ -62,22 +64,22 @@ const LinkAccount: React.FC = () => {
     };
     const seconds = link ? Math.max(0, Math.round((link.expiresAt - now) / 1000)) : 0;
     return (
-        <section aria-label="绑定我的 IM 账号" className="ui-card ui-stack">
-            <div className="ui-card-head">
+        <section aria-label="绑定我的 IM 账号" className={cn(UI.card, UI.stack)}>
+            <div className={UI.cardHead}>
                 <div>
-                    <h3 className="ui-card-title">绑定我的 IM 账号</h3>
-                    <p className="ui-card-desc">机器人只回应已绑定账号的人。绑定后，你在 IM 里的对话会出现在这个账号下；查询用的是本应用配置的数据库，绑定任何人都等于让他能查询这些数据。</p>
+                    <h3 className={UI.cardTitle}>绑定我的 IM 账号</h3>
+                    <p className={UI.cardDesc}>机器人只回应已绑定账号的人。绑定后，你在 IM 里的对话会出现在这个账号下；查询用的是本应用配置的数据库，绑定任何人都等于让他能查询这些数据。</p>
                 </div>
-                <button type="button" className={link ? 'ui-btn' : 'ui-btn ui-btn-primary'} onClick={() => { void issue(); }}>{link ? '重新获取' : '获取绑定码'}</button>
+                <button type="button" className={cn(UI.btn, !link && UI.btnPrimary)} onClick={() => { void issue(); }}>{link ? '重新获取' : '获取绑定码'}</button>
             </div>
             {link && seconds > 0 && (
-                <div className="channel-bind">
-                    <div>在与机器人的<strong>私聊</strong>中发送：<code className="ui-code">/bind {link.code}</code></div>
-                    <div className="channel-meta">绑定码只能用一次，{Math.floor(seconds / 60)} 分 {seconds % 60} 秒后过期。不要发到群里。</div>
+                <div className="grid gap-1.5 rounded-xl bg-[#fafaf9] px-4 py-3.5 text-[0.9rem] leading-[1.7] text-[#44403c]">
+                    <div>在与机器人的<strong>私聊</strong>中发送：<code className={cn(UI.code, 'text-[1.05rem] font-semibold tracking-[0.02em]')}>/bind {link.code}</code></div>
+                    <div className="text-[0.8rem] text-muted-foreground">绑定码只能用一次，{Math.floor(seconds / 60)} 分 {seconds % 60} 秒后过期。不要发到群里。</div>
                 </div>
             )}
-            {link && seconds === 0 && <p className="ui-empty">绑定码已过期，请重新获取。</p>}
-            {failed && <div role="alert" className="ui-alert" data-tone="error">无法获取绑定码，请稍后重试。</div>}
+            {link && seconds === 0 && <p className={UI.empty}>绑定码已过期，请重新获取。</p>}
+            {failed && <div role="alert" className={UI.alert} data-tone="error">无法获取绑定码，请稍后重试。</div>}
         </section>
     );
 };
@@ -102,47 +104,47 @@ const AccessList: React.FC = () => {
     useEffect(() => { void apply(listChannelAccessViaRuntime); }, []);
     if (failed && !access) return null;
     return (
-        <section aria-label="授权名单" className="ui-card ui-stack">
-            <div className="ui-card-head">
+        <section aria-label="授权名单" className={cn(UI.card, UI.stack)}>
+            <div className={UI.cardHead}>
                 <div>
-                    <h3 className="ui-card-title">授权名单</h3>
-                    <p className="ui-card-desc">没有权限的人给机器人发消息时，会向已绑定账号的成员发出使用申请。账号成员可以审批别人；访客只能使用。</p>
+                    <h3 className={UI.cardTitle}>授权名单</h3>
+                    <p className={UI.cardDesc}>没有权限的人给机器人发消息时，会向已绑定账号的成员发出使用申请。账号成员可以审批别人；访客只能使用。</p>
                 </div>
-                <button type="button" className="ui-btn" onClick={() => { void apply(listChannelAccessViaRuntime); }}>刷新</button>
+                <button type="button" className={UI.btn} onClick={() => { void apply(listChannelAccessViaRuntime); }}>刷新</button>
             </div>
-            {!access ? <Loader2 size={20} className="legacy-animate-spin" /> : (
+            {!access ? <Loader2 size={20} className="animate-spin" /> : (
                 <>
                     <div>
-                        <h4 className="ui-subhead">待处理的申请</h4>
-                        {access.requests.length === 0 ? <p className="ui-empty">没有待处理的申请。</p> : (
-                            <div className="channel-requests">
+                        <h4 className={UI.subhead}>待处理的申请</h4>
+                        {access.requests.length === 0 ? <p className={UI.empty}>没有待处理的申请。</p> : (
+                            <div className="grid gap-2">
                                 {access.requests.map((request) => (
-                                    <div key={request.id} role="group" aria-label={`申请 ${shortId(request.requester.externalUserId)}`} className="channel-request">
-                                        <div className="channel-request-text">
+                                    <div key={request.id} role="group" aria-label={`申请 ${shortId(request.requester.externalUserId)}`} className="flex items-center gap-2.5 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-3.5 py-3 max-[720px]:flex-wrap">
+                                        <div className="min-w-0 flex-1 text-[0.85rem] text-[#44403c]">
                                             <div>{PLATFORM[request.requester.channel] ?? request.requester.channel} · {shortId(request.requester.externalUserId)} · {request.audience === 'group' ? '群聊' : '私聊'} · {when(request.at)}</div>
-                                            {request.text && <div className="channel-request-quote">“{request.text}”</div>}
+                                            {request.text && <div className="mt-1 break-all text-muted-foreground">“{request.text}”</div>}
                                         </div>
-                                        <button type="button" className="ui-btn ui-btn-primary ui-btn-sm" onClick={() => { if (window.confirm('允许后，对方能查询本应用可以访问的全部数据。确定允许？')) void apply(() => decideChannelAccessViaRuntime(request.id, 'allow')); }}>允许</button>
-                                        <button type="button" className="ui-btn ui-btn-sm" onClick={() => { void apply(() => decideChannelAccessViaRuntime(request.id, 'deny')); }}>拒绝</button>
+                                        <button type="button" className={cn(UI.btn, UI.btnPrimary, UI.btnSm)} onClick={() => { if (window.confirm('允许后，对方能查询本应用可以访问的全部数据。确定允许？')) void apply(() => decideChannelAccessViaRuntime(request.id, 'allow')); }}>允许</button>
+                                        <button type="button" className={cn(UI.btn, UI.btnSm)} onClick={() => { void apply(() => decideChannelAccessViaRuntime(request.id, 'deny')); }}>拒绝</button>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
                     <div>
-                        <h4 className="ui-subhead">可以使用的人</h4>
-                        {access.members.length === 0 ? <p className="ui-empty">还没有人。先用上面的绑定码绑定你自己的 IM 账号。</p> : (
-                            <table className="ui-table">
+                        <h4 className={UI.subhead}>可以使用的人</h4>
+                        {access.members.length === 0 ? <p className={UI.empty}>还没有人。先用上面的绑定码绑定你自己的 IM 账号。</p> : (
+                            <table className={UI.table}>
                                 <thead><tr><th>平台</th><th>IM 账号</th><th>身份</th><th>开始时间</th><th aria-label="操作" /></tr></thead>
                                 <tbody>
                                     {access.members.map((member) => (
                                         <tr key={`${member.actor.channel}|${member.actor.tenant}|${member.actor.externalUserId}`}>
                                             <td>{PLATFORM[member.actor.channel] ?? member.actor.channel}</td>
-                                            <td className="ui-mono" title={member.actor.externalUserId}>{shortId(member.actor.externalUserId)}</td>
-                                            <td><span className="ui-pill">{member.role === 'account' ? '账号成员' : '访客'}</span></td>
+                                            <td className={UI.mono} title={member.actor.externalUserId}>{shortId(member.actor.externalUserId)}</td>
+                                            <td><span className={UI.pill}>{member.role === 'account' ? '账号成员' : '访客'}</span></td>
                                             <td>{when(member.since)}</td>
-                                            <td className="ui-table-action">
-                                                <button type="button" className="ui-btn ui-btn-quiet ui-btn-danger ui-btn-sm" onClick={() => { if (window.confirm('撤销后，对方再发消息需要重新申请。确定撤销？')) void apply(() => revokeChannelAccessViaRuntime(member.actor)); }}>撤销</button>
+                                            <td className={UI.tableAction}>
+                                                <button type="button" className={cn(UI.btn, UI.btnQuiet, UI.btnDanger, UI.btnSm)} onClick={() => { if (window.confirm('撤销后，对方再发消息需要重新申请。确定撤销？')) void apply(() => revokeChannelAccessViaRuntime(member.actor)); }}>撤销</button>
                                             </td>
                                         </tr>
                                     ))}
@@ -150,7 +152,7 @@ const AccessList: React.FC = () => {
                             </table>
                         )}
                     </div>
-                    {failed && <div role="alert" className="ui-alert" data-tone="error">操作没有成功，请刷新后重试。</div>}
+                    {failed && <div role="alert" className={UI.alert} data-tone="error">操作没有成功，请刷新后重试。</div>}
                 </>
             )}
         </section>
@@ -193,36 +195,36 @@ const ChannelsSettings: React.FC = () => {
     };
 
     if (unavailable) {
-        return <p className="ui-lead">当前运行方式没有启用消息渠道，或暂时无法读取渠道状态。</p>;
+        return <p className={UI.lead}>当前运行方式没有启用消息渠道，或暂时无法读取渠道状态。</p>;
     }
-    if (!channels) return <Loader2 size={20} className="legacy-animate-spin" />;
+    if (!channels) return <Loader2 size={20} className="animate-spin" />;
 
     return (
-        <div className="settings-tab-content ui-stack ui-enter">
-            <p className="ui-lead">接入后，可以在 IM 里直接向数据智能体提问、接收查询结果和看板。发送 <code className="ui-code">/new</code> 可随时开始新对话。</p>
+        <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
+            <p className={UI.lead}>接入后，可以在 IM 里直接向数据智能体提问、接收查询结果和看板。发送 <code className={UI.code}>/new</code> 可随时开始新对话。</p>
             <LinkAccount />
             <AccessList />
             {channels.map((channel) => {
                 const state = STATE_LABEL[channel.state];
                 const working = busy === channel.id;
                 return (
-                    <section key={channel.id} aria-label={channel.label} className="ui-card ui-stack">
-                        <div className="ui-card-head">
-                            <h3 className="ui-card-title">{channel.label}<span className="ui-pill" data-tone={state.tone}>{state.text}</span></h3>
+                    <section key={channel.id} aria-label={channel.label} className={cn(UI.card, UI.stack)}>
+                        <div className={UI.cardHead}>
+                            <h3 className={UI.cardTitle}>{channel.label}<span className={UI.pill} data-tone={state.tone}>{state.text}</span></h3>
                             {channel.provisionable && (
-                                <button type="button" className={channel.state === 'unconfigured' ? 'ui-btn ui-btn-primary' : 'ui-btn'} disabled={working} onClick={() => run(channel.id, provisionChannelViaRuntime)}>
-                                    {working ? <Loader2 size={16} className="legacy-animate-spin" /> : null}
+                                <button type="button" className={cn(UI.btn, channel.state === 'unconfigured' && UI.btnPrimary)} disabled={working} onClick={() => run(channel.id, provisionChannelViaRuntime)}>
+                                    {working ? <Loader2 size={16} className="animate-spin" /> : null}
                                     {channel.state === 'unconfigured' ? '扫码接入' : '重新扫码'}
                                 </button>
                             )}
                             {(channel.state === 'connected' || channel.state === 'failed') && (
-                                <button type="button" className="ui-btn ui-btn-danger" disabled={working} onClick={() => { if (window.confirm(`断开${channel.label}？已保存的接入凭证会被删除。`)) void run(channel.id, disconnectChannelViaRuntime); }}>断开</button>
+                                <button type="button" className={cn(UI.btn, UI.btnDanger)} disabled={working} onClick={() => { if (window.confirm(`断开${channel.label}？已保存的接入凭证会被删除。`)) void run(channel.id, disconnectChannelViaRuntime); }}>断开</button>
                             )}
                         </div>
                         {channel.provisioning && channel.state === 'provisioning' && <QrLink url={channel.provisioning.url} expiresAt={channel.provisioning.expiresAt} />}
-                        {channel.message && <div role="alert" className="ui-alert" data-tone="error">{channel.message}</div>}
+                        {channel.message && <div role="alert" className={UI.alert} data-tone="error">{channel.message}</div>}
                         {channel.warnings?.map((warning) => (
-                            <div key={warning} role="status" className="ui-alert" data-tone="warn">还差一步：{warning}</div>
+                            <div key={warning} role="status" className={UI.alert} data-tone="warn">还差一步：{warning}</div>
                         ))}
                     </section>
                 );

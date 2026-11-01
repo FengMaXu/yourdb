@@ -15,8 +15,6 @@
 @import "./base.css" layer(base);
 
 @import "../index.css" layer(legacy);
-@import "./ui.css" layer(legacy);
-@import "./workspace.css" layer(legacy);
 @import "./chat-trace.css" layer(legacy);
 
 /* Generate utilities only for class names in src, not for words in docs and the rest of the repo. */

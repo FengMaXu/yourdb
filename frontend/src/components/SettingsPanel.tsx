@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { UI } from './workspace-ui';
+import { cn } from '@/lib/utils';
 import ChannelsSettings from './ChannelsSettings';
 import {
     Settings as SettingsIcon,
@@ -391,89 +393,89 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     };
 
     return (
-        <section className="workspace-page" aria-labelledby="settings-page-title">
-            <header className="workspace-page-header">
+        <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="settings-page-title">
+            <header className="flex h-14 flex-none items-center border-b border-[var(--hairline)] px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-[var(--text-primary)]">
                 <h1 id="settings-page-title">{t(`settings.${section}`)}</h1>
             </header>
 
-            <div className={`workspace-page-body scrollable-area ${activeMenu === '模型' ? 'is-split' : ''}`}>
+            <div className={cn('scrollable-area flex min-h-0 flex-auto flex-col overflow-y-auto', activeMenu === '模型' ? 'overflow-hidden p-0' : 'p-8 max-[720px]:p-4 [&>*]:w-full')}>
                 {/* 模型 (Model) */}
                 {activeMenu === '模型' && (
-                    <div className="settings-model-layout">
+                    <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
                         {/* Internal Sidebar for Model */}
-                        <nav className="settings-provider-nav" aria-label={t('settings.providers')}>
+                        <nav className="flex w-[216px] flex-[0_0_216px] flex-col gap-px overflow-y-auto border-r border-border bg-[#fafaf9] px-3 py-4 max-[720px]:max-h-40 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-row max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label={t('settings.providers')}>
                             <button
                                 type="button"
-                                className={`modal-nav-item settings-provider-overview ${modelProvider === '模型设置' ? 'active' : ''}`}
+                                className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-[#f2f1ef] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap mb-3.5 max-[720px]:mb-0', modelProvider === '模型设置' && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
                                 aria-current={modelProvider === '模型设置' ? 'page' : undefined}
                                 onClick={() => setModelProvider('模型设置')}
                             >
-                                <SettingsIcon size={16} className="modal-nav-icon" />
+                                <SettingsIcon size={16} />
                                 <span>{t('settings.modelSettings')}</span>
                             </button>
 
-                            <div className="settings-provider-label">{t('settings.providers')}</div>
+                            <div className="px-2.5 pb-1.5 font-mono text-[0.7rem] text-[#a8a29e] before:content-['--_'] max-[720px]:hidden">{t('settings.providers')}</div>
                             {providers.map(p => (
                                 <button
                                     key={p.id}
                                     type="button"
-                                    className={`modal-nav-item settings-provider-item ${modelProvider === p.id ? 'active' : ''}`}
+                                    className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-[#f2f1ef] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap', modelProvider === p.id && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
                                     aria-current={modelProvider === p.id ? 'page' : undefined}
                                     onClick={() => setModelProvider(p.id)}
                                 >
-                                    <span className="settings-provider-dot" data-on={providerConfigs[p.id]?.enabled ? 'true' : undefined} aria-hidden="true" />
+                                    <span className="size-1.5 flex-none rounded-full bg-[#d6d3d1] transition-colors data-[on=true]:bg-[#047857] data-[on=true]:shadow-[0_0_0_3px_rgba(4,120,87,0.12)]" data-on={providerConfigs[p.id]?.enabled ? 'true' : undefined} aria-hidden="true" />
                                     <span>{p.label}</span>
                                 </button>
                             ))}
                         </nav>
 
                         {/* Model Content */}
-                        <div className="settings-provider-content">
+                        <div className="min-w-0 flex-1 overflow-y-auto px-9 pt-7 pb-10 max-[720px]:p-4 [&>*]:max-w-[720px]">
                             {modelProvider === '模型设置' ? (
-                                <div key="overview" className="ui-stack ui-enter settings-pane">
-                                    <p className="ui-lead">{t('settings.defaultModelTitle')}</p>
+                                <div key="overview" className={cn(UI.stack, UI.enter, 'max-w-[640px] gap-6')}>
+                                    <p className={UI.lead}>{t('settings.defaultModelTitle')}</p>
 
-                                    <div className="ui-field">
-                                        <label className="ui-label" htmlFor="settings-default-model">{t('settings.defaultModelSubtitle')}</label>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-default-model">{t('settings.defaultModelSubtitle')}</label>
                                         <input
                                             id="settings-default-model"
-                                            className="ui-input ui-mono"
+                                            className={cn(UI.input, UI.mono)}
                                             value={config?.model || ''}
                                             readOnly
                                             placeholder={t('settings.notSet')}
                                         />
-                                        <p className="ui-hint">{t('settings.defaultModelHint')}</p>
+                                        <p className={UI.hint}>{t('settings.defaultModelHint')}</p>
                                     </div>
 
-                                    <div className="ui-stack settings-subsection">
-                                        <h4 className="ui-subhead">{t('settings.historyLimitTitle')}</h4>
-                                        <div className="ui-grid-2">
-                                            <div className="ui-field">
-                                                <label className="ui-label" htmlFor="settings-max-turns">{t('settings.maxTurns')}</label>
-                                                <input id="settings-max-turns" className="ui-input" type="number" value="20" readOnly />
-                                                <p className="ui-hint">{t('settings.maxTurnsSubtitle')}</p>
+                                    <div className={cn(UI.stack, 'gap-3.5 border-t border-border pt-6')}>
+                                        <h4 className={UI.subhead}>{t('settings.historyLimitTitle')}</h4>
+                                        <div className={UI.grid2}>
+                                            <div className={UI.field}>
+                                                <label className={UI.label} htmlFor="settings-max-turns">{t('settings.maxTurns')}</label>
+                                                <input id="settings-max-turns" className={UI.input} type="number" value="20" readOnly />
+                                                <p className={UI.hint}>{t('settings.maxTurnsSubtitle')}</p>
                                             </div>
-                                            <div className="ui-field">
-                                                <label className="ui-label" htmlFor="settings-max-tokens">{t('settings.maxTokens')}</label>
-                                                <input id="settings-max-tokens" className="ui-input" type="number" value="2000" readOnly />
-                                                <p className="ui-hint">{t('settings.maxTokensSubtitle')}</p>
+                                            <div className={UI.field}>
+                                                <label className={UI.label} htmlFor="settings-max-tokens">{t('settings.maxTokens')}</label>
+                                                <input id="settings-max-tokens" className={UI.input} type="number" value="2000" readOnly />
+                                                <p className={UI.hint}>{t('settings.maxTokensSubtitle')}</p>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             ) : (
-                                <div key={modelProvider} className="ui-stack ui-enter settings-pane">
+                                <div key={modelProvider} className={cn(UI.stack, UI.enter, 'max-w-[640px] gap-6')}>
                                     {/* Header */}
-                                    <div className="ui-card-head settings-provider-head">
+                                    <div className={cn(UI.cardHead, 'border-b border-border pb-5')}>
                                         <div>
-                                            <h3 className="ui-card-title">
+                                            <h3 className={UI.cardTitle}>
                                                 {providers.find(p => p.id === modelProvider)?.label || modelProvider}
-                                                <span className="ui-pill" data-tone={providerConfigs[modelProvider]?.enabled ? 'ok' : 'idle'}>
+                                                <span className={UI.pill} data-tone={providerConfigs[modelProvider]?.enabled ? 'ok' : 'idle'}>
                                                     {providerConfigs[modelProvider]?.enabled ? t('settings.providerEnabled') : t('settings.providerDisabled')}
                                                 </span>
                                             </h3>
                                             {saveFeedback && providerConfigs[modelProvider]?.enabled && (
-                                                <span role="status" aria-live="polite" className={`settings-feedback ${saveFeedback.startsWith('✗') ? 'is-error' : 'is-ok'}`}>
+                                                <span role="status" aria-live="polite" className={cn('mt-1.5 block text-[0.8rem]', saveFeedback.startsWith('✗') ? 'text-destructive' : 'text-[#047857]')}>
                                                     {saveFeedback}
                                                 </span>
                                             )}
@@ -481,7 +483,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                         <button
                                             type="button"
                                             role="switch"
-                                            className="ui-switch"
+                                            className={UI.switch}
                                             aria-checked={!!providerConfigs[modelProvider]?.enabled}
                                             aria-label={providerConfigs[modelProvider]?.enabled ? '停用提供商' : '启用提供商'}
                                             onClick={() => toggleProvider(modelProvider)}
@@ -490,12 +492,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                     </div>
 
                                     {/* API Key */}
-                                    <div className="ui-field">
-                                        <label className="ui-label" htmlFor="settings-api-key">{t('settings.apiKeyTitle')}</label>
-                                        <div className="ui-input-group">
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-api-key">{t('settings.apiKeyTitle')}</label>
+                                        <div className={UI.inputGroup}>
                                             <input
                                                 id="settings-api-key"
-                                                className="ui-input ui-mono"
+                                                className={cn(UI.input, UI.mono)}
                                                 type={showPassword ? 'text' : 'password'}
                                                 autoComplete="off"
                                                 spellCheck={false}
@@ -505,7 +507,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                             />
                                             <button
                                                 type="button"
-                                                className="ui-input-adorn"
+                                                data-adorn
+                                                className={UI.inputAdorn}
                                                 onClick={() => setShowPassword(prev => !prev)}
                                                 aria-label={showPassword ? '隐藏密码' : '显示密码'}
                                                 aria-pressed={showPassword}
@@ -513,17 +516,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                                 <Eye size={16} />
                                             </button>
                                         </div>
-                                        <a className="ui-link" href={providers.find(p => p.id === modelProvider)?.apiKeyUrl || '#'} target="_blank" rel="noreferrer">
+                                        <a className={UI.link} href={providers.find(p => p.id === modelProvider)?.apiKeyUrl || '#'} target="_blank" rel="noreferrer">
                                             {t('settings.howToGetToken')} <ExternalLink size={13} />
                                         </a>
                                     </div>
 
                                     {/* API Base URL */}
-                                    <div className="ui-field">
-                                        <label className="ui-label" htmlFor="settings-api-base-url">{t('settings.apiBaseUrl')}</label>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-api-base-url">{t('settings.apiBaseUrl')}</label>
                                         <input
                                             id="settings-api-base-url"
-                                            className="ui-input ui-mono"
+                                            className={cn(UI.input, UI.mono)}
                                             type="text"
                                             spellCheck={false}
                                             value={providerConfigs[modelProvider]?.baseUrl || ''}
@@ -533,11 +536,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                     </div>
 
                                     {/* Model */}
-                                    <div className="ui-field">
-                                        <label className="ui-label" htmlFor="settings-model-name">{t('settings.modelName')}</label>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-model-name">{t('settings.modelName')}</label>
                                         <input
                                             id="settings-model-name"
-                                            className="ui-input ui-mono"
+                                            className={cn(UI.input, UI.mono)}
                                             type="text"
                                             spellCheck={false}
                                             value={providerConfigs[modelProvider]?.selectedModel || ''}
@@ -546,7 +549,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                         />
                                     </div>
 
-                                    <div className="ui-alert settings-local-hint">
+                                    <div className={cn(UI.alert, '[&_span]:inline-flex [&_span]:items-start [&_span]:gap-2 [&_svg]:mt-1 [&_svg]:flex-none [&_svg]:text-[#a8a29e]')}>
                                         <span><SettingsIcon size={14} aria-hidden="true" /> {t('settings.configLocalHint')}</span>
                                     </div>
                                 </div>
@@ -557,86 +560,86 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                 {/* 数据库 (Database) */}
                 {activeMenu === '数据库' && (
-                    <div className="settings-tab-content ui-stack ui-enter">
-                        <section className="ui-card ui-stack settings-form-card" aria-labelledby="settings-db-heading">
-                            <div className="ui-card-head">
-                                <div className="ui-card-title" id="settings-db-heading">
-                                    <span className="ui-card-icon" aria-hidden="true"><Database size={18} /></span>
-                                    <div>
+                    <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
+                        <section className={cn(UI.card, UI.stack, 'gap-5')} aria-labelledby="settings-db-heading">
+                            <div className={UI.cardHead}>
+                                <div className={UI.cardTitle} id="settings-db-heading">
+                                    <span className={UI.cardIcon} aria-hidden="true"><Database size={18} /></span>
+                                    <div className="grid min-w-0 gap-0.5">
                                         <div>{t('settings.database')}</div>
-                                        <div className="ui-caption">-- {dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://{dbHost || 'localhost'}:{dbPort}</div>
+                                        <div className={cn(UI.caption, 'truncate')}>-- {dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://{dbHost || 'localhost'}:{dbPort}</div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="ui-field">
-                                <label className="ui-label" htmlFor="settings-db-driver">
+                            <div className={UI.field}>
+                                <label className={UI.label} htmlFor="settings-db-driver">
                                     <Database size={15} aria-hidden="true" />
                                     <span>{t('settings.dbDriver')}</span>
                                 </label>
-                                <select id="settings-db-driver" className="ui-select" value={dbDriver} onChange={e => changeDbDriver(e.target.value as DatabaseDriver)}>
+                                <select id="settings-db-driver" className={cn(UI.input, UI.select)} value={dbDriver} onChange={e => changeDbDriver(e.target.value as DatabaseDriver)}>
                                     <option value="mysql">MySQL</option>
                                     <option value="postgres">PostgreSQL</option>
                                 </select>
                             </div>
 
-                            <div className="ui-grid-2 settings-form-row">
-                                <div className="ui-field">
-                                    <label className="ui-label" htmlFor="settings-db-host">
+                            <div className={cn(UI.grid2, 'max-[720px]:gap-4')}>
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-host">
                                         <RiCloud size={15} aria-hidden="true" />
                                         <span>{t('settings.dbHost')}</span>
                                     </label>
-                                    <input id="settings-db-host" className="ui-input ui-mono" type="text" spellCheck={false} placeholder="localhost" value={dbHost} onChange={e => setDbHost(e.target.value)} />
+                                    <input id="settings-db-host" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} placeholder="localhost" value={dbHost} onChange={e => setDbHost(e.target.value)} />
                                 </div>
-                                <div className="ui-field">
-                                    <label className="ui-label" htmlFor="settings-db-port">
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-port">
                                         <RiUsb size={15} aria-hidden="true" />
                                         <span>{t('settings.dbPort')}</span>
                                     </label>
-                                    <input id="settings-db-port" className="ui-input ui-mono" type="number" placeholder={String(DB_DRIVER_DEFAULTS[dbDriver].port)} value={dbPort} onChange={e => setDbPort(parseInt(e.target.value) || DB_DRIVER_DEFAULTS[dbDriver].port)} />
+                                    <input id="settings-db-port" className={cn(UI.input, UI.mono)} type="number" placeholder={String(DB_DRIVER_DEFAULTS[dbDriver].port)} value={dbPort} onChange={e => setDbPort(parseInt(e.target.value) || DB_DRIVER_DEFAULTS[dbDriver].port)} />
                                 </div>
                             </div>
 
-                            <div className="ui-grid-2 settings-form-row">
-                                <div className="ui-field">
-                                    <label className="ui-label" htmlFor="settings-db-user">
+                            <div className={cn(UI.grid2, 'max-[720px]:gap-4')}>
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-user">
                                         <User size={15} aria-hidden="true" />
                                         <span>{t('settings.dbUser')}</span>
                                     </label>
-                                    <input id="settings-db-user" className="ui-input ui-mono" type="text" spellCheck={false} placeholder={DB_DRIVER_DEFAULTS[dbDriver].user} value={dbUser} onChange={e => setDbUser(e.target.value)} />
+                                    <input id="settings-db-user" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} placeholder={DB_DRIVER_DEFAULTS[dbDriver].user} value={dbUser} onChange={e => setDbUser(e.target.value)} />
                                 </div>
-                                <div className="ui-field">
-                                    <label className="ui-label" htmlFor="settings-db-password">
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-password">
                                         <RiKey2 size={15} aria-hidden="true" />
                                         <span>{t('settings.dbPassword')}</span>
                                     </label>
-                                    <input id="settings-db-password" className="ui-input ui-mono" type="password" placeholder="••••••••" value={dbPassword} onChange={e => setDbPassword(e.target.value)} />
+                                    <input id="settings-db-password" className={cn(UI.input, UI.mono)} type="password" placeholder="••••••••" value={dbPassword} onChange={e => setDbPassword(e.target.value)} />
                                 </div>
                             </div>
 
-                            <div className="ui-field">
-                                <label className="ui-label" htmlFor="settings-db-name">
+                            <div className={UI.field}>
+                                <label className={UI.label} htmlFor="settings-db-name">
                                     <Link size={15} aria-hidden="true" />
                                     <span>{t('settings.dbDatabase')}</span>
                                 </label>
-                                <input id="settings-db-name" className="ui-input ui-mono" type="text" spellCheck={false} placeholder="my_database" value={dbName} onChange={e => setDbName(e.target.value)} />
+                                <input id="settings-db-name" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} placeholder="my_database" value={dbName} onChange={e => setDbName(e.target.value)} />
                             </div>
 
                             {/* Test Result Alert */}
                             {dbTestResult && (
-                                <div className="ui-alert" data-tone={dbTestResult.success ? 'ok' : 'error'} role={dbTestResult.success ? 'status' : 'alert'} aria-live={dbTestResult.success ? 'polite' : 'assertive'}>
+                                <div className={UI.alert} data-tone={dbTestResult.success ? 'ok' : 'error'} role={dbTestResult.success ? 'status' : 'alert'} aria-live={dbTestResult.success ? 'polite' : 'assertive'}>
                                     <strong>{dbTestResult.success ? `✓ ${t('settings.dbTestSuccess')}` : `✗ ${t('settings.dbTestFailed')}`}</strong>
-                                    <div className="ui-alert-detail">{dbTestResult.message}</div>
+                                    <div className={UI.alertDetail}>{dbTestResult.message}</div>
                                 </div>
                             )}
 
-                            <div className="ui-actions settings-action-row">
-                                <button type="button" className="ui-btn" onClick={handleTestDB} disabled={isTestingDB}>
-                                    {isTestingDB ? <Loader2 size={15} className="legacy-animate-spin" /> : null}
+                            <div className={cn(UI.actions, 'max-[720px]:flex-wrap max-[720px]:[&>button]:w-[min(180px,100%)] max-[720px]:[&>button]:flex-[1_1_120px]')}>
+                                <button type="button" className={UI.btn} onClick={handleTestDB} disabled={isTestingDB}>
+                                    {isTestingDB ? <Loader2 size={15} className="animate-spin" /> : null}
                                     {isTestingDB ? t('settings.testing') : t('settings.dbTest')}
                                 </button>
-                                <button type="button" className="ui-btn ui-btn-primary" onClick={handleSaveDB} disabled={isSavingDB}>
-                                    {isSavingDB ? <Loader2 size={15} className="legacy-animate-spin" /> : null}
+                                <button type="button" className={cn(UI.btn, UI.btnPrimary)} onClick={handleSaveDB} disabled={isSavingDB}>
+                                    {isSavingDB ? <Loader2 size={15} className="animate-spin" /> : null}
                                     {t('settings.save')}
                                 </button>
                             </div>
@@ -650,37 +653,37 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                 {/* 环境 (Environment) */}
                 {activeMenu === '环境' && (
-                    <div className="settings-tab-content ui-stack ui-enter">
-                        <section className="ui-card ui-stack settings-form-card" aria-labelledby="settings-python-heading">
-                            <div className="ui-card-head">
+                    <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
+                        <section className={cn(UI.card, UI.stack, 'gap-5')} aria-labelledby="settings-python-heading">
+                            <div className={UI.cardHead}>
                                 <div>
-                                    <h3 className="ui-card-title" id="settings-python-heading">
-                                        <span className="ui-card-icon" aria-hidden="true"><Terminal size={18} /></span>
+                                    <h3 className={UI.cardTitle} id="settings-python-heading">
+                                        <span className={UI.cardIcon} aria-hidden="true"><Terminal size={18} /></span>
                                         {t('settings.python')}
                                     </h3>
-                                    <p className="ui-card-desc">{t('settings.pythonHint')}</p>
+                                    <p className={UI.cardDesc}>{t('settings.pythonHint')}</p>
                                 </div>
                             </div>
-                            <div className="ui-segmented" role="group" aria-label={t('settings.python')}>
+                            <div className={UI.segmented} role="group" aria-label={t('settings.python')}>
                                 <button type="button" aria-pressed={pythonRuntime.mode === 'bundled'} onClick={() => { setPythonRuntime({ mode: 'bundled' }); setPythonTestResult(null); }}>{t('settings.bundledPython')}</button>
                                 <button type="button" aria-pressed={pythonRuntime.mode === 'external'} onClick={() => { setPythonRuntime({ mode: 'external', executable: pythonExecutable }); setPythonTestResult(null); }}>{t('settings.externalPython')}</button>
                             </div>
-                            <div className="ui-field">
-                                <label className="ui-label" htmlFor="settings-python-executable">{t('settings.pythonExecutable')}</label>
-                                <div className="ui-input-group">
-                                    <input id="settings-python-executable" className="ui-input ui-mono" type="text" spellCheck={false} value={pythonRuntime.mode === 'bundled' ? (pythonRuntime.label || t('settings.bundledPython')) : pythonExecutable} onChange={e => setPythonExecutable(e.target.value)} readOnly={pythonRuntime.mode === 'bundled'} placeholder="例如: D:\\data_agent\\.venv\\Scripts\\python.exe" />
-                                    <button type="button" className="ui-btn" onClick={handleChoosePython} disabled={pythonRuntime.mode !== 'external'}>{t('settings.choose')}</button>
+                            <div className={UI.field}>
+                                <label className={UI.label} htmlFor="settings-python-executable">{t('settings.pythonExecutable')}</label>
+                                <div className={UI.inputGroup}>
+                                    <input id="settings-python-executable" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} value={pythonRuntime.mode === 'bundled' ? (pythonRuntime.label || t('settings.bundledPython')) : pythonExecutable} onChange={e => setPythonExecutable(e.target.value)} readOnly={pythonRuntime.mode === 'bundled'} placeholder="例如: D:\\data_agent\\.venv\\Scripts\\python.exe" />
+                                    <button type="button" className={UI.btn} onClick={handleChoosePython} disabled={pythonRuntime.mode !== 'external'}>{t('settings.choose')}</button>
                                 </div>
                             </div>
                             {pythonTestResult && (
-                                <div className="ui-alert" data-tone={pythonTestResult.success ? 'ok' : 'error'} role={pythonTestResult.success ? 'status' : 'alert'} aria-live={pythonTestResult.success ? 'polite' : 'assertive'}>
+                                <div className={UI.alert} data-tone={pythonTestResult.success ? 'ok' : 'error'} role={pythonTestResult.success ? 'status' : 'alert'} aria-live={pythonTestResult.success ? 'polite' : 'assertive'}>
                                     <strong>{pythonTestResult.success ? `✓ ${t('settings.saveSuccess')}` : `✗ ${t('settings.saveFailed')}`}</strong>
-                                    <div className="ui-alert-detail">{pythonTestResult.message}</div>
+                                    <div className={UI.alertDetail}>{pythonTestResult.message}</div>
                                 </div>
                             )}
-                            <div className="ui-actions settings-action-row">
-                                <button type="button" onClick={handleTestPython} className="ui-btn" disabled={isTestingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isTestingPython ? <Loader2 size={15} className="legacy-animate-spin" /> : null}{isTestingPython ? t('settings.testingPython') : t('settings.testPython')}</button>
-                                <button type="button" onClick={handleSavePython} className="ui-btn ui-btn-primary" disabled={isSavingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isSavingPython ? <Loader2 size={15} className="legacy-animate-spin" /> : null}{t('settings.savePython')}</button>
+                            <div className={cn(UI.actions, 'max-[720px]:flex-wrap max-[720px]:[&>button]:w-[min(180px,100%)] max-[720px]:[&>button]:flex-[1_1_120px]')}>
+                                <button type="button" onClick={handleTestPython} className={UI.btn} disabled={isTestingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isTestingPython ? <Loader2 size={15} className="animate-spin" /> : null}{isTestingPython ? t('settings.testingPython') : t('settings.testPython')}</button>
+                                <button type="button" onClick={handleSavePython} className={cn(UI.btn, UI.btnPrimary)} disabled={isSavingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isSavingPython ? <Loader2 size={15} className="animate-spin" /> : null}{t('settings.savePython')}</button>
                             </div>
                         </section>
                     </div>

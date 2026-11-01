@@ -41,6 +41,8 @@
   --sidebar-accent-foreground: #1c1917;
   --sidebar-border: #ecebe8;
   --sidebar-ring: #c2410c;
+  /* The chevron drawn inside a native <select>. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2378716c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
 }
 
 @theme inline {
