@@ -4822,9 +4822,74 @@ body {
 
 .plugins-tab-list {
   display: flex;
-  gap: 24px;
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--border-light);
+  gap: 28px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--hairline, #ecebe8);
+}
+
+.plugins-tab {
+  position: relative;
+  padding: 0 0 12px;
+  border: 0;
+  background: none;
+  color: #78716c;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--duration-quick) var(--ease-out);
+}
+
+.plugins-tab::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: #1c1917;
+  transform: scaleX(0);
+  transition: transform var(--duration-ui) var(--ease-out);
+}
+
+.plugins-tab:hover {
+  color: #1c1917;
+}
+
+.plugins-tab[aria-selected='true'] {
+  color: #1c1917;
+  font-weight: 600;
+}
+
+.plugins-tab[aria-selected='true']::after {
+  transform: scaleX(1);
+}
+
+.plugins-tab:focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.plugins-lead {
+  margin: 0;
+  max-width: 64ch;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: #78716c;
+}
+
+.plugins-toolbar-actions {
+  display: flex;
+  gap: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plugins-tab,
+  .plugins-tab::after {
+    transition: none;
+  }
 }
 
 .plugins-mcp-toolbar,
