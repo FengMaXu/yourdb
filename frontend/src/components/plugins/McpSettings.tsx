@@ -7,6 +7,8 @@ export interface McpStatusMeta {
     label: string;
     fg: string;
     bg: string;
+    /** Connected and serving tools; drawn with a soft pulse. */
+    live?: boolean;
 }
 
 interface McpSettingsProps {
@@ -57,7 +59,7 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
                         return (
                             <li key={`${item.name || 'new'}-${index}`}>
                                 <button type="button" className="mcp-list-item" aria-current={selected === index ? 'true' : undefined} onClick={() => onSelect(index)}>
-                                    <span className="mcp-dot" style={{ background: item.enabled ? (status?.fg ?? '#a8a29e') : '#d6d3d1' }} aria-hidden="true" />
+                                    <span className="mcp-dot" data-live={item.enabled && status?.live ? 'true' : undefined} style={{ color: item.enabled ? (status?.fg ?? '#a8a29e') : '#d6d3d1' }} aria-hidden="true" />
                                     <span className="mcp-list-text">
                                         <span className="mcp-list-title">{item.preset?.title ?? (item.name || t('plugins.unnamedSrv'))}</span>
                                         <span className="mcp-list-sub">{subtitle(item, t)}</span>
@@ -73,7 +75,7 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
                 {!server || selected === null ? (
                     <div className="mcp-editor-empty">{t('plugins.selectHint')}</div>
                 ) : (
-                    <Editor {...props} server={server} index={selected} />
+                    <Editor key={selected} {...props} server={server} index={selected} />
                 )}
             </section>
         </div>
@@ -91,7 +93,7 @@ const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: numb
                     <h4>{server.preset?.title ?? (server.name || t('plugins.unnamedSrv'))}</h4>
                     <div className="mcp-editor-meta">
                         {server.preset && <span className="mcp-badge">{t('plugins.preset')}</span>}
-                        {status && <span className="mcp-status" style={{ color: status.fg, background: status.bg }}>{status.label}</span>}
+                        {status && <span className="mcp-status" data-live={status.live ? 'true' : undefined} style={{ color: status.fg, background: status.bg }}>{status.label}</span>}
                     </div>
                 </div>
                 <label className="mcp-switch">
@@ -173,7 +175,7 @@ const ChoiceField: React.FC<{ field: MCPPresetField; server: MCPServerConfig; in
     const chosen = Array.isArray(saved) ? saved : (field.defaultValue || []);
     return (
         <fieldset className="mcp-field">
-            <legend className="mcp-field-head">{field.label}{field.required && <span className="mcp-required" aria-hidden="true">*</span>}</legend>
+            <legend className="mcp-field-head"><span>{field.label}{field.required && <span className="mcp-required" aria-hidden="true">*</span>}</span>{field.choices && <span className="mcp-field-count">{field.choices.filter((choice) => chosen.includes(choice.value)).length} / {field.choices.length}</span>}</legend>
             <div className="mcp-choices">
                 {(field.choices || []).map((choice) => {
                     const on = chosen.includes(choice.value);

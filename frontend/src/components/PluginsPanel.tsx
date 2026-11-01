@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, RefreshCw, Plus, Loader2 } from './icons/Typicons';
+import { Search, RefreshCw, Plus, Loader2, Database, PlugZap, Server } from './icons/Typicons';
 import {
     type MCPConfig,
     type MCPServerConfig,
@@ -306,7 +306,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
         }
         const status = !server.enabled ? 'disabled' : (server.status || (server.connected ? 'connected' : 'disconnected'));
         if (status === 'connected') {
-            return { label: t('plugins.connected'), fg: '#047857', bg: '#ecfdf5' };
+            return { label: t('plugins.connected'), fg: '#047857', bg: '#ecfdf5', live: true };
         }
         if (status === 'connecting') {
             return { label: t('plugins.connecting'), fg: '#1d4ed8', bg: '#eff6ff' };
@@ -335,7 +335,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                 type="button"
                                 role="tab"
                                 aria-selected={mcpTab === '已安装'}
-                                style={{ paddingBottom: '12px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: mcpTab === '已安装' ? 600 : 400, color: mcpTab === '已安装' ? '#1f2937' : '#6b7280', borderBottom: mcpTab === '已安装' ? '2px solid #1f2937' : '2px solid transparent' }}
+                                className="plugins-tab"
                                 onClick={() => setMcpTab('已安装')}
                             >
                                 {t('plugins.installed')}
@@ -344,7 +344,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                 type="button"
                                 role="tab"
                                 aria-selected={mcpTab === '设置'}
-                                style={{ paddingBottom: '12px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: mcpTab === '设置' ? 600 : 400, color: mcpTab === '设置' ? '#1f2937' : '#6b7280', borderBottom: mcpTab === '设置' ? '2px solid #1f2937' : '2px solid transparent' }}
+                                className="plugins-tab"
                                 onClick={() => setMcpTab('设置')}
                             >
                                 {t('plugins.settings')}
@@ -352,10 +352,8 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         </div>
 
                         <div className="plugins-mcp-toolbar">
-                            <div style={{ color: '#4b5563', fontSize: '0.9rem' }}>
-                                {t('plugins.mcpDesc')}
-                            </div>
-                            <div style={{ display: 'flex', gap: '4px' }}>
+                            <p className="plugins-lead">{t('plugins.mcpDesc')}</p>
+                            <div className="plugins-toolbar-actions">
                                 <button
                                     type="button"
                                     className="icon-reveal-btn"
@@ -366,10 +364,13 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                     {isLoadingMCP ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={17} aria-hidden="true" />}
                                     <span className="header-icon-label" aria-hidden="true">{t('plugins.refresh')}</span>
                                 </button>
-                                <button type="button" className="icon-reveal-btn" onClick={addMcpServer} aria-label={t('plugins.add')}>
-                                    <Plus size={17} aria-hidden="true" />
-                                    <span className="header-icon-label" aria-hidden="true">{t('plugins.add')}</span>
-                                </button>
+                                {/* The settings tab's plugin list has its own add button. */}
+                                {mcpTab === '已安装' && (
+                                    <button type="button" className="icon-reveal-btn" onClick={addMcpServer} aria-label={t('plugins.add')}>
+                                        <Plus size={17} aria-hidden="true" />
+                                        <span className="header-icon-label" aria-hidden="true">{t('plugins.add')}</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
 
@@ -384,18 +385,24 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                 {displayedMcpServers.length === 0 && (
                                     <li role="status" className="mcp-cards-empty">{t('plugins.noServers')}</li>
                                 )}
-                                {displayedMcpServers.map((server) => {
+                                {displayedMcpServers.map((server, index) => {
                                     const isToggling = pendingToggleServer === server.name;
                                     const isRestarting = pendingRestartServer === server.name;
                                     const statusMeta = !statusesLoaded && server.enabled
                                         ? { label: t('plugins.connecting'), fg: '#1d4ed8', bg: '#eff6ff' }
                                         : getServerStatusMeta(server);
+                                    const live = statusesLoaded && server.connected;
+                                    const CardIcon = isHostManaged(server) ? Database : server.preset ? PlugZap : Server;
                                     return (
-                                        <li key={server.key} className="mcp-card">
+                                        <li key={server.key} className="mcp-card" data-off={server.enabled ? undefined : 'true'} style={{ '--i': index } as React.CSSProperties}>
+                                            <span className="mcp-card-icon" aria-hidden="true"><CardIcon size={18} /></span>
                                             <div className="mcp-card-main">
                                                 <div className="mcp-card-title">
                                                     <span>{server.preset?.title ?? server.name}</span>
-                                                    <span className="mcp-status" style={{ color: statusMeta.fg, background: statusMeta.bg }}>{statusMeta.label}</span>
+                                                    <span className="mcp-status" data-live={live ? 'true' : undefined} style={{ color: statusMeta.fg, background: statusMeta.bg }}>{statusMeta.label}</span>
+                                                    {live && server.tool_count > 0 && (
+                                                        <span className="mcp-card-count">{t('plugins.toolCount').replace('{count}', String(server.tool_count))}</span>
+                                                    )}
                                                 </div>
                                                 <p className="mcp-card-desc">{server.description || t('plugins.noDesc')}</p>
                                             </div>
@@ -459,7 +466,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                 type="button"
                                 role="tab"
                                 aria-selected={skillsTab === '已安装'}
-                                style={{ paddingBottom: '12px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: skillsTab === '已安装' ? 600 : 400, color: skillsTab === '已安装' ? '#1f2937' : '#6b7280', borderBottom: skillsTab === '已安装' ? '2px solid #1f2937' : '2px solid transparent' }}
+                                className="plugins-tab"
                                 onClick={() => setSkillsTab('已安装')}
                             >
                                 {t('plugins.installed')}
@@ -468,7 +475,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                 type="button"
                                 role="tab"
                                 aria-selected={skillsTab === '设置'}
-                                style={{ paddingBottom: '12px', background: 'none', border: 'none', cursor: 'pointer', fontWeight: skillsTab === '设置' ? 600 : 400, color: skillsTab === '设置' ? '#1f2937' : '#6b7280', borderBottom: skillsTab === '设置' ? '2px solid #1f2937' : '2px solid transparent' }}
+                                className="plugins-tab"
                                 onClick={() => setSkillsTab('设置')}
                             >
                                 {t('plugins.settings')}
