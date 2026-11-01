@@ -1,4 +1,5 @@
 import React from 'react';
+import { FILE_ACTION_BUTTON, FILE_ACTIONS } from '../file-actions';
 import { formatFieldValue, type ChartDataset, type SemanticsCheck } from '@data-agent/charts';
 import type { FieldMeta } from '@data-agent/contracts';
 import ChartSpecWidget from './ChartSpecWidget';
@@ -513,11 +514,11 @@ const FileLinkWidget: React.FC<FileLinkWidgetProps> = ({ widget, t, currentSessi
                         </div>
                     )}
                 </div>
-                <div className="agent-file-actions">
+                <div className={FILE_ACTIONS}>
                     {canPreview && previewUrl && (
                         <button
                             type="button"
-                            className="agent-file-action-btn"
+                            className={FILE_ACTION_BUTTON}
                             onClick={() => openPreview(previewUrl, title || file_path || 'preview', normalizedFileType)}
                             title={t('widgets.preview') || '查看'}
                             aria-label={t('widgets.preview') || '查看'}
@@ -527,7 +528,7 @@ const FileLinkWidget: React.FC<FileLinkWidgetProps> = ({ widget, t, currentSessi
                     )}
                     <button
                         type="button"
-                        className="agent-file-action-btn"
+                        className={FILE_ACTION_BUTTON}
                         onClick={handleDownload}
                         title={t('widgets.download') || '下载'}
                         aria-label={t('widgets.download') || '下载'}
