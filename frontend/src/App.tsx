@@ -14,6 +14,7 @@ import { PreviewProvider } from './context/PreviewContext';
 import { getConfigViaRuntime } from './api/runtime-client';
 import LoginView from './components/LoginView';
 import GlobalPreviewModal from './components/common/GlobalPreviewModal';
+import { Toaster } from '@/components/ui/sonner';
 
 type StartupState = 'checking' | 'ready' | 'error';
 
@@ -390,6 +391,8 @@ const App: React.FC = () => {
         onModelMissing={markModelMissing}
       />
       <GlobalPreviewModal />
+      {/* Short confirmations and errors from the sidebar; it used to draw its own toast at the same spot. */}
+      <Toaster position="bottom-center" offset={112} />
     </PreviewProvider>
   );
 };
