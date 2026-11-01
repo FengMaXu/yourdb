@@ -73,8 +73,10 @@ const PAGE_HELPERS = `window.__visual = {
   find(label) {
     const candidates = [...document.querySelectorAll('button, a, [role="button"], [role="tab"], [role="treeitem"], [role="menuitem"], summary')];
     const name = (el) => (el.getAttribute('aria-label') || el.getAttribute('title') || el.textContent || '').trim();
-    return candidates.find((el) => name(el) === label && el.offsetParent !== null)
-      || candidates.find((el) => name(el).includes(label) && el.offsetParent !== null);
+    // A disabled control is not ready yet (a toggle waiting for data): keep waiting for it.
+    const usable = (el) => el.offsetParent !== null && !el.disabled && el.getAttribute('aria-disabled') !== 'true';
+    return candidates.find((el) => name(el) === label && usable(el))
+      || candidates.find((el) => name(el).includes(label) && usable(el));
   },
   async click(label) {
     for (let waited = 0; waited < 5000; waited += 100) { const el = this.find(label); if (el) { el.click(); return true; } await new Promise((r) => setTimeout(r, 100)); }

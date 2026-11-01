@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { MARKDOWN_DOCUMENT } from './markdown-styles';
 import {
     Bot,
     Cable,
@@ -576,7 +577,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                             {isMarkdown && !isEditing ? (
-                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><div className="markdown-content leading-[1.7] text-foreground"><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
+                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><div className={`leading-[1.7] text-foreground ${MARKDOWN_DOCUMENT}`}><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
                             ) : !isEditing ? (
                                 <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><pre className="m-0 font-mono text-[0.85rem] leading-relaxed break-words whitespace-pre-wrap">{fileContent}</pre></div>
                             ) : (

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { MARKDOWN_ANSWER, MARKDOWN_DOCUMENT } from './markdown-styles';
 import type { WidgetSpec } from '../api/client';
 import { useLanguage } from '../context/LanguageContext';
 import { formatDuration, splitTurn, type TraceStep, type TurnAgentLike } from '../utils/agent-turns';
@@ -96,7 +97,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
         if (step.kind === 'note') {
             return (
                 <li key={step.key} className="trace-step">
-                    <div className="trace-note markdown-content">
+                    <div className={`trace-note ${MARKDOWN_DOCUMENT}`}>
                         <AgentMarkdown currentSessionId={currentSessionId}>{step.text}</AgentMarkdown>
                     </div>
                 </li>
@@ -164,7 +165,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 )}
 
                 {resultText && (
-                    <div className="message-content agent-message-body markdown-content agent-turn-result">
+                    <div className={`message-content agent-message-body agent-turn-result ${MARKDOWN_ANSWER}`}>
                         <AgentMarkdown currentSessionId={currentSessionId}>{resultText}</AgentMarkdown>
                     </div>
                 )}
