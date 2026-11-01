@@ -6,7 +6,7 @@ status: proposed
 
 本计划回答两个问题：是否迁移，以及怎样迁移才能不破坏现有页面、每一步都可以停下。
 
-**结论：迁移，按阶段渐进完成，不做一次性重写。** 长期维护的主要负担是现在的全局样式表，不是缺少组件库。迁移的价值在于让样式跟着组件走、能随组件一起删除，并获得维护良好的交互基础组件（折叠、弹窗、下拉、键盘与无障碍）和一批 agent 界面模式。代价是大约 15–18 个 PR，迁移期间新旧两套样式并存。
+**结论：迁移，按阶段渐进完成，不做一次性重写。** 长期维护的主要负担是现在的全局样式表，不是缺少组件库。迁移的价值在于让样式跟着组件走、能随组件一起删除，并获得维护良好的交互基础组件（折叠、弹窗、下拉、键盘与无障碍）和一批 agent 界面模式。代价是大约 15–20 个 PR，迁移期间新旧两套样式并存。
 
 ## 1. 现状（已对照 `develop` 核实）
 
@@ -22,6 +22,8 @@ status: proposed
 - 测试用 vitest + jsdom + Testing Library，按角色和文本断言，不依赖类名。
 
 ### 1.2 样式规模与债务
+
+以下行号和数字都是 2026-11-01 `develop`（#215 合并后）的快照；第 0 阶段清理开始后行号会变化，届时以选择器为准。
 
 | 文件 | 行数 | 规则块 | `@media` | `!important` | 说明 |
 |---|---:|---:|---:|---:|---|
@@ -42,7 +44,7 @@ status: proposed
     - 窄屏下压过 JS 内联写入的预览窗位置（第 4989–4990 行，覆盖 `GlobalPreviewModal` 的 `style={{ left, top }}`）。
 
     这些规则本来就要压过一切。
-  - **应清除（12 处）：** 窄屏布局里的 11 处（第 5119–5230 行，大多是当年为压过已删除的内联样式而加），以及 `.close-btn:hover` 的 1 处（第 6212 行）。
+  - **应清除（12 处）：** 插件和设置布局规则里的 11 处（第 5119–5230 行：`.plugins-action-row > button` 1 处，其余 10 处在窄屏媒体查询里，大多是当年为压过已删除的内联样式而加），以及 `.close-btn:hover` 的 1 处（第 6212 行）。
 - 内联样式剩余：`WidgetRenderer.tsx` 37 处，`ChatArea`、`PluginsPanel`、`GlobalPreviewModal`、`ChartSpecWidget` 各 3 处。
 
 ### 1.3 与 Tailwind 的直接冲突（迁移的第一个坑）
@@ -81,7 +83,7 @@ status: proposed
 | D3 | shadcn 基础库选 **Base UI**，**以第 0 阶段原型验收为准**：用 `shadcn view` 逐个确认第 2 阶段清单里的组件和计划用到的 AI Elements 模式都有 Base UI 版本，**只要缺一个就改选 Radix** | 项目目前没有任何基础库，属于“新开始”；Base UI 是官方默认和推荐，Trace、Code Block、AI Elements 都有 Base UI 版本（见第 2 节）。代价是第三方社区组件多按 Radix 和 `asChild` 写，引入时要改写成 `render` 写法。这个选择不可逆，所以要先验收，并给出明确的回退条件 |
 | D4 | `baseColor` 选 **stone**，`cssVariables: true` | 和现在的暖灰配色一致；用 CSS 变量才能映射到品牌色。这两个选项也不可逆 |
 | D5 | 变量映射：`--primary` 用墨色 `#1c1917`（主按钮就是墨色），`--ring` 用品牌橙 `#c2410c`，另加 `--brand` 和 `--brand-soft` 表示品牌橙。shadcn 的 `--accent` 保持它原本的含义：悬停时的浅底色 | shadcn 的 `accent` 是浅色悬停面，不是品牌强调色；直接把橙色映射过去，会让所有菜单的悬停状态变成橙色 |
-| D6 | **不用前缀** | 冲突已经清点过（见 1.3），数量很少，可以在第 1 阶段处理掉。用前缀会让每个组件多写 `tw:`，和 shadcn 生成的代码也对不上（shadcn 示例用 `tw-`，Tailwind 语法是 `tw:`） |
+| D6 | **不用前缀** | 冲突已经清点过（见 1.3），数量很少，在第 0 阶段（PR 0.4）处理掉。用前缀会让每个组件多写 `tw:`，和 shadcn 生成的代码也对不上（shadcn 示例用 `tw-`，Tailwind 语法是 `tw:`） |
 | D7 | 新代码用 `lucide-react` 图标，这也是 shadcn 的默认图标库，且已安装。`Typicons` 和 `RemixIcons` 两个包装层在各页面迁移时一并替换，最后删除 | 两个包装层导出的名字本来就按 lucide 命名（如 `Loader2`、`ChevronRight`），替换基本是改 import |
 | D8 | 加 `@/*` 路径别名（`tsconfig.app.json` 的 `paths`，加上 Vite 的 `resolve.alias`）；`vite.config.ts` 是 ESM，用 `fileURLToPath(new URL('./src', import.meta.url))`，不用 `__dirname` | shadcn CLI 靠别名决定文件放哪、怎么改写 import |
 | D9 | **不执行** `shadcn init`，手写 `components.json` 和主题 CSS，之后只用 `shadcn add` 添加组件 | `init` 会改写全局 CSS；手写可以完全掌控写入内容。也可以在临时目录里运行一次 `init`，把生成的内容拷过来 |
