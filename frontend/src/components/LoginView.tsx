@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { BrandWordmark } from './Brand';
-import { LockKeyhole, LogIn, UserPlus } from './icons/Typicons';
+import { LogIn, UserPlus, Loader2 } from './icons/Typicons';
 import { useAuth } from '../hooks/useAuth';
 import { useLanguage } from '../context/LanguageContext';
 
 interface LoginViewProps {
     embedded?: boolean;
 }
+
+/** The brand's SQL voice, set beside the form: keyword, then value. */
+const SQL_LINES = [
+    ['SELECT', 'auth.sql.select'],
+    ['FROM', 'auth.sql.from'],
+    ['WHERE', 'auth.sql.where'],
+] as const;
 
 const LoginView: React.FC<LoginViewProps> = ({ embedded = false }) => {
     const { login, register, registrationOpen } = useAuth();
@@ -45,13 +52,9 @@ const LoginView: React.FC<LoginViewProps> = ({ embedded = false }) => {
     const form = (
             <form className={`auth-panel ${embedded ? 'auth-panel-embedded' : ''}`} onSubmit={handleSubmit}>
                 <div className="auth-brand">
-                    <div className="auth-mark">
-                        <LockKeyhole size={22} />
-                    </div>
-                    <div>
-                        <h1><BrandWordmark title="yourdb" /></h1>
-                        <p>{isRegister ? t('auth.registerSubtitle') : t('auth.loginSubtitle')}</p>
-                    </div>
+                    <h1><BrandWordmark title="yourdb" /></h1>
+                    <p className="auth-heading">{isRegister ? t('auth.registerTitle') : t('auth.loginTitle')}</p>
+                    <p className="auth-sub">{isRegister ? t('auth.registerSubtitle') : t('auth.loginSubtitle')}</p>
                 </div>
 
                 <label className="auth-field">
@@ -60,6 +63,8 @@ const LoginView: React.FC<LoginViewProps> = ({ embedded = false }) => {
                         value={username}
                         onChange={(event) => setUsername(event.target.value)}
                         autoComplete="username"
+                        autoFocus
+                        spellCheck={false}
                         minLength={3}
                         required
                     />
@@ -80,7 +85,7 @@ const LoginView: React.FC<LoginViewProps> = ({ embedded = false }) => {
                 {error && <div className="auth-error" role="alert" aria-live="assertive">{error}</div>}
 
                 <button className="auth-submit" type="submit" disabled={submitting}>
-                    {isRegister ? <UserPlus size={18} /> : <LogIn size={18} />}
+                    {submitting ? <Loader2 size={17} className="animate-spin" /> : isRegister ? <UserPlus size={17} /> : <LogIn size={17} />}
                     <span>{submitting ? t('auth.submitting') : isRegister ? t('auth.createAccount') : t('auth.signIn')}</span>
                 </button>
 
@@ -102,7 +107,22 @@ const LoginView: React.FC<LoginViewProps> = ({ embedded = false }) => {
 
     return (
         <main className="auth-shell">
-            {form}
+            <aside className="auth-aside" aria-hidden="true">
+                <div className="auth-aside-file">yourdb.sql</div>
+                <pre className="auth-sql">
+                    <span className="auth-sql-comment">-- {t('auth.sql.comment')}</span>
+                    {SQL_LINES.map(([keyword, key], index) => (
+                        <span key={keyword} className="auth-sql-line" style={{ '--line': index } as React.CSSProperties}>
+                            <b>{keyword}</b>{t(key)}{index === SQL_LINES.length - 1 ? ';' : ''}
+                        </span>
+                    ))}
+                    <span className="auth-sql-cursor" />
+                </pre>
+                <p className="auth-aside-foot">{t('auth.tagline')}</p>
+            </aside>
+            <div className="auth-main">
+                {form}
+            </div>
         </main>
     );
 };
