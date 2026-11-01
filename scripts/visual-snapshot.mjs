@@ -65,6 +65,7 @@ const PAGES = [
   { name: "mcp-settings", path: "/app", auth: true, steps: [["sidebar", "插件管理"], ["sidebar", "MCP"], ["tab", 1]] },
   { name: "skills", path: "/app", auth: true, steps: [["sidebar", "插件管理"], ["sidebar", "Skills"]] },
   { name: "knowledge", path: "/app", auth: true, steps: [["sidebar", "知识库"], ["sidebar", "business.md"]] },
+  { name: "preview", path: "/app", auth: true, session: "销售摘要报告", steps: [["click", "查看"]] },
 ];
 
 /** Runs inside the page: find a control by its accessible name or text, and click it. */
@@ -80,7 +81,14 @@ const PAGE_HELPERS = `window.__visual = {
     return false;
   },
   tab(index) { const tabs = [...document.querySelectorAll('[role="tab"]')].filter((el) => el.offsetParent !== null); if (!tabs[index]) return false; tabs[index].click(); return true; },
-  expandTrace() { const el = [...document.querySelectorAll('[aria-expanded="false"]')].find((node) => node.closest('main, .chat-area, [class*="agent"]') && !node.closest('nav')); if (!el) return false; el.click(); return true; },
+  async expandTrace() {
+    for (let waited = 0; waited < 5000; waited += 100) {
+      const el = [...document.querySelectorAll('[aria-expanded="false"]')].find((node) => node.closest('main, .chat-area, [class*="agent"]') && !node.closest('nav'));
+      if (el) { el.click(); return true; }
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return false;
+  },
 };`;
 
 // ─── Browser over the DevTools protocol ───────────────────────────────────────

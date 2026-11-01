@@ -22,7 +22,7 @@ import ReactMarkdown from 'react-markdown';
 import { useSession } from '../hooks/useSession';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../hooks/useAuth';
-import { useFocusTrap } from '../hooks/useFocusTrap';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { CHAT_VIEW, type WorkspaceView } from './workspace-view';
 import type { PluginsTab } from './PluginsPanel';
 import type { SettingsSection } from './SettingsPanel';
@@ -93,10 +93,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
     const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const knowledgeImportInputRef = useRef<HTMLInputElement>(null);
-    const editorOverlayRef = useRef<HTMLDivElement>(null);
-    const editorModalRef = useRef<HTMLDivElement>(null);
 
-    useFocusTrap(editorOpen, editorModalRef, editorOverlayRef);
 
     const showToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
         if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -556,30 +553,38 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                 )}
             </nav>
 
-            {editorOpen && selectedFile && (
-                <div ref={editorOverlayRef} className="editor-modal-overlay" onClick={closeEditor}>
-                    <div ref={editorModalRef} className="editor-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="editor-modal-title" tabIndex={-1}>
-                        <div className="editor-modal-header">
-                            <div className="editor-title" id="editor-modal-title"><FileText size={16} aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></div>
-                            <div className="editor-actions">
-                                {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="action-btn" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
-                                {isEditing && <button type="button" className="action-btn save" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
-                                <button type="button" className="action-btn" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
+            <Dialog open={editorOpen && selectedFile !== null} onOpenChange={(open) => { if (!open) closeEditor(); }}>
+                {selectedFile && (
+                    <DialogContent
+                        showCloseButton={false}
+                        overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[6px] supports-backdrop-filter:backdrop-blur-[6px] motion-reduce:animate-none"
+                        className="z-[2000] flex h-full max-h-none w-[calc(100vw-32px)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl bg-[var(--surface-bg)] p-0 text-[length:inherit] shadow-[0_34px_90px_-42px_rgba(17,24,39,0.7)] ring-0 motion-reduce:animate-none sm:max-w-none min-[421px]:h-[calc(100%-16px)] min-[721px]:h-[80vh] min-[721px]:max-h-[90vh] min-[721px]:w-[800px] min-[721px]:max-w-[calc(100vw-32px)] min-[721px]:rounded-3xl"
+                    >
+                        <div className="flex items-center justify-between border-b border-[var(--border-light)] bg-[#fafafa] px-5 py-4">
+                            <DialogTitle className="flex items-center gap-2 text-[0.9rem] font-medium text-foreground"><FileText size={16} aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></DialogTitle>
+                            <div className="flex gap-1">
+                                {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[#f3f4f6] hover:text-foreground" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
+                                {isEditing && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[#ecfdf5] hover:text-[#10b981]" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
+                                <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[#f3f4f6] hover:text-foreground" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
                             </div>
                         </div>
-                        <div className="editor-modal-content">
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                             {isMarkdown && !isEditing ? (
-                                <div className="editor-preview markdown-preview"><div className="markdown-content"><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
+                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><div className="markdown-content leading-[1.7] text-foreground"><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
                             ) : !isEditing ? (
-                                <div className="editor-preview plain-preview"><pre>{fileContent}</pre></div>
+                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><pre className="m-0 font-mono text-[0.85rem] leading-relaxed break-words whitespace-pre-wrap">{fileContent}</pre></div>
                             ) : (
-                                <textarea className="editor-textarea" value={fileContent} onChange={(event) => setFileContent(event.target.value)} />
+                                <textarea
+                                    aria-label={knowledgeLabel(selectedFile)}
+                                    className="min-h-0 w-full flex-1 resize-none overflow-auto border-0 bg-[var(--surface-bg)] p-4 font-mono text-[0.85rem] leading-relaxed text-foreground outline-none"
+                                    value={fileContent}
+                                    onChange={(event) => setFileContent(event.target.value)}
+                                />
                             )}
                         </div>
-                    </div>
-                </div>
-            )}
-
+                    </DialogContent>
+                )}
+            </Dialog>
         </>
     );
 };

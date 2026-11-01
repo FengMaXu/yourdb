@@ -1,3 +1,4 @@
+// yourdb change: DialogContent takes overlayClassName (see below).
 "use client"
 
 import * as React from "react"
@@ -41,15 +42,18 @@ function DialogOverlay({
 
 function DialogContent({
   className,
+  overlayClassName,
   children,
   showCloseButton = true,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  /** yourdb change: lets a dialog style its backdrop, e.g. to sit above the legacy app's z-index layers. */
+  overlayClassName?: string
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay className={overlayClassName} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(

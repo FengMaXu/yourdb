@@ -25,3 +25,10 @@ table[data-slot] {
   background-color: transparent;
   border-radius: 0;
 }
+
+/* A rule inside a shadcn component draws as Preflight draws it: a 1px top border. */
+[data-slot] hr {
+  height: 0;
+  color: inherit;
+  border-top-width: 1px;
+}

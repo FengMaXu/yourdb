@@ -88,7 +88,7 @@ export async function buildVisualFixture(dataDir) {
       for (const session of task.sessions) {
         const sessionId = (await command("session.create", { taskId, name: session.name })).item.id;
         const last = session.messages.at(-1)?.at ?? session.createdAt;
-        sessionTimes.set(sessionId, { created: Date.parse(session.createdAt), updated: Date.parse(last), messages: session.messages });
+        sessionTimes.set(sessionId, { created: Date.parse(session.createdAt), updated: Date.parse(last), messages: session.messages, files: session.workspaceFiles ?? {} });
       }
     }
   } finally {
@@ -103,6 +103,14 @@ export async function buildVisualFixture(dataDir) {
     for (const { at, message } of messages) await session.appendMessage({ ...message, timestamp: Date.parse(at) });
   }
   await store.close();
+  // Files a session's answers link to go in that session's workspace, where its links resolve.
+  for (const [sessionId, { files }] of sessionTimes) {
+    for (const [relative, content] of Object.entries(files)) {
+      const target = path.join(dataDir, "workspace", sessionId, ...relative.split("/"));
+      await mkdir(path.dirname(target), { recursive: true });
+      await writeFile(target, content, "utf8");
+    }
+  }
   await pinSessionFiles(path.join(dataDir, "sessions"), sessionTimes);
 
   const db = new DatabaseSync(path.join(dataDir, "metadata", "app.db"));

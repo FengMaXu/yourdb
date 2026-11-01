@@ -7,6 +7,7 @@ import PluginsPanel from './components/PluginsPanel';
 import { CHAT_VIEW, type WorkspaceView } from './components/workspace-view';
 import { ModelSetupPrompt } from './components/ModelSetupPrompt';
 import { SessionProvider } from './hooks/useSession';
+import { NARROW_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { useLanguage } from './context/LanguageContext';
 import { PreviewProvider } from './context/PreviewContext';
@@ -39,21 +40,6 @@ const CHAT_PANEL_MIN_WIDTH = 560;
 // Hovering the collapsed rail peeks the full sidebar, pushing the page right; short delays keep a passing pointer from flickering it.
 const SIDEBAR_PEEK_OPEN_DELAY = 80;
 const SIDEBAR_PEEK_CLOSE_DELAY = 180;
-const NARROW_QUERY = '(max-width: 720px)';
-
-/** Tracks a CSS media query, so layout defaults can follow the window. */
-function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches);
-  useEffect(() => {
-    if (typeof window.matchMedia !== 'function') return;
-    const list = window.matchMedia(query);
-    const update = () => setMatches(list.matches);
-    update();
-    list.addEventListener('change', update);
-    return () => list.removeEventListener('change', update);
-  }, [query]);
-  return matches;
-}
 
 const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelConfigured, onRecheckModel, onModelMissing }) => {
   const { t } = useLanguage();
