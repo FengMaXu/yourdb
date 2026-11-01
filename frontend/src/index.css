@@ -3604,9 +3604,14 @@ body {
   margin-bottom: 1em;
   border: 1px solid var(--hairline);
   border-radius: 12px;
-  overflow: hidden;
   font-variant-numeric: tabular-nums;
 }
+
+/* Round the corner cells rather than clipping the table, so wide tables never lose columns. */
+.markdown-content tr:first-child > :first-child { border-top-left-radius: 11px; }
+.markdown-content tr:first-child > :last-child { border-top-right-radius: 11px; }
+.markdown-content tbody tr:last-child > :first-child { border-bottom-left-radius: 11px; }
+.markdown-content tbody tr:last-child > :last-child { border-bottom-right-radius: 11px; }
 
 .markdown-content th,
 .markdown-content td {
