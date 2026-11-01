@@ -5,7 +5,7 @@ import '@fontsource-variable/noto-serif-sc';
 import { ArrowRight, Download, Languages, X } from '../icons/Typicons';
 import { BrandMark, BrandWordmark } from '../Brand';
 import { useLanguage } from '../../context/LanguageContext';
-import './landing.css';
+import './landing-entry.css';
 
 /** Where the "enter app" buttons go when there is no download panel: the bundled /app, or VITE_APP_URL. */
 const APP_URL = (import.meta.env.VITE_APP_URL as string | undefined)?.trim() || '/app';

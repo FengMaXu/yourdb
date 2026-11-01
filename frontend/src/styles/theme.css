@@ -1,0 +1,85 @@
+/*
+ * Design tokens, the single source for colour, radius and motion.
+ * Names follow shadcn/ui's semantic variables (baseColor stone), mapped to yourdb's
+ * existing values. --accent keeps shadcn's meaning, a quiet hover surface; the brand
+ * orange is --brand. --primary is ink, as the primary buttons are.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #1c1917;
+  --primary-foreground: #fafaf9;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
+  --destructive: #b91c1c;
+  --border: #ecebe8;
+  --input: #e2e0dc;
+  --ring: #c2410c;
+  --brand: #c2410c;
+  --brand-soft: #fff7ed;
+  --body: #57534e;
+  --radius: 10px;
+  --radius-card: 14px;
+  --chart-1: #c2410c;
+  --chart-2: #0f766e;
+  --chart-3: #1d4ed8;
+  --chart-4: #a16207;
+  --chart-5: #7c3aed;
+  --sidebar: #fafaf9;
+  --sidebar-foreground: #1c1917;
+  --sidebar-primary: #1c1917;
+  --sidebar-primary-foreground: #fafaf9;
+  --sidebar-accent: #f5f5f4;
+  --sidebar-accent-foreground: #1c1917;
+  --sidebar-border: #ecebe8;
+  --sidebar-ring: #c2410c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-body: var(--body);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius-card);
+}
