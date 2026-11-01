@@ -240,89 +240,6 @@ body {
   background: var(--border-medium);
 }
 
-/* Sidebar Styles */
-.sidebar {
-  margin: 0;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  justify-content: space-between;
-  box-shadow: none;
-}
-
-.nav-menu {
-  flex: 1;
-  min-height: 0;
-  padding-right: 4px;
-}
-
-.nav-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.nav-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  font-weight: 500;
-  border: none;
-  background: transparent;
-  width: 100%;
-  text-align: left;
-  font-size: 0.9rem;
-  transition: background-color var(--duration-ui) var(--ease-out), color var(--duration-ui) var(--ease-out), transform var(--duration-quick) var(--ease-out), box-shadow var(--duration-ui) var(--ease-out);
-  position: relative;
-}
-
-.nav-item:active {
-  transform: scale(0.97);
-}
-
-.nav-item.active {
-  color: var(--accent-strong);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .nav-item:hover {
-    background-color: rgba(255, 255, 255, 0.7);
-    color: #111827;
-    transform: translateX(2px);
-  }
-}
-
-.nav-item-icon {
-  flex-shrink: 0;
-}
-
-.nav-item-text {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-}
-
-.sidebar-footer {
-  padding-top: 8px;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-
-.sidebar-footer .nav-item {
-  min-height: 36px;
-  padding: 7px 10px;
-  border-radius: 10px;
-}
-
 /* Chat Area Styles */
 .chat-panel-shell {
   flex: 1 1 auto;
@@ -1324,7 +1241,6 @@ body {
   .chat-input-wrapper,
   .chat-panel-resize-handle::after,
   .desktop-menu-item,
-  .nav-item,
   .tool-panel-header-btn,
   .chat-icon-btn,
   .chat-send-btn {
@@ -1333,7 +1249,6 @@ body {
 
   .chat-input-wrapper:focus-within,
   .desktop-menu-item:active,
-  .nav-item:active,
   .tool-panel-header-btn:not(:disabled):active,
   .chat-icon-btn:not(:disabled):active,
   .chat-send-btn:not(:disabled):active {
@@ -1344,32 +1259,6 @@ body {
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-/* Floats at the bottom centre of the window, above the chat input: inside the sidebar it covered the footer navigation. */
-.sidebar-toast {
-  position: fixed;
-  bottom: 112px;
-  left: 0;
-  right: 0;
-  width: fit-content;
-  max-width: min(420px, calc(100vw - 32px));
-  margin: 0 auto;
-  box-shadow: 0 10px 30px -12px rgba(28, 25, 23, 0.28);
-  display: flex;
-  align-items: center;
-  border-radius: var(--radius-sm);
-  z-index: 1000;
-  animation: slideUp 0.2s ease-out;
-}
-
-.sidebar-toast.success {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.sidebar-toast.error {
-  background: #fee2e2;
-  color: #991b1b;
 }
 
 /* Editor Modal Overlay */
@@ -1513,21 +1402,6 @@ body {
   }
 }
 
-/* Sidebar + Chat Refinements */
-
-.sidebar {
-  height: 100%;
-}
-
-.sidebar-logo {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  color: #1f2937;
-  font-size: 1.25rem;
-  font-weight: 700;
-}
-
 /* Brand artwork (components/Brand.tsx): sized by height, sits on the text baseline */
 .brand-wordmark {
   display: inline-block;
@@ -1544,52 +1418,6 @@ body {
   width: auto;
   aspect-ratio: 1;
   flex-shrink: 0;
-}
-
-.sidebar-logo .brand-wordmark { height: 22px; }
-.sidebar-logo-compact .brand-wordmark { height: 13px; }
-
-.sidebar-primary-action {
-  margin-bottom: 8px;
-}
-
-.nav-item {
-  padding: 9px 11px;
-  border-radius: 12px;
-}
-
-.nav-item.expanded {
-  background: transparent;
-  color: #7c2d12;
-  box-shadow: none;
-}
-
-.sidebar-footer {
-  margin-top: auto;
-  padding: 22px 0 0;
-  gap: 6px;
-}
-
-.sidebar-footer-settings {
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  margin-left: 0;
-}
-
-.sidebar-footer-user {
-  min-height: 32px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  margin-left: 0;
-}
-
-.sidebar-footer .sidebar-footer-settings,
-.sidebar-footer .sidebar-footer-user {
-  width: 100%;
-  margin-left: 0;
-  padding: 6px 10px;
-  justify-content: flex-start;
 }
 
 .breadcrumb-task {
@@ -1707,38 +1535,6 @@ body {
   }
 }
 
-.sidebar-toast {
-  justify-content: space-between;
-  gap: 8px;
-  min-width: 0;
-  padding: 9px 10px 9px 12px;
-  font-size: var(--font-size-caption);
-}
-
-.sidebar-toast > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.sidebar-toast-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 28px;
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: currentColor;
-  cursor: pointer;
-}
-
-.sidebar-toast-close:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 1px;
-}
-
 .chat-live-region {
   position: absolute;
   width: 1px;
@@ -1755,12 +1551,6 @@ body {
   .app-container {
     gap: 8px;
     padding: 8px;
-  }
-
-  .sidebar {
-    min-width: 180px;
-    max-width: 180px;
-    padding: 14px 8px 10px;
   }
 
   .chat-panel-shell,
@@ -1792,31 +1582,6 @@ body {
     padding: 6px;
   }
 
-  .sidebar {
-    width: 108px;
-    min-width: 108px;
-    max-width: 108px;
-    padding-inline: 4px;
-  }
-
-  .sidebar-logo {
-    padding-inline: 6px;
-    font-size: 1rem;
-  }
-
-  .nav-item {
-    gap: 6px;
-    padding: 8px 6px;
-    font-size: 0.78rem;
-  }
-
-  .nav-item-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
   .chat-message-list {
     padding: 16px 12px;
     gap: 20px;
@@ -1845,30 +1610,6 @@ body {
 }
 
 @media (max-width: 480px) {
-  .sidebar {
-    width: 104px;
-    min-width: 104px;
-    max-width: 104px;
-    padding-inline: 4px;
-  }
-
-  .sidebar-logo {
-    padding-inline: 6px;
-    font-size: 0.95rem;
-  }
-
-  .sidebar .nav-item {
-    gap: 5px;
-    padding-inline: 5px;
-    font-size: 0.72rem;
-  }
-
-  .sidebar .nav-item-text {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 
   .chat-input-meta {
     align-items: flex-start;
@@ -1896,81 +1637,6 @@ body {
 .sidebar-shell.is-collapsed {
   flex-basis: auto;
   width: var(--sidebar-rail-width);
-}
-
-.sidebar-shell.is-collapsed .sidebar {
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.sidebar {
-  width: 100%;
-  min-width: 0;
-  max-width: none;
-  padding: 20px 8px 12px 10px;
-}
-
-.sidebar .nav-item {
-  gap: 10px;
-  padding: 8px 10px;
-  font-size: 0.86rem;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.sidebar .nav-item-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sidebar-logo {
-  letter-spacing: -0.04em;
-  padding: 2px 10px 18px;
-}
-
-.sidebar.is-rail {
-  padding: 20px 10px 12px;
-}
-
-.sidebar.is-rail .nav-menu {
-  padding-right: 0;
-}
-
-.sidebar.is-rail .nav-section {
-  align-items: center;
-  gap: 6px;
-}
-
-.sidebar.is-rail .nav-item {
-  width: 40px;
-  height: 40px;
-  justify-content: center;
-  gap: 0;
-  padding: 0;
-  border-radius: 12px;
-}
-
-.sidebar.is-rail .nav-item-text {
-  display: none;
-}
-
-.sidebar.is-rail .sidebar-footer {
-  align-items: center;
-}
-
-.sidebar.is-rail .sidebar-footer .nav-item {
-  width: 40px;
-  min-height: 36px;
-  padding: 0;
-  justify-content: center;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .sidebar.is-rail .nav-item:hover {
-    transform: none;
-  }
 }
 
 /* Chat: a wider reading column */
@@ -2149,38 +1815,6 @@ body {
   }
 }
 
-/* Sidebar header: logo stays put and lines up with the chat header */
-.sidebar,
-.sidebar.is-rail {
-  padding: 0 0 12px;
-}
-
-.sidebar-header {
-  flex: 0 0 auto;
-  height: 56px;
-  display: flex;
-  align-items: center;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.sidebar-header .sidebar-logo {
-  padding: 0;
-  line-height: 1;
-}
-
-.sidebar .nav-menu {
-  padding: 14px 8px 0 10px;
-}
-
-.sidebar .sidebar-footer {
-  padding: 22px 8px 0 10px;
-}
-
-.sidebar.is-rail .nav-menu,
-.sidebar.is-rail .sidebar-footer {
-  padding-inline: 10px;
-}
-
 /* User message: flat, neutral bubble */
 .user-message-body {
   border: 0;
@@ -2214,11 +1848,6 @@ body {
   box-shadow: none;
   border-radius: var(--bubble-radius);
   background: var(--bubble-bg);
-}
-
-.nav-item.expanded,
-.sidebar .nav-item.expanded {
-  color: var(--accent-strong);
 }
 
 /* Avatars sit on the midline of the first line of their message */
@@ -2332,269 +1961,6 @@ body {
   --tree-guide: #d6d3ce;
 }
 
-/* Section header with its actions on the same row */
-.nav-group {
-  position: relative;
-}
-
-.nav-group.has-actions .nav-item {
-  padding-right: 64px;
-}
-
-.nav-group-actions {
-  position: absolute;
-  top: 50%;
-  right: 6px;
-  display: flex;
-  transform: translateY(-50%);
-}
-
-.tree {
-  margin: 2px 0 8px;
-}
-
-.tree-row {
-  --row-bg: var(--tree-row-bg);
-  position: relative;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  border-radius: 8px;
-  background: transparent;
-  transition: background-color var(--duration-quick) var(--ease-out);
-}
-
-.tree-row:hover,
-.tree-row:focus-within {
-  --row-bg: var(--tree-row-hover);
-  background: var(--row-bg);
-}
-
-.tree-row.is-active {
-  --row-bg: var(--tree-row-active);
-  background: var(--row-bg);
-}
-
-.tree-row-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 8px 0 calc(var(--tree-inset) + var(--depth) * var(--tree-indent));
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.82rem;
-  text-align: left;
-  cursor: pointer;
-}
-
-.tree-row-main:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: -2px;
-}
-
-.tree-row:hover .tree-row-main,
-.tree-row.is-active .tree-row-main {
-  color: var(--text-primary);
-}
-
-.tree-row.is-active .tree-row-main {
-  font-weight: 500;
-}
-
-.tree-chevron {
-  flex: 0 0 14px;
-  display: inline-flex;
-  color: var(--thread-muted);
-  transition: transform var(--duration-quick) var(--ease-out);
-}
-
-.tree-chevron.is-open {
-  transform: rotate(90deg);
-}
-
-.tree-icon {
-  flex: 0 0 auto;
-  display: inline-flex;
-  color: #78716c;
-}
-
-.tree-row.is-active .tree-icon {
-  color: var(--accent-strong);
-}
-
-.tree-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.tree-secondary {
-  margin-left: 6px;
-  color: var(--thread-muted);
-  font-family: var(--font-code);
-  font-size: 0.7rem;
-  font-weight: 400;
-}
-
-.tree-meta {
-  flex: 0 0 auto;
-  max-width: 5em;
-  overflow: hidden;
-  color: var(--thread-muted);
-  font-family: var(--font-code);
-  font-size: 0.68rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Row actions overlay the right edge, so they never squeeze the label */
-.tree-actions {
-  position: absolute;
-  top: 50%;
-  right: 4px;
-  display: flex;
-  padding-left: 14px;
-  background: linear-gradient(90deg, transparent, var(--row-bg) 14px);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-50%);
-  transition: opacity var(--duration-quick) var(--ease-out);
-}
-
-.tree-row:hover .tree-actions,
-.tree-row:focus-within .tree-actions,
-.tree-row.is-editing .tree-actions {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.tree-action {
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #78716c;
-  cursor: pointer;
-  transition: color var(--duration-quick) var(--ease-out);
-}
-
-.tree-action:hover {
-  color: var(--text-primary);
-}
-
-.tree-action.is-danger:hover {
-  color: var(--status-error);
-}
-
-.tree-action:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: -2px;
-}
-
-/* Children hang off a guide line under the parent's chevron */
-.tree-group {
-  position: relative;
-}
-
-.tree-group::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 4px;
-  left: calc(var(--tree-inset) + var(--depth) * var(--tree-indent) + 7px);
-  width: 1px;
-  background: var(--tree-guide);
-}
-
-.tree-note {
-  padding: 6px 8px 6px calc(var(--tree-inset) + var(--depth) * var(--tree-indent) + 20px);
-  color: var(--thread-muted);
-  font-size: 0.76rem;
-}
-
-.tree-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  height: 24px;
-  margin-right: 30px;
-  padding: 0 6px;
-  border: 1px solid var(--hairline);
-  border-radius: 6px;
-  background: var(--frame-surface);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 0.82rem;
-  outline: none;
-}
-
-.tree-input:focus {
-  border-color: rgba(194, 65, 12, 0.45);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .tree-chevron,
-  .tree-actions {
-    transition: none;
-  }
-}
-
-/* Sidebar header: logo on the left, the collapse toggle on the right */
-.sidebar-header {
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 12px 0 20px;
-}
-
-.sidebar.is-rail .sidebar-header {
-  justify-content: center;
-  padding: 0;
-}
-
-.sidebar-collapse-toggle {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #78716c;
-  cursor: pointer;
-  transition: color var(--duration-quick) var(--ease-out), background-color var(--duration-quick) var(--ease-out);
-}
-
-.sidebar-collapse-toggle:active {
-  transform: scale(0.95);
-}
-
-.sidebar-collapse-toggle:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 2px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .sidebar-collapse-toggle:hover {
-    background: var(--tree-row-hover);
-    color: var(--text-primary);
-  }
-}
-
 /* The agent mark in the chat header is decoration, not a control */
 .breadcrumb-mark {
   display: inline-flex;
@@ -2604,36 +1970,10 @@ body {
   margin-left: -4px;
   color: var(--text-secondary);
 }
-/* System CJK faces have only regular and bold, so 600 renders bold: only the current section takes it. */
-.sidebar .nav-item {
-  font-weight: 500;
-}
-
-.sidebar .nav-item.active,
-.sidebar .nav-item.expanded {
-  font-weight: 600;
-}
-
-.sidebar .tree-row-main {
-  font-weight: 500;
-}
-
-.sidebar .tree-row.is-active .tree-row-main {
-  font-weight: 600;
-}
-
-.sidebar-settings-tree {
-  margin-bottom: 2px;
-}
 
 /* Collapsed rail: hovering it peeks the full sidebar and pushes the page right, never covering it */
 .sidebar-shell.is-peeking {
   width: var(--sidebar-width);
-}
-
-.sidebar-logo-compact {
-  font-size: 0.82rem;
-  letter-spacing: -0.02em;
 }
 
 /* Settings, MCP and Skills open in the main pane in place of the chat */

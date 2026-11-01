@@ -1,19 +1,35 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    Settings,
-    Languages,
-    FileText,
-    X,
-    Save,
-    Edit3,
-    Trash2,
+    Bot,
+    Cable,
     Check,
-    User,
+    Database,
+    Edit3,
+    FilePen,
+    FileText,
+    FileUp,
+    Folder,
+    Languages,
+    LibraryBig,
+    ListChecks,
     LogOut,
-} from './icons/Typicons';
+    MessageSquare,
+    Monitor,
+    PanelLeft,
+    Plus,
+    Puzzle,
+    Save,
+    Settings,
+    SquareCheck,
+    Trash2,
+    User,
+    Workflow,
+    X,
+} from 'lucide-react';
+import { toast as notify } from 'sonner';
 import { BrandWordmark } from './Brand';
-import { RiAdd, RiBookShelf, RiChat3, RiComputer, RiConnector, RiDatabaseLine, RiFileEdit, RiFileText, RiFileUpload, RiFlowChart, RiFolder3, RiLayoutLeft2, RiListCheck3, RiPuzzle2, RiRobot2, RiTaskLine } from './icons/RemixIcons';
-import { SectionHeader, TreeAction, TreeGroup, TreeNote, TreeRow } from './SidebarTree';
+import { NAV_EXPANDED, NAV_ITEM, NAV_TEXT, SectionHeader, TREE, TreeAction, TreeGroup, TreeNote, TreeRow } from './SidebarTree';
+import { cn } from '@/lib/utils';
 import {
     type KnowledgeFile,
 } from '../api/client';
@@ -40,10 +56,10 @@ interface SidebarProps {
 }
 
 const SETTINGS_SECTIONS: { id: SettingsSection; icon: React.FC<{ size?: number }> }[] = [
-    { id: 'model', icon: RiRobot2 },
-    { id: 'database', icon: RiDatabaseLine },
-    { id: 'environment', icon: RiComputer },
-    { id: 'channels', icon: RiChat3 },
+    { id: 'model', icon: Bot },
+    { id: 'database', icon: Database },
+    { id: 'environment', icon: Monitor },
+    { id: 'channels', icon: MessageSquare },
 ];
 
 interface KnowledgeFileNode {
@@ -56,6 +72,9 @@ interface KnowledgeFileNode {
 const knowledgeLabel = (file: KnowledgeFile): string => (
     file.knowledgeId ? `${file.title ?? file.name}（${file.knowledgeId}）` : file.name
 );
+
+/** Footer entries sit a little tighter than the main ones, and keep their height on the rail. */
+const FOOTER_ITEM = 'min-h-9 justify-start rounded-[10px] group-data-[rail=true]/sidebar:h-auto group-data-[rail=true]/sidebar:min-h-9';
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = false, pinned = true, onExpand, onTogglePinned }) => {
     const {
@@ -90,21 +109,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const [fileContent, setFileContent] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const knowledgeImportInputRef = useRef<HTMLInputElement>(null);
 
 
+    // Successes fade on their own; an error stays until it is dismissed.
     const showToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-        setToast({ text, type });
-        if (type === 'success') {
-            toastTimerRef.current = setTimeout(() => setToast(null), 3000);
-        }
-    }, []);
-
-    useEffect(() => () => {
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        if (type === 'error') notify.error(text, { duration: Infinity, closeButton: true });
+        else notify.success(text, { duration: 3000 });
     }, []);
 
     const loadKnowledgeFiles = useCallback(async () => {
@@ -302,7 +313,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
             <React.Fragment key={item.path}>
                 <TreeRow
                     depth={level}
-                    icon={isDirectory ? <RiFolder3 size={15} /> : <RiFileText size={15} />}
+                    icon={isDirectory ? <Folder size={15} /> : <FileText size={15} />}
                     label={item.knowledgeId ? (item.title ?? item.name) : item.name}
                     secondary={item.readOnly ? `${item.knowledgeId} · ${t('common.knowledgeBuiltin')}` : item.hasContent === false ? `${item.knowledgeId} · ${t('common.knowledgePlaceholder')}` : item.knowledgeId}
                     title={isDirectory ? item.path : [knowledgeLabel(item), item.description, item.path, item.readOnly ? t('common.knowledgeBuiltinHint') : item.hasContent === false ? t('common.knowledgePlaceholderHint') : ''].filter(Boolean).join('\n')}
@@ -322,47 +333,52 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
 
     return (
         <>
-            <nav id="workspace-sidebar" className={`sidebar ${collapsed ? 'is-rail' : ''}`} aria-label={t('sidebar.navigation')}>
-                <div className="sidebar-header">
+            <nav
+                id="workspace-sidebar"
+                data-rail={collapsed ? 'true' : undefined}
+                className="group/sidebar relative m-0 flex h-full w-full max-w-none min-w-0 shrink-0 flex-col justify-between overflow-hidden rounded-none border-0 bg-transparent p-0 pb-3 shadow-none"
+                aria-label={t('sidebar.navigation')}
+            >
+                <div className={cn('flex h-14 flex-none items-center border-b border-[var(--hairline)]', collapsed ? 'justify-center p-0' : 'justify-between gap-2 pr-3 pl-5')}>
                     {collapsed ? (
-                        <div className="sidebar-logo sidebar-logo-compact"><BrandWordmark title="yourdb" /></div>
+                        <div className="flex items-center text-[0.82rem] leading-none font-bold tracking-[-0.02em] text-[#1f2937] [&_.brand-wordmark]:h-[13px]"><BrandWordmark title="yourdb" /></div>
                     ) : (
                         <>
-                            <div className="sidebar-logo"><BrandWordmark title="yourdb" /></div>
+                            <div className="flex items-center text-xl leading-none font-bold tracking-[-0.04em] text-[#1f2937] max-[720px]:text-base max-[480px]:text-[0.95rem] [&_.brand-wordmark]:h-[22px]"><BrandWordmark title="yourdb" /></div>
                             <button
                                 type="button"
-                                className="sidebar-collapse-toggle"
+                                className="inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-[#78716c] transition-colors active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] pointer-fine:hover:bg-[var(--tree-row-hover)] pointer-fine:hover:text-[var(--text-primary)]"
                                 onClick={onTogglePinned}
                                 aria-expanded={pinned}
                                 aria-controls="workspace-sidebar"
                                 title={pinned ? t('sidebar.close') : t('sidebar.open')}
                                 aria-label={pinned ? t('sidebar.close') : t('sidebar.open')}
                             >
-                                <RiLayoutLeft2 size={18} />
+                                <PanelLeft size={18} />
                             </button>
                         </>
                     )}
                 </div>
-                <div className="nav-menu scrollable-area">
-                    <div className="nav-section">
+                <div className={cn('scrollable-area min-h-0 flex-1 pt-3.5', collapsed ? 'px-2.5' : 'pr-2 pl-2.5')}>
+                    <div className={cn('flex flex-col', collapsed ? 'items-center gap-1.5' : 'gap-1')}>
 
-                        <button type="button" className="nav-item sidebar-primary-action" title={t('sidebar.newTask')} aria-label={t('sidebar.newTask')} onClick={() => {
+                        <button type="button" className={cn(NAV_ITEM, 'mb-2')} title={t('sidebar.newTask')} aria-label={t('sidebar.newTask')} onClick={() => {
                             createTask();
                             onNavigate(CHAT_VIEW);
                             showToast(t('task.created') || '新任务创建成功');
                         }}>
-                            <RiTaskLine className="nav-item-icon" size={18} />
-                            <span className="nav-item-text">{t('sidebar.newTask')}</span>
+                            <SquareCheck className="shrink-0" size={18} />
+                            <span className={NAV_TEXT}>{t('sidebar.newTask')}</span>
                         </button>
 
                         <SectionHeader
-                            icon={<RiListCheck3 className="nav-item-icon" size={18} />}
+                            icon={<ListChecks className="shrink-0" size={18} />}
                             label={t('sidebar.currentTask')}
                             expanded={tasksExpanded}
                             onToggle={() => toggleExclusiveSection('tasks')}
                         />
                         {!collapsed && tasksExpanded && (
-                            <div className="tree">
+                            <div className={TREE}>
                                 {tasks.map((task) => {
                                     const expanded = expandedTaskIds.has(task.id);
                                     const editing = editingTaskId === task.id;
@@ -371,7 +387,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                         <React.Fragment key={task.id}>
                                             <TreeRow
                                                 depth={0}
-                                                icon={<RiFolder3 size={15} />}
+                                                icon={<Folder size={15} />}
                                                 label={task.name}
                                                 title={task.name}
                                                 expanded={expanded}
@@ -383,7 +399,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                 }}
                                                 editor={editing ? (
                                                     <input
-                                                        className="tree-input"
+                                                        className="mr-[30px] h-6 min-w-0 flex-auto rounded-md border border-[var(--hairline)] bg-[var(--frame-surface)] px-1.5 text-[0.82rem] text-[var(--text-primary)] outline-none focus:border-[rgba(194,65,12,0.45)]"
                                                         value={editTaskName}
                                                         onChange={(event) => setEditTaskName(event.target.value)}
                                                         onKeyDown={(event) => {
@@ -406,7 +422,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                             createSession(task.id);
                                                             onNavigate(CHAT_VIEW);
                                                         }}>
-                                                            <RiAdd size={14} aria-hidden="true" />
+                                                            <Plus size={14} aria-hidden="true" />
                                                         </TreeAction>
                                                         <TreeAction label={t('common.edit')} onClick={() => { setEditTaskName(task.name); setEditingTaskId(task.id); }}>
                                                             <Edit3 size={14} aria-hidden="true" />
@@ -426,7 +442,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                         <TreeRow
                                                             key={session.id}
                                                             depth={1}
-                                                            icon={<RiChat3 size={15} />}
+                                                            icon={<MessageSquare size={15} />}
                                                             label={session.name}
                                                             title={session.name}
                                                             active={activeView.kind === 'chat' && currentSession?.id === session.id}
@@ -452,17 +468,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         )}
 
                         <SectionHeader
-                            icon={<RiBookShelf className="nav-item-icon" size={18} />}
+                            icon={<LibraryBig className="shrink-0" size={18} />}
                             label={t('sidebar.knowledge')}
                             expanded={knowledgeExpanded}
                             onToggle={() => toggleExclusiveSection('knowledge')}
                             actions={!collapsed && (
                                 <>
                                     <TreeAction label={t('common.knowledgeNew')} onClick={handleNewKnowledgeFile}>
-                                        <RiFileEdit size={15} aria-hidden="true" />
+                                        <FilePen size={15} aria-hidden="true" />
                                     </TreeAction>
                                     <TreeAction label={t('common.knowledgeImport')} onClick={() => knowledgeImportInputRef.current?.click()}>
-                                        <RiFileUpload size={15} aria-hidden="true" />
+                                        <FileUp size={15} aria-hidden="true" />
                                     </TreeAction>
                                 </>
                             )}
@@ -476,7 +492,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                             onChange={(event) => { void handleImportKnowledge(event); }}
                         />
                         {!collapsed && knowledgeExpanded && (
-                            <div className="tree">
+                            <div className={TREE}>
                                 {loadingKnowledge && knowledgeFiles.length === 0 ? (
                                     <TreeNote depth={0} role="status">{t('common.loading')}</TreeNote>
                                 ) : knowledgeFileTree.length === 0 ? (
@@ -486,42 +502,42 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         )}
 
                         <SectionHeader
-                            icon={<RiPuzzle2 className="nav-item-icon" size={18} />}
+                            icon={<Puzzle className="shrink-0" size={18} />}
                             label={t('sidebar.plugins')}
                             expanded={pluginsExpanded}
                             onToggle={() => toggleExclusiveSection('plugins')}
                         />
                         {!collapsed && pluginsExpanded && (
-                            <div className="tree">
-                                <TreeRow depth={0} icon={<RiConnector size={15} />} label="MCP" title="MCP" active={isPluginsView('MCP')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'MCP' })} />
-                                <TreeRow depth={0} icon={<RiFlowChart size={15} />} label="Skills" title="Skills" active={isPluginsView('Skills')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'Skills' })} />
+                            <div className={TREE}>
+                                <TreeRow depth={0} icon={<Cable size={15} />} label="MCP" title="MCP" active={isPluginsView('MCP')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'MCP' })} />
+                                <TreeRow depth={0} icon={<Workflow size={15} />} label="Skills" title="Skills" active={isPluginsView('Skills')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'Skills' })} />
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="sidebar-footer">
-                    <div className="nav-item sidebar-footer-user" title={user?.username || displayName}>
-                        <User className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{displayName}</span>
+                <div className={cn('mt-auto flex shrink-0 flex-col gap-1.5 pt-[22px]', collapsed ? 'items-center px-2.5' : 'pr-2 pl-2.5')}>
+                    <div className={cn(NAV_ITEM, FOOTER_ITEM, 'cursor-default')} title={user?.username || displayName}>
+                        <User className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{displayName}</span>
                     </div>
-                    <button type="button" className="nav-item sidebar-footer-settings" onClick={toggleLanguage} title={t('sidebar.langToggle')} aria-label={t('sidebar.langToggle')}>
-                        <Languages className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{t('sidebar.language')}</span>
+                    <button type="button" className={cn(NAV_ITEM, FOOTER_ITEM)} onClick={toggleLanguage} title={t('sidebar.langToggle')} aria-label={t('sidebar.langToggle')}>
+                        <Languages className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{t('sidebar.language')}</span>
                     </button>
                     <button
                         type="button"
-                        className={`nav-item sidebar-footer-settings ${settingsExpanded ? 'expanded' : ''}`}
+                        className={cn(NAV_ITEM, FOOTER_ITEM, settingsExpanded && NAV_EXPANDED)}
                         onClick={toggleSettings}
                         aria-expanded={settingsExpanded}
                         title={t('sidebar.settings')}
                         aria-label={t('sidebar.settings')}
                     >
-                        <Settings className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{t('sidebar.settings')}</span>
+                        <Settings className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{t('sidebar.settings')}</span>
                     </button>
                     {!collapsed && settingsExpanded && (
-                        <div className="tree sidebar-settings-tree">
+                        <div className={cn(TREE, 'mb-0.5')}>
                             {SETTINGS_SECTIONS.map(({ id, icon: Icon }) => (
                                 <TreeRow
                                     key={id}
@@ -535,22 +551,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                             ))}
                         </div>
                     )}
-                    <button type="button" className="nav-item sidebar-footer-settings" onClick={() => void logout()} title={t('sidebar.logout')} aria-label={t('sidebar.logout')}>
-                        <LogOut className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{t('sidebar.logout')}</span>
+                    <button type="button" className={cn(NAV_ITEM, FOOTER_ITEM)} onClick={() => void logout()} title={t('sidebar.logout')} aria-label={t('sidebar.logout')}>
+                        <LogOut className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{t('sidebar.logout')}</span>
                     </button>
                 </div>
 
-                {toast && (
-                    <div className={`sidebar-toast ${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'} aria-live={toast.type === 'error' ? 'assertive' : 'polite'}>
-                        <span>{toast.text}</span>
-                        {toast.type === 'error' && (
-                            <button type="button" className="sidebar-toast-close" onClick={() => setToast(null)} aria-label={t('common.close')}>
-                                <X size={13} aria-hidden="true" />
-                            </button>
-                        )}
-                    </div>
-                )}
             </nav>
 
             <Dialog open={editorOpen && selectedFile !== null} onOpenChange={(open) => { if (!open) closeEditor(); }}>
