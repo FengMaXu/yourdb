@@ -1167,7 +1167,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         : <span>{isStreaming ? t('chat.steerHint') : null}</span>}
                     {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : t('tools.statusError')}</span>}
                 </div>
-                <div className="chat-input-wrapper shadow-sm">
+                <div className="chat-input-wrapper">
                     <input
                         ref={fileInputRef}
                         type="file"
