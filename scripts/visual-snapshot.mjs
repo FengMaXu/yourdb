@@ -55,7 +55,7 @@ const PAGES = [
   { name: "login", path: "/app" },
   { name: "chat-empty", path: "/app", auth: true, session: "新会话" },
   { name: "chat-table", path: "/app", auth: true, session: "三大行业累计销售额" },
-  { name: "chat-trace-open", path: "/app", auth: true, session: "三大行业累计销售额", steps: [["expandTrace"]] },
+  { name: "chat-trace-open", path: "/app", auth: true, session: "三大行业累计销售额", steps: [["expandTrace"], ["scrollTop"]] },
   { name: "tool-panel", path: "/app", auth: true, session: "三大行业累计销售额", steps: [["click", "打开详细信息"]] },
   { name: "settings-model", path: "/app", auth: true, steps: [["sidebar", "设置"], ["sidebar", "模型"]] },
   { name: "settings-database", path: "/app", auth: true, steps: [["sidebar", "设置"], ["sidebar", "数据库"]] },
@@ -274,6 +274,8 @@ try {
           if (action === "click") done = await tab.evaluate(`window.__visual.click(${JSON.stringify(argument)})`);
           else if (action === "tab") done = await tab.evaluate(`window.__visual.tab(${argument})`);
           else if (action === "expandTrace") done = await tab.evaluate("window.__visual.expandTrace()");
+          // The chat follows the newest message; scroll back so the expanded process is in the shot.
+          else if (action === "scrollTop") done = await tab.evaluate("(() => { const list = [...document.querySelectorAll('.scrollable-area')].find((el) => el.scrollHeight > el.clientHeight && el.closest('main')); if (!list) return false; list.scrollTop = 0; return true; })()");
           else if (action === "sidebar") {
             // On a narrow screen the sidebar is closed until opened.
             done = await tab.evaluate(`window.__visual.click(${JSON.stringify(argument)})`);

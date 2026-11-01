@@ -100,6 +100,9 @@
   --animate-node-pulse: node-pulse 1.6s var(--ease-out) infinite;
   --animate-dot-breathe: dot-breathe 1.2s ease-in-out infinite;
   --animate-orbit-nucleus: orbit-nucleus 2.4s ease-in-out infinite;
+  --animate-trace-shimmer: trace-shimmer 2.2s linear infinite;
+  --animate-trace-pulse: trace-pulse 1.6s var(--ease-out) infinite;
+  --animate-trace-in: trace-in 260ms var(--ease-out) both;
   --animate-electron-float-1: electron-float-1 3.8s ease-in-out infinite;
   --animate-electron-float-2: electron-float-2 4.4s ease-in-out infinite;
   --animate-electron-float-3: electron-float-3 5.1s ease-in-out infinite;
@@ -163,6 +166,11 @@
     0%, 100% { opacity: 0.3; transform: scale(0.8); }
     50% { opacity: 1; transform: scale(1.2); }
   }
+
+  /* The answer process: a light sweeps across live text, a live dot sends out a ring, steps rise in. */
+  @keyframes trace-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+  @keyframes trace-pulse { 0% { transform: scale(1); opacity: 0.5; } 70%, 100% { transform: scale(2.8); opacity: 0; } }
+  @keyframes trace-in { from { opacity: 0; transform: translateY(3px); } }
 
   /* The agent's orbit mark while it works: the nucleus breathes, each electron drifts and blinks in and out. */
   @keyframes orbit-nucleus {
