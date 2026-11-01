@@ -53,25 +53,6 @@ interface WidgetRendererProps {
     currentSessionId?: string;
 }
 
-const cardStyle: React.CSSProperties = {
-    border: '1px solid #e5e7eb',
-    borderRadius: '12px',
-    background: '#ffffff',
-    padding: '12px',
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '15px',
-    fontWeight: 600,
-    color: '#111827',
-};
-
-const sectionSubtitleStyle: React.CSSProperties = {
-    fontSize: '12px',
-    color: '#6b7280',
-    marginTop: '4px',
-};
-
 const getColumnKey = (column: any, index: number) => (
     column?.key ?? column?.field ?? column?.accessor ?? column?.id ?? `column_${index}`
 );
@@ -276,13 +257,13 @@ const renderMetricCards = (widget: WidgetSpec, t: (key: string) => string) => {
             ? [{ label: widget.label, value: widget.value }]
             : [];
     return (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '10px' }}>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
             {items.map((item, index) => (
-                <div key={index} style={{ ...cardStyle, background: '#f9fafb' }}>
-                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{toDisplayText(item.label ?? item.name, `${t('widgets.metric')} ${index + 1}`)}</div>
-                    <div style={{ fontSize: '24px', fontWeight: 700, color: '#111827', marginTop: '6px' }}>{toDisplayText(item.value, '--')}</div>
+                <div key={index} className="rounded-xl border border-[#e5e7eb] bg-[#f9fafb] p-3">
+                    <div className="text-[12px] text-[#6b7280]">{toDisplayText(item.label ?? item.name, `${t('widgets.metric')} ${index + 1}`)}</div>
+                    <div className="mt-1.5 text-[24px] font-bold text-[#111827]">{toDisplayText(item.value, '--')}</div>
                     {(item.change ?? item.description) && (
-                        <div style={{ fontSize: '12px', color: '#4b5563', marginTop: '6px' }}>{toDisplayText(item.change ?? item.description)}</div>
+                        <div className="mt-1.5 text-[12px] text-[#4b5563]">{toDisplayText(item.change ?? item.description)}</div>
                     )}
                 </div>
             ))}
@@ -298,12 +279,12 @@ const renderTable = (widget: WidgetSpec, t: (key: string) => string) => {
     const cell = (value: unknown, column: any) => (versioned ? formatVersionedCell(value, widget.fields?.[column.key], t) : formatTableCell(value, column, t));
 
     return (
-        <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+        <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-[13px]">
                 <thead>
                     <tr>
                         {columns.map((column: any, index: number) => (
-                            <th key={index} style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '1px solid #e5e7eb', color: '#6b7280', fontWeight: 600 }}>
+                            <th key={index} className="border-b border-[#e5e7eb] px-2.5 py-2 text-left font-semibold text-[#6b7280]">
                                 {column.label ?? column.key ?? `${t('widgets.column')} ${index + 1}`}
                             </th>
                         ))}
@@ -313,7 +294,7 @@ const renderTable = (widget: WidgetSpec, t: (key: string) => string) => {
                     {rows.map((row, rowIndex) => (
                         <tr key={rowIndex}>
                             {columns.map((column: any, colIndex: number) => (
-                                <td key={colIndex} style={{ padding: '8px 10px', borderBottom: '1px solid #f3f4f6', color: '#111827' }}>
+                                <td key={colIndex} className="border-b border-[#f3f4f6] px-2.5 py-2 text-[#111827]">
                                     {cell(row[column.key], column)}
                                 </td>
                             ))}
@@ -361,18 +342,18 @@ const renderChart = (widget: WidgetSpec, t: (key: string) => string) => {
     const maxValue = values.length > 0 ? Math.max(...values, 1) : 1;
 
     return (
-        <div style={{ display: 'grid', gap: '10px' }}>
+        <div className="grid gap-2.5">
             {points.map((point, index) => {
                 const value = Number(point.value ?? point.y ?? 0);
                 const width = `${Math.max(8, (value / maxValue) * 100)}%`;
                 return (
-                    <div key={index} style={{ display: 'grid', gap: '4px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#4b5563' }}>
+                    <div key={index} className="grid gap-1">
+                        <div className="flex justify-between text-[12px] text-[#4b5563]">
                             <span>{toDisplayText(point.label ?? point.x ?? point.name, `${t('widgets.dataPoint')} ${index + 1}`)}</span>
                             <span>{Number.isFinite(value) ? value : toDisplayText(point.value ?? point.y, '--')}</span>
                         </div>
-                        <div style={{ height: '10px', background: '#f3f4f6', borderRadius: '999px', overflow: 'hidden' }}>
-                            <div style={{ width, height: '100%', background: '#2563eb', borderRadius: '999px' }} />
+                        <div className="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]">
+                            <div className="h-full rounded-full bg-[#2563eb]" style={{ width }} />
                         </div>
                     </div>
                 );
@@ -384,12 +365,12 @@ const renderChart = (widget: WidgetSpec, t: (key: string) => string) => {
 const renderSteps = (widget: WidgetSpec, t: (key: string) => string) => {
     const steps = Array.isArray(widget.data) ? widget.data : [];
     return (
-        <ol style={{ margin: 0, paddingLeft: '20px', display: 'grid', gap: '10px' }}>
+        <ol className="m-0 grid gap-2.5 pl-5">
             {steps.map((step, index) => (
-                <li key={index} style={{ color: '#111827' }}>
-                    <div style={{ fontWeight: 600 }}>{toDisplayText(step.title ?? step.label, `${t('widgets.step')} ${index + 1}`)}</div>
+                <li key={index} className="text-[#111827]">
+                    <div className="font-semibold">{toDisplayText(step.title ?? step.label, `${t('widgets.step')} ${index + 1}`)}</div>
                     {(step.description ?? step.content) && (
-                        <div style={{ fontSize: '13px', color: '#4b5563', marginTop: '4px' }}>{toDisplayText(step.description ?? step.content)}</div>
+                        <div className="mt-1 text-[13px] text-[#4b5563]">{toDisplayText(step.description ?? step.content)}</div>
                     )}
                 </li>
             ))}
@@ -401,22 +382,22 @@ const renderRichTextBlock = (block: any, t: (key: string) => string) => {
     if (typeof block === 'string') return block;
     if (!block || typeof block !== 'object') return String(block ?? '');
     if (block.type === 'notice') {
-        return <div style={{ color: '#64748b', fontSize: '12px' }}>{block.text || t('widgets.preview')}</div>;
+        return <div className="text-[12px] text-[#64748b]">{block.text || t('widgets.preview')}</div>;
     }
     if (block.type === 'table' && Array.isArray(block.headers) && Array.isArray(block.rows)) {
         const rows = block.rows.slice(0, 12).map((row: any) => (Array.isArray(row) ? row : Object.values(row || {})));
         return (
-            <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead><tr>{block.headers.map((header: any, index: number) => <th key={index} style={{ textAlign: 'left', padding: '7px 9px', borderBottom: '1px solid #e5e7eb', color: '#6b7280' }}>{String(header)}</th>)}</tr></thead>
-                    <tbody>{rows.map((row: any[], rowIndex: number) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} style={{ padding: '7px 9px', borderBottom: '1px solid #f3f4f6' }}>{String(cell ?? '')}</td>)}</tr>)}</tbody>
+            <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[13px]">
+                    <thead><tr>{block.headers.map((header: any, index: number) => <th key={index} className="border-b border-[#e5e7eb] px-[9px] py-[7px] text-left text-[#6b7280]">{String(header)}</th>)}</tr></thead>
+                    <tbody>{rows.map((row: any[], rowIndex: number) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border-b border-[#f3f4f6] px-[9px] py-[7px]">{String(cell ?? '')}</td>)}</tr>)}</tbody>
                 </table>
             </div>
         );
     }
     if ((block.type === 'ol' || block.type === 'ul' || block.type === 'list') && Array.isArray(block.items)) {
         const List = block.type === 'ul' || block.type === 'list' ? 'ul' : 'ol';
-        return <List style={{ margin: 0, paddingLeft: '20px' }}>{block.items.slice(0, 10).map((item: any, index: number) => <li key={index}>{String(item)}</li>)}</List>;
+        return <List className="m-0 pl-5">{block.items.slice(0, 10).map((item: any, index: number) => <li key={index}>{String(item)}</li>)}</List>;
     }
     return block.text ?? block.content ?? JSON.stringify(block);
 };
@@ -433,9 +414,9 @@ const renderRichText = (widget: WidgetSpec, t: (key: string) => string) => {
     }
     const truncated = visibleBlocks.length < blocks.length;
     return (
-        <div style={{ display: 'grid', gap: '8px', color: '#111827', fontSize: '14px', lineHeight: 1.6 }}>
+        <div className="grid gap-2 text-[14px] leading-[1.6] text-[#111827]">
             {visibleBlocks.map((block, index) => <div key={index}>{renderRichTextBlock(block, t)}</div>)}
-            {truncated && <div style={{ color: '#64748b', fontSize: '12px' }}>内容较长，完整报告请打开文件链接预览。</div>}
+            {truncated && <div className="text-[12px] text-[#64748b]">内容较长，完整报告请打开文件链接预览。</div>}
         </div>
     );
 };
@@ -490,26 +471,15 @@ const FileLinkWidget: React.FC<FileLinkWidgetProps> = ({ widget, t, currentSessi
     })();
 
     return (
-        <div style={{
-            border: '1px solid #e5e7eb',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            background: 'white'
-        }}>
-            <div style={{
-                padding: '16px 20px',
-                background: '#f9fafb',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '16px'
-            }}>
-                <div style={{ color: '#4b5563', display: 'flex', alignItems: 'center' }}><FileIcon size={30} /></div>
-                <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#1f2937', marginBottom: '4px' }}>
+        <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-white">
+            <div className="flex items-center gap-4 bg-[#f9fafb] px-5 py-4">
+                <div className="flex items-center text-[#4b5563]"><FileIcon size={30} /></div>
+                <div className="flex-1">
+                    <div className="mb-1 text-[16px] font-semibold text-[#1f2937]">
                         {title}
                     </div>
                     {subtitle && (
-                        <div style={{ fontSize: '13px', color: '#6b7280' }}>
+                        <div className="text-[13px] text-[#6b7280]">
                             {subtitle}
                         </div>
                     )}
@@ -552,7 +522,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
 
     const body = (() => {
         if (widget.status === 'error') {
-            return <div style={{ color: '#b91c1c', fontSize: '13px' }}>{widget.error || t('widgets.renderFail')}</div>;
+            return <div className="text-[13px] text-[#b91c1c]">{widget.error || t('widgets.renderFail')}</div>;
         }
 
         switch (widget.kind) {
@@ -572,19 +542,19 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
                 return renderRichText(widget, t);
             case 'echarts':
                 // A raw ECharts option from an earlier Runtime; its contents were never checked, so it is not drawn (ADR-0008 decision 11).
-                return <div role="note" style={{ color: '#64748b', fontSize: '13px' }}>{t('widgets.legacyEcharts')}</div>;
+                return <div role="note" className="text-[13px] text-[#64748b]">{t('widgets.legacyEcharts')}</div>;
             case 'file_link':
                 return <FileLinkWidget widget={widget} t={t} currentSessionId={currentSessionId} />;
             default:
-                return <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px' }}>{JSON.stringify(widget, null, 2)}</pre>;
+                return <pre className="m-0 text-[12px] whitespace-pre-wrap">{JSON.stringify(widget, null, 2)}</pre>;
         }
     })();
 
     return (
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: '14px', background: '#ffffff', padding: '14px', marginTop: '10px' }}>
-            <div style={sectionTitleStyle}>{widget.title}</div>
-            {widget.subtitle && <div style={sectionSubtitleStyle}>{widget.subtitle}</div>}
-            <div style={{ marginTop: '12px' }}>{body}</div>
+        <div className="mt-2.5 rounded-[14px] border border-[#e5e7eb] bg-white p-3.5">
+            <div className="text-[15px] font-semibold text-[#111827]">{widget.title}</div>
+            {widget.subtitle && <div className="mt-1 text-[12px] text-[#6b7280]">{widget.subtitle}</div>}
+            <div className="mt-3">{body}</div>
         </div>
     );
 };
