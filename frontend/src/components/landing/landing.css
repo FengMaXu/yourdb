@@ -32,7 +32,6 @@
 .lp h2, .lp h3 { font-feature-settings: 'halt'; }
 .lp :focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
 /* The global skip link sits just above the viewport; its shadow must not bleed into the header. */
-.lp .skip-link:not(:focus-visible) { box-shadow: none; }
 
 .lp-wrap {
   width: min(1200px, 100%);
