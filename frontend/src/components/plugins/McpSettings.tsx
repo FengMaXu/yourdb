@@ -175,7 +175,7 @@ const ChoiceField: React.FC<{ field: MCPPresetField; server: MCPServerConfig; in
     const chosen = Array.isArray(saved) ? saved : (field.defaultValue || []);
     return (
         <fieldset className="mcp-field">
-            <legend className="mcp-field-head"><span>{field.label}{field.required && <span className="mcp-required" aria-hidden="true">*</span>}</span>{field.choices && <span className="mcp-field-count">{chosen.length} / {field.choices.length}</span>}</legend>
+            <legend className="mcp-field-head"><span>{field.label}{field.required && <span className="mcp-required" aria-hidden="true">*</span>}</span>{field.choices && <span className="mcp-field-count">{field.choices.filter((choice) => chosen.includes(choice.value)).length} / {field.choices.length}</span>}</legend>
             <div className="mcp-choices">
                 {(field.choices || []).map((choice) => {
                     const on = chosen.includes(choice.value);
