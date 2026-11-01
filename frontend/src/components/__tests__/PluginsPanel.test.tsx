@@ -74,6 +74,16 @@ describe('PluginsPanel MCP presets', () => {
         expect(open).toHaveBeenCalledOnce();
     });
 
+    it('keeps the database status while the list reloads after a save', async () => {
+        render(<PluginsPanel tab="MCP" onOpenDatabaseSettings={vi.fn()} />);
+        await screen.findByText('企查查');
+        await waitFor(() => expect(screen.getAllByText('已连接').length).toBeGreaterThan(0));
+        api.getMcpServersViaRuntime.mockReturnValue(new Promise(() => {}));
+        fireEvent.click(screen.getAllByRole('button', { name: /启用|Enable/ })[0]!);
+        await waitFor(() => expect(api.getMcpConfigViaRuntime).toHaveBeenCalledTimes(2));
+        expect(screen.queryByRole('button', { name: '前往配置数据库' })).toBeNull();
+    });
+
     it('lists presets by title and enables one without sending masked secrets back', async () => {
         render(<PluginsPanel tab="MCP" />);
         expect(await screen.findByText('企查查')).toBeInTheDocument();

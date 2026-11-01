@@ -81,7 +81,11 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
             const configRes: MCPConfig = { servers: listed.filter((server) => !server.host_managed) };
             setMcpError(null);
             setMcpConfig(configRes);
-            setMcpServers(listed);
+            // Keep the last known statuses until fresh ones arrive, so a reload does not flash servers as down.
+            setMcpServers((prev) => listed.map((server) => {
+                const known = prev.find((item) => item.name === server.name);
+                return known ? { ...server, connected: known.connected, tool_count: known.tool_count } : server;
+            }));
             // Reading statuses connects the enabled plugins, which can take a while; show them when they arrive.
             void getMcpServersViaRuntime().then((statuses) => {
                 setMcpServers(listed.map((server) => {
