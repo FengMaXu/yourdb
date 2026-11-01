@@ -998,6 +998,7 @@ textarea.mcp-input {
   }
 }
 
+/* !important on purpose: reduced motion must beat every element's own animation and transition. */
 @media (prefers-reduced-motion: reduce) {
   .mcp-settings *,
   .mcp-settings *::before,
