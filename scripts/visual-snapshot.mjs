@@ -45,7 +45,7 @@ const VIEWPORTS = [
   { name: "mobile", width: 390, height: 844, mobile: true },
 ];
 
-// Applied only while snapshotting: the one place this project allows !important outside the legacy layer.
+// Applied only while snapshotting: the one place this project allows !important.
 const FREEZE_CSS = "*, *::before, *::after { animation: none !important; transition: none !important; caret-color: transparent !important; }";
 
 // ─── Page matrix ──────────────────────────────────────────────────────────────
@@ -178,13 +178,27 @@ async function snapshot(browser, { url, viewport, clock, storage }) {
     const fixed = Date.parse(clock);
     await send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
       const fixed = ${fixed}; const RealDate = Date;
-      class FrozenDate extends RealDate { constructor(...args) { if (args.length === 0) super(fixed); else super(...args); } static now() { return fixed; } }
+      // Works with and without new, like Date itself: Date() returns the frozen time as a string.
+      function FrozenDate(...args) {
+        if (!new.target) return new RealDate(fixed).toString();
+        return args.length === 0 ? new RealDate(fixed) : new RealDate(...args);
+      }
+      FrozenDate.prototype = RealDate.prototype;
+      FrozenDate.now = () => fixed;
+      FrozenDate.parse = RealDate.parse;
+      FrozenDate.UTC = RealDate.UTC;
       globalThis.Date = FrozenDate;
       try { localStorage.clear(); ${Object.entries(storage).map(([key, value]) => value === null ? `localStorage.removeItem(${JSON.stringify(key)});` : `localStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join(" ")} } catch {}
       const style = () => { const node = document.createElement('style'); node.textContent = ${JSON.stringify(FREEZE_CSS)}; document.documentElement.appendChild(node); };
       if (document.documentElement) style(); else document.addEventListener('DOMContentLoaded', style);
     })();` });
-    const loaded = new Promise((resolve) => { const done = (message) => { if (message.sessionId === sessionId && message.method === "Page.loadEventFired") { browser.listeners.delete(done); resolve(); } }; browser.listeners.add(done); setTimeout(resolve, 30_000); });
+    // Wait for the load event, at most 30 s; either way the listener goes.
+    const loaded = new Promise((resolve) => {
+      const finish = () => { browser.listeners.delete(done); clearTimeout(timer); resolve(); };
+      const done = (message) => { if (message.sessionId === sessionId && message.method === "Page.loadEventFired") finish(); };
+      const timer = setTimeout(finish, 30_000);
+      browser.listeners.add(done);
+    });
     lastActivity = Date.now();
     await send("Page.navigate", { url });
     await loaded;
@@ -265,7 +279,8 @@ try {
     for (const viewport of VIEWPORTS) {
       const name = `${page.name}--${viewport.name}`;
       const session = page.session ? sessions.find((item) => item.name === page.session) : undefined;
-      if (page.session && !session) throw new Error(`fixture session not found: ${page.session}`);
+      // A missing fixture session fails this page, not the whole run.
+      if (page.session && !session) { failures.push(`${name}: fixture session not found: ${page.session}`); continue; }
       const storage = {
         app_language: "zh",
         "data-agent:auth-token": page.auth ? token : null,

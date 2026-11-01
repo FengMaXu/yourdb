@@ -48,7 +48,7 @@ function DialogContent({
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
-  /** yourdb change: lets a dialog style its backdrop, e.g. to sit above the legacy app's z-index layers. */
+  /** yourdb change: lets a dialog style its backdrop, e.g. to raise it above the app's other fixed layers. */
   overlayClassName?: string
 }) {
   return (

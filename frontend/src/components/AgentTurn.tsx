@@ -170,7 +170,6 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                     <Trace className="mb-1.5 gap-0">
                         <TraceCollapsible open={open} onOpenChange={(next) => setUserOpen(next)}>
                             <TraceCollapsibleTrigger
-                                aria-controls={bodyId}
                                 className="-ml-2 gap-2 rounded-lg border-0 bg-transparent px-2 py-[5px] text-[0.85rem] leading-[1.4] text-[#78716c] [font-family:inherit] hover:bg-[#f5f5f4] hover:text-[#1c1917] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent-strong)] motion-reduce:transition-none [&_[data-slot=trace-icon]]:ml-0 [&_[data-slot=trace-icon]]:size-3.5 [&_[data-slot=trace-icon]]:text-[#a8a29e] motion-reduce:[&_[data-slot=trace-icon]]:transition-none"
                             >
                                 <TraceTitle className={cn('overflow-visible font-[550] whitespace-nowrap', running && SHIMMER)}>{headline}</TraceTitle>

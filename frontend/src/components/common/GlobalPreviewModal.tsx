@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { MARKDOWN_DOCUMENT } from '../markdown-styles';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { ExternalLink, X } from 'lucide-react';
@@ -100,7 +101,7 @@ function rewriteHtmlAssets(html: string, sourceUrl: string): string {
     document.body.appendChild(navigationGuard);
     return `<!doctype html>${document.documentElement.outerHTML}`;
 }
-/** A white page inside the preview body, for Markdown, CSV and text. Markdown keeps the browser's heading sizes and list markers. */
+/** A white page inside the preview body, for Markdown, CSV and text. */
 const SHEET = 'box-border min-h-full bg-white px-8 pt-7 pb-12';
 /** Bordered table cells with a tinted header row. */
 const CELLS = '[&_td]:border [&_td]:border-[#e5e7eb] [&_td]:px-[11px] [&_td]:py-[9px] [&_td]:text-left [&_td]:align-top [&_th]:border [&_th]:border-[#e5e7eb] [&_th]:bg-[#f8fafc] [&_th]:px-[11px] [&_th]:py-[9px] [&_th]:text-left [&_th]:align-top [&_th]:font-bold [&_th]:text-[#334155]';
@@ -303,7 +304,7 @@ const GlobalPreviewModal: React.FC = () => {
     };
 
     const renderMarkdown = () => (
-        <article className={cn(SHEET, CELLS, 'mx-auto max-w-[1000px] leading-[1.72] text-[#1f2937] [&_:is(h1,h2,h3,h4,h5,h6)]:font-bold [&_h1]:text-[2em] [&_h2]:text-[1.5em] [&_h3]:text-[1.17em] [&_h5]:text-[0.83em] [&_h6]:text-[0.67em] [&_ul]:list-disc [&_ol]:list-decimal [&_img]:mx-auto [&_img]:my-[18px] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-md [&_img]:border [&_img]:border-[#e5e7eb] [&_table]:w-full [&_table]:border-collapse [&_table]:text-[13px]')}>
+        <article className={cn(SHEET, CELLS, 'mx-auto max-w-[1000px] leading-[1.72] text-[#1f2937] [&_img]:mx-auto [&_img]:my-[18px] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-md [&_img]:border [&_img]:border-[#e5e7eb] [&_table]:w-full [&_table]:border-collapse [&_table]:text-[13px]', MARKDOWN_DOCUMENT)}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -330,7 +331,7 @@ const GlobalPreviewModal: React.FC = () => {
             >
                 <header
                     className="flex min-h-14 cursor-move touch-none items-center justify-between gap-4 border-b border-[var(--border-light)] bg-[#f8fafc] py-2.5 pr-2.5 pl-3.5 select-none min-[721px]:min-h-[58px] min-[721px]:py-3 min-[721px]:pr-3.5 min-[721px]:pl-[18px]"
-                    onPointerDown={(event) => startPointerInteraction('move', event)}
+                    onPointerDown={(event) => { if (!narrow) startPointerInteraction('move', event); }}
                 >
                     <div className="flex min-w-0 flex-col gap-1">
                         <div className="max-w-[calc(100vw-172px)] truncate text-[0.98rem] font-extrabold text-[#111827] min-[721px]:max-w-[62vw]">{title || t('preview.title')}</div>

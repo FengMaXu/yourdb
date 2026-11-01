@@ -38,6 +38,7 @@ const aliases: Record<string, keyof typeof languages> = {
 let highlighter: Promise<HighlighterCore> | undefined
 
 function getHighlighter() {
+  // yourdb change: forget a failed load, so a later code block can try again.
   highlighter ??= createHighlighterCore({
     themes: [
       import("shiki/themes/github-light.mjs"),
@@ -45,6 +46,9 @@ function getHighlighter() {
     ],
     langs: [],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
+  }).catch((error: unknown) => {
+    highlighter = undefined
+    throw error
   })
 
   return highlighter
