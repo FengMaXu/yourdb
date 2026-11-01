@@ -24,13 +24,12 @@ import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData } from './ToolPanel';
 import { useSession, type Session, type Task } from '../hooks/useSession';
 import { useLanguage } from '../context/LanguageContext';
-import WidgetRenderer from './widgets/WidgetRenderer';
 import AgentOrbitIcon from './AgentOrbitIcon';
 import { RiInfoCard } from './icons/RemixIcons';
-import AgentMarkdown from './AgentMarkdown';
-import { isAgentMessageEmpty, visibleAgentContent } from '../utils/agent-message';
-import { mergeToolResultState, subagentChildrenOf, type ToolCallState } from './tool-event-state';
-import SubagentProgressLines from './SubagentProgressLines';
+import { isAgentMessageEmpty } from '../utils/agent-message';
+import { groupIntoTurns } from '../utils/agent-turns';
+import AgentTurn from './AgentTurn';
+import { mergeToolResultState, type ToolCallState } from './tool-event-state';
 
 interface SkillActivation {
     name: string;
@@ -61,6 +60,7 @@ interface AgentMessage {
     terminalReason: AgentTerminalReason;
     retryNotice?: string;
     statusNotice?: string;
+    timestamp?: number;
 }
 
 interface UserMessage {
@@ -68,6 +68,7 @@ interface UserMessage {
     role: 'user';
     content: string;
     attachments?: string[];
+    timestamp?: number;
 }
 
 type ChatMessage = AgentMessage | UserMessage;
@@ -115,6 +116,7 @@ const setTerminalReason = (message: AgentMessage, reason: AgentTerminalReason): 
 const createLocalAgentMessage = (messageId: string): AgentMessage => ({
     id: `local-${messageId}`,
     role: 'agent',
+    timestamp: Date.now(),
     content: '',
     transientContent: '',
     reasoningContent: '',
@@ -153,8 +155,11 @@ const toSnapshotMessage = (message: ChatMessage): SessionSnapshotMessage => {
 };
 
 const fromSnapshotMessage = (message: SessionSnapshotMessage): ChatMessage => {
+    const { timestamp } = message as { timestamp?: unknown };
+    const stamp = typeof timestamp === 'number' && Number.isFinite(timestamp) ? { timestamp } : {};
     if (message.role === 'user') {
         return {
+            ...stamp,
             id: message.id,
             role: 'user',
             content: message.content,
@@ -163,6 +168,7 @@ const fromSnapshotMessage = (message: SessionSnapshotMessage): ChatMessage => {
     }
 
     return {
+        ...stamp,
         id: message.id,
         role: 'agent',
         content: message.content,
@@ -216,8 +222,6 @@ export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string
 
 const getSkillHintLabel = (skill: SkillActivation, t: (key: string) => string) => t('chat.skillActivated').replace('{name}', skill.name);
 
-const THINKING_STATUS_TEXT = '思考中';
-const REASONING_DONE_TEXT = '思考内容';
 
 interface ActiveChatAreaProps extends ChatAreaProps {
     activeTask: Task;
@@ -516,6 +520,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const userMsg: UserMessage = {
             id: `user-${Date.now()}`,
             role: 'user',
+            timestamp: Date.now(),
             content,
             ...(attachments.length > 0 ? { attachments } : {}),
         };
@@ -952,17 +957,17 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         }
     };
 
-    const isAgentMessageAnimating = (messageId: string, terminalReason: AgentTerminalReason | null) => (
-        isStreaming &&
-        !terminalReason &&
-        (messageId === activeAgentMessageIdRef.current || messageId === pendingAgentMessageIdRef.current)
-    );
 
-    const shouldShowThinking = (message: AgentMessage) => (
-        isAgentMessageAnimating(message.messageId, message.terminalReason) &&
-        isAgentMessageEmpty(message)
-    );
     const latestAgentMessage = [...messages].reverse().find((message): message is AgentMessage => message.role === 'agent');
+    const chatItems = (() => {
+        const items = groupIntoTurns<UserMessage, AgentMessage>(messages);
+        // A run that has not produced a step yet still shows that it is working.
+        const last = items[items.length - 1];
+        if (isStreaming && last?.kind === 'user') {
+            items.push({ kind: 'turn', key: `turn-${last.message.id}`, ...(last.message.timestamp !== undefined ? { startedAt: last.message.timestamp } : {}), agents: [] });
+        }
+        return items;
+    })();
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
         : (isStreaming && isStreamReconnecting ? t('chat.streamReconnecting') : '') || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
@@ -1039,112 +1044,39 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     </div>
                 )}
 
-                {messages.filter((msg) => msg.role === 'user' || !isAgentMessageEmpty(msg)).map((msg) => (
-                    <React.Fragment key={msg.id}>
-                        {msg.role === 'user' ? (
-                            <div className="message user">
-                                <div className="user-message-stack">
-                                    <div className="message-content user-message-body">
-                                        {msg.content}
-                                    </div>
-                                    {msg.attachments && msg.attachments.length > 0 && (
-                                        <ul className="message-attachments" aria-label={t('chat.attachedFiles')}>
-                                            {msg.attachments.map((file) => (
-                                                <li key={file} className="attachment-chip" title={file}>
-                                                    <FileIcon filename={file} size={14} />
-                                                    <span>{file}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
+                {chatItems.map((item, index) => (
+                    item.kind === 'user' ? (
+                        <div key={item.message.id} className="message user">
+                            <div className="user-message-stack">
+                                <div className="message-content user-message-body">
+                                    {item.message.content}
                                 </div>
-                                <div className="message-avatar user-avatar">U</div>
+                                {item.message.attachments && item.message.attachments.length > 0 && (
+                                    <ul className="message-attachments" aria-label={t('chat.attachedFiles')}>
+                                        {item.message.attachments.map((file) => (
+                                            <li key={file} className="attachment-chip" title={file}>
+                                                <FileIcon filename={file} size={14} />
+                                                <span>{file}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
-                        ) : (
-                            <div className="message agent">
-                                <div className={`agent-icon-red flex-shrink-0 flex items-center justify-center ${isAgentMessageAnimating(msg.messageId, msg.terminalReason) ? 'is-running' : 'is-idle'}`}>
-                                    <AgentOrbitIcon
-                                        size={32}
-                                        animated={isAgentMessageAnimating(msg.messageId, msg.terminalReason)}
-                                        className="agent-message-icon"
-                                    />
-                                </div>
-                                <div className="message-content-wrapper">
-                                    {(msg.reasoningContent.trim().length > 0 || shouldShowThinking(msg)) && (
-                                        <details
-                                            className={`agent-reasoning-block ${isAgentMessageAnimating(msg.messageId, msg.terminalReason) ? 'is-streaming' : ''}`}
-                                            open={isAgentMessageAnimating(msg.messageId, msg.terminalReason)}
-                                        >
-                                            <summary className="agent-reasoning-title">
-                                                {isAgentMessageAnimating(msg.messageId, msg.terminalReason) ? THINKING_STATUS_TEXT : REASONING_DONE_TEXT}
-                                            </summary>
-                                            <div className="agent-reasoning-content">
-                                                {msg.reasoningContent || t('tools.processing')}
-                                            </div>
-                                        </details>
-                                    )}
-
-                                    {visibleAgentContent(msg) && (
-                                        <div className="message-content prose prose-sm max-w-none agent-message-body markdown-content">
-                                            <AgentMarkdown currentSessionId={currentSession.id}>
-                                                {visibleAgentContent(msg)}
-                                            </AgentMarkdown>
-                                        </div>
-                                    )}
-
-                                    {msg.retryNotice && (
-                                        <div className="agent-thinking-line">
-                                            <span>{msg.retryNotice}</span>
-                                        </div>
-                                    )}
-
-                                    {isStreaming && isStreamReconnecting && msg === latestAgentMessage && (
-                                        <div className="agent-thinking-line">
-                                            <span>{t('chat.streamReconnecting')}</span>
-                                        </div>
-                                    )}
-
-                                    {Object.values(msg.widgetsById).map((widget) => (
-                                        <WidgetRenderer
-                                            key={widget.tool_call_id || widget.widget_id}
-                                            widget={widget}
-                                            currentSessionId={currentSession.id}
-                                        />
-                                    ))}
-
-                                    {(Object.values(msg.toolCallsById).length > 0 || msg.skillActivations.length > 0) && (
-                                        <div className="agent-hint-list">
-                                            {Object.values(msg.toolCallsById).map((tool) => (
-                                                <React.Fragment key={tool.toolCallId}>
-                                                    <button
-                                                        type="button"
-                                                        className={`agent-hint-line ${tool.status === 'error' ? 'is-error' : ''}`}
-                                                        onClick={onOpenToolPanel}
-                                                        disabled={!onOpenToolPanel}
-                                                        aria-label={getToolHintLabel(tool, t)}
-                                                        style={{ cursor: onOpenToolPanel ? 'pointer' : 'default', background: 'none', border: 'none', padding: 0, textAlign: 'left' }}
-                                                    >
-                                                        <span className="agent-hint-dot" aria-hidden="true" />
-                                                        <span>{getToolHintLabel(tool, t)}</span>
-                                                    </button>
-                                                    <SubagentProgressLines progress={subagentChildrenOf(tool)} />
-                                                </React.Fragment>
-                                            ))}
-                                            {msg.skillActivations.map((skill) => (
-                                                <div
-                                                    key={[skill.name, skill.source, skill.command_text, skill.location].join('|')}
-                                                    className="agent-hint-line"
-                                                >
-                                                    <span className="agent-hint-dot" aria-hidden="true" />
-                                                    <span>{getSkillHintLabel(skill, t)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </React.Fragment>
+                            <div className="message-avatar user-avatar">U</div>
+                        </div>
+                    ) : (
+                        <AgentTurn
+                            key={item.key}
+                            agents={item.agents}
+                            running={isStreaming && index === chatItems.length - 1}
+                            startedAt={item.startedAt}
+                            currentSessionId={currentSession.id}
+                            reconnecting={isStreaming && isStreamReconnecting && index === chatItems.length - 1}
+                            toolLabel={(tool) => getToolHintLabel(tool, t)}
+                            skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
+                            onOpenToolPanel={onOpenToolPanel}
+                        />
+                    )
                 ))}
 
                 {pendingClarification && (
