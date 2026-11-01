@@ -83,3 +83,34 @@
   --radius-lg: var(--radius);
   --radius-xl: var(--radius-card);
 }
+
+/* Motion tokens: animate-rise, animate-type-in, animate-blink. The curve is --ease-out from the legacy root until phase 4. */
+@theme {
+  --animate-rise: rise 520ms var(--ease-out) both;
+  --animate-rise-quick: rise 260ms var(--ease-out) both;
+  --animate-type-in: type-in 520ms var(--ease-out) both;
+  --animate-blink: blink 1.1s steps(1) 900ms infinite both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  @keyframes type-in {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+  }
+}
