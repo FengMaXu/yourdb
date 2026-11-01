@@ -15,6 +15,8 @@ import { getConfigViaRuntime } from './api/runtime-client';
 import LoginView from './components/LoginView';
 import GlobalPreviewModal from './components/common/GlobalPreviewModal';
 import { Toaster } from '@/components/ui/sonner';
+import { cn } from '@/lib/utils';
+import { SkipLink } from './components/SkipLink';
 
 type StartupState = 'checking' | 'ready' | 'error';
 
@@ -42,6 +44,9 @@ const CHAT_PANEL_MIN_WIDTH = 560;
 const SIDEBAR_PEEK_OPEN_DELAY = 80;
 const SIDEBAR_PEEK_CLOSE_DELAY = 180;
 
+/** The full-window screen shown while the app starts or when it could not. */
+const APP_LOADING = 'grid min-h-screen place-items-center bg-[radial-gradient(circle_at_18%_20%,rgba(240,68,56,0.14),transparent_28%),radial-gradient(circle_at_82%_14%,rgba(17,24,39,0.1),transparent_26%),linear-gradient(135deg,#fff7ed_0%,#f8fafc_52%,#eef2ff_100%)] font-bold tracking-[0.02em] text-[#1f2937]';
+
 const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelConfigured, onRecheckModel, onModelMissing }) => {
   const { t } = useLanguage();
   const [tools, setTools] = useState<ToolData[]>([]);
@@ -61,6 +66,8 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   const chatMainPaneRef = useRef<HTMLDivElement>(null);
   const chatResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const chatPaneRatioRef = useRef<number | null>(null);
+  // While the chat pane is resized, a full-window layer carries the cursor and keeps text from being selected.
+  const [isResizingChat, setIsResizingChat] = useState(false);
   const [chatPaneWidth, setChatPaneWidth] = useState<number | null>(null);
   const isDesktop = typeof window !== 'undefined' && Boolean(window.dataAgent);
 
@@ -145,7 +152,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
       startX: event.clientX,
       startWidth: currentWidth,
     };
-    document.body.classList.add('chat-panel-resizing');
+    setIsResizingChat(true);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!chatResizeStartRef.current) return;
@@ -160,7 +167,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
 
     const handleMouseUp = () => {
       chatResizeStartRef.current = null;
-      document.body.classList.remove('chat-panel-resizing');
+      setIsResizingChat(false);
       window.removeEventListener('mousemove', handleMouseMove);
     };
 
@@ -208,12 +215,12 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   }, [chatPaneWidth, getMaxChatPaneWidth, isSidebarOpen]);
 
   if (startupState === 'checking') {
-    return <div className="app-loading">{t('app.preparing')}</div>;
+    return <div className={APP_LOADING}>{t('app.preparing')}</div>;
   }
 
   if (startupState === 'error') {
     return (
-      <div className="app-loading" role="alert">
+      <div className={APP_LOADING} role="alert">
         <p>{t('app.startupError')}</p>
         <button type="button" onClick={onRetryStartup}>{t('app.retry')}</button>
       </div>
@@ -222,15 +229,15 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
 
   return (
     <SessionProvider>
-      <div className="desktop-shell">
-        <a className="skip-link" href="#main-content">{t('accessibility.skipToContent')}</a>
+      <div className="flex h-full min-h-0 w-full flex-col bg-transparent">
+        <SkipLink href="#main-content">{t('accessibility.skipToContent')}</SkipLink>
         {isDesktop && (
-          <div className="desktop-menu-strip" role="menubar" aria-label={t('desktop.menu')}>
+          <div className="flex h-[34px] shrink-0 items-center gap-0.5 border-b border-[rgba(120,53,15,0.08)] bg-[rgba(255,250,242,0.66)] px-2.5 text-[#111827] backdrop-blur-[18px] max-[720px]:hidden" role="menubar" aria-label={t('desktop.menu')}>
             {DESKTOP_MENU_ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className="desktop-menu-item"
+                className="h-7 cursor-pointer rounded-[7px] border-0 bg-transparent px-2.5 text-[0.86rem] text-inherit transition-[background-color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 pointer-fine:hover:bg-white/64"
                 role="menuitem"
                 onClick={(event) => {
                   const rect = event.currentTarget.getBoundingClientRect();
@@ -250,9 +257,14 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           <ModelSetupPrompt onConfigure={() => setActiveView({ kind: 'settings', section: 'model' })} />
         )}
 
-        <div className="app-container">
+        {/* The framed workspace: inset on a wide window, edge to edge on a phone. */}
+        <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-[var(--hairline)] bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:min-h-dvh max-[720px]:rounded-none max-[720px]:border-0">
           <div
-            className={`sidebar-shell ${isSidebarOpen ? '' : 'is-collapsed'} ${!isSidebarOpen && isSidebarPeeking ? 'is-peeking' : ''}`}
+            className={cn(
+              'relative z-20 flex min-w-0 flex-none self-stretch border-r border-[var(--hairline)] bg-[var(--frame-rail)] transition-[width] motion-reduce:transition-none',
+              isSidebarOpen || isSidebarPeeking ? 'w-[var(--sidebar-width)]' : 'w-[var(--sidebar-rail-width)]',
+              isSidebarOpen && 'max-[720px]:w-[112px]',
+            )}
             // Tracked while open too, so the hover state is never stale when the sidebar auto-collapses.
             onMouseEnter={() => scheduleSidebarPeek(true)}
             onMouseLeave={() => scheduleSidebarPeek(false)}
@@ -270,17 +282,22 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           {/* The chat stays mounted behind settings pages so a running turn keeps streaming. */}
           <div
             ref={chatPanelShellRef}
-            className={`chat-panel-shell ${isToolPanelOpen ? 'has-tool-panel' : ''}`}
+            className="relative flex h-auto w-auto min-w-0 flex-auto items-stretch overflow-hidden rounded-none border-0 bg-[var(--frame-surface)] [&[hidden]]:hidden"
             hidden={activeView.kind !== 'chat'}
           >
             <div
               ref={chatMainPaneRef}
-              className="chat-main-pane"
+              className="relative flex min-h-0 min-w-[560px] flex-auto overflow-hidden max-[1100px]:min-w-0 [&_.chat-area]:min-w-0 [&_.chat-area]:flex-auto"
               style={isToolPanelOpen && chatPaneWidth ? { flex: `0 0 ${chatPaneWidth}px`, width: chatPaneWidth } : undefined}
             >
               {isToolPanelOpen && (
                 <div
-                  className="chat-panel-resize-handle"
+                  className={cn(
+                    'group/resize absolute top-[18px] right-0 z-[12] flex h-[calc(100%-36px)] w-4 cursor-ew-resize items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]',
+                    'after:h-14 after:w-[3px] after:rounded-full after:bg-[rgba(120,53,15,0.18)] after:opacity-0 after:transition-[opacity,background-color,transform] motion-reduce:after:transition-none',
+                    'hover:after:scale-y-[1.08] hover:after:bg-[rgba(240,68,56,0.42)] hover:after:opacity-100',
+                    isResizingChat && 'after:scale-y-[1.08] after:bg-[rgba(240,68,56,0.42)] after:opacity-100',
+                  )}
                   role="separator"
                   aria-orientation="vertical"
                   aria-valuemin={CHAT_PANEL_MIN_WIDTH}
@@ -306,9 +323,10 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
 
             {isToolPanelOpen && <ToolPanel tools={tools} onClose={closeToolPanel} />}
           </div>
+          {isResizingChat && <div className="fixed inset-0 z-[3000] cursor-ew-resize select-none" aria-hidden="true" />}
 
           {activeView.kind !== 'chat' && (
-            <div className="workspace-page-shell">
+            <div className="flex min-w-0 flex-auto overflow-hidden bg-[var(--frame-surface)]">
               {activeView.kind === 'plugins'
                 ? <PluginsPanel tab={activeView.tab} onOpenDatabaseSettings={() => setActiveView({ kind: 'settings', section: 'database' })} />
                 : <SettingsPanel section={activeView.section} />}
@@ -374,7 +392,7 @@ const App: React.FC = () => {
   const markModelMissing = useCallback(() => setModelConfigured(false), []);
 
   if (status === 'checking') {
-    return <div className="app-loading">{t('app.preparing')}</div>;
+    return <div className={APP_LOADING}>{t('app.preparing')}</div>;
   }
 
   if (status === 'anonymous') {

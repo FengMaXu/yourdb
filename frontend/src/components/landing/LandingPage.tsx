@@ -4,6 +4,7 @@ import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/noto-serif-sc';
 import { ArrowRight, Download, Languages, X } from '../icons/Typicons';
 import { BrandMark, BrandWordmark } from '../Brand';
+import { SkipLink } from '../SkipLink';
 import { useLanguage } from '../../context/LanguageContext';
 import './landing-entry.css';
 
@@ -430,7 +431,7 @@ const LandingPage: React.FC = () => {
 
     return (
         <main className="lp">
-            <a className="skip-link" href="#landing-content">{t('accessibility.skipToContent')}</a>
+            <SkipLink href="#landing-content" className="not-focus-visible:shadow-none">{t('accessibility.skipToContent')}</SkipLink>
 
             <header className="lp-nav">
                 <div className="lp-wrap lp-nav-inner">
