@@ -1,0 +1,369 @@
+{
+  "$comment": "Fixed data for the visual regression snapshots. Built into a throwaway data dir by scripts/visual-fixture.mjs; nothing here calls a model or a database.",
+  "clock": "2026-10-01T12:00:00.000Z",
+  "user": {
+    "username": "visual",
+    "password": "visual-fixture"
+  },
+  "settings": {
+    "provider": "DeepSeek",
+    "llm_enabled": true,
+    "api_key": "sk-visual-fixture-0000",
+    "base_url": "https://api.deepseek.com/v1",
+    "model": "deepseek-chat",
+    "driver": "mysql",
+    "host": "db.fixture.invalid",
+    "port": 3306,
+    "user": "visual",
+    "password": "visual-fixture",
+    "database": "sales_demo",
+    "python_runtime": {
+      "mode": "bundled"
+    }
+  },
+  "mcp": {
+    "servers": [
+      {
+        "name": "filesystem",
+        "enabled": false,
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "./workspace"
+        ],
+        "description": "读写工作区文件"
+      },
+      {
+        "name": "weather",
+        "enabled": false,
+        "transport": "streamable-http",
+        "url": "https://mcp.fixture.invalid/weather",
+        "description": "天气查询"
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "name": "经营分析",
+      "createdAt": "2026-09-30T08:00:00.000Z",
+      "sessions": [
+        {
+          "name": "三大行业累计销售额",
+          "createdAt": "2026-10-01T09:00:00.000Z",
+          "messages": [
+            {
+              "at": "2026-10-01T09:00:00.000Z",
+              "message": {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "查询 2025 年 12 月批发、零售、餐饮三大行业的累计销售额和同比增速"
+                  }
+                ]
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:04.000Z",
+              "message": {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "thinking",
+                    "thinking": "先查知识库里的行业口径和销售额字段，再写查询。"
+                  },
+                  {
+                    "type": "text",
+                    "text": "我先查阅知识库，确认行业口径和累计销售额的字段。"
+                  },
+                  {
+                    "type": "toolCall",
+                    "id": "call_search",
+                    "name": "search_knowledge",
+                    "arguments": {
+                      "query": "批发 零售 餐饮 累计销售额"
+                    }
+                  },
+                  {
+                    "type": "toolCall",
+                    "id": "call_schema",
+                    "name": "read_knowledge",
+                    "arguments": {
+                      "path": "doc/db_schema.md"
+                    }
+                  }
+                ],
+                "stopReason": "toolUse"
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:05.000Z",
+              "message": {
+                "role": "toolResult",
+                "toolCallId": "call_search",
+                "toolName": "search_knowledge",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "doc/business.md：行业门类按国民经济行业分类，批发业 51、零售业 52、餐饮业 62。"
+                  }
+                ],
+                "isError": false
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:05.000Z",
+              "message": {
+                "role": "toolResult",
+                "toolCallId": "call_schema",
+                "toolName": "read_knowledge",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "fact_sales_monthly(company_id, snapshot_month, sales_ytd, sales_ytd_last_year)"
+                  }
+                ],
+                "isError": false
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:09.000Z",
+              "message": {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "口径确认了，按行业大类汇总 12 月的累计值。"
+                  },
+                  {
+                    "type": "toolCall",
+                    "id": "call_query",
+                    "name": "query_database",
+                    "arguments": {
+                      "sql": "SELECT di.industry_name_large AS 行业, ROUND(SUM(f.sales_ytd), 2) AS 累计销售额_亿元,\n       ROUND((SUM(f.sales_ytd) - SUM(f.sales_ytd_last_year)) / SUM(f.sales_ytd_last_year) * 100, 2) AS 同比增速\nFROM fact_sales_monthly f\nJOIN dim_industry di ON f.industry_code = di.industry_code\nWHERE f.snapshot_month = '2025-12-01' AND di.industry_code_large IN ('51', '52', '62')\nGROUP BY di.industry_name_large"
+                    }
+                  }
+                ],
+                "stopReason": "toolUse"
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:11.000Z",
+              "message": {
+                "role": "toolResult",
+                "toolCallId": "call_query",
+                "toolName": "query_database",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "3 rows"
+                  }
+                ],
+                "details": {
+                  "columns": [
+                    "行业",
+                    "累计销售额_亿元",
+                    "同比增速"
+                  ],
+                  "rows": [
+                    [
+                      "批发业",
+                      6710.25,
+                      -25.12
+                    ],
+                    [
+                      "零售业",
+                      499.88,
+                      16.46
+                    ],
+                    [
+                      "餐饮业",
+                      66.44,
+                      3.08
+                    ]
+                  ]
+                },
+                "isError": false
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:12.000Z",
+              "message": {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "toolCall",
+                    "id": "call_widget",
+                    "name": "show_widget",
+                    "arguments": {
+                      "type": "metric_cards"
+                    }
+                  },
+                  {
+                    "type": "toolCall",
+                    "id": "call_table",
+                    "name": "show_widget",
+                    "arguments": {
+                      "kind": "table"
+                    }
+                  }
+                ],
+                "stopReason": "toolUse"
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:12.000Z",
+              "message": {
+                "role": "toolResult",
+                "toolCallId": "call_widget",
+                "toolName": "show_widget",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "widget shown"
+                  }
+                ],
+                "details": {
+                  "widgetId": "widget_totals",
+                  "widget": {
+                    "title": "核心指标",
+                    "data": [
+                      {
+                        "label": "三大行业累计销售额",
+                        "value": "7,276.57 亿元",
+                        "change": "同比 -23.34%"
+                      },
+                      {
+                        "label": "增长最快",
+                        "value": "零售业",
+                        "change": "同比 +16.46%"
+                      }
+                    ],
+                    "kind": "metric_cards"
+                  }
+                },
+                "isError": false
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:12.000Z",
+              "message": {
+                "role": "toolResult",
+                "toolCallId": "call_table",
+                "toolName": "show_widget",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "widget shown"
+                  }
+                ],
+                "details": {
+                  "widgetId": "widget_table",
+                  "widget": {
+                    "kind": "table",
+                    "title": "分行业明细",
+                    "columns": [
+                      {
+                        "key": "industry",
+                        "label": "行业"
+                      },
+                      {
+                        "key": "sales",
+                        "label": "累计销售额（亿元）"
+                      },
+                      {
+                        "key": "yoy",
+                        "label": "同比增速"
+                      }
+                    ],
+                    "data": [
+                      {
+                        "industry": "批发业",
+                        "sales": 6710.25,
+                        "yoy": "-25.12%"
+                      },
+                      {
+                        "industry": "零售业",
+                        "sales": 499.88,
+                        "yoy": "16.46%"
+                      },
+                      {
+                        "industry": "餐饮业",
+                        "sales": 66.44,
+                        "yoy": "3.08%"
+                      }
+                    ]
+                  }
+                },
+                "isError": false
+              }
+            },
+            {
+              "at": "2026-10-01T09:00:16.000Z",
+              "message": {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "2025 年 12 月三大行业累计销售额合计 **7,276.57 亿元**，同比下降 23.34%。\n\n| 行业 | 累计销售额（亿元） | 同比增速 |\n| --- | ---: | ---: |\n| 批发业 | 6,710.25 | -25.12% |\n| 零售业 | 499.88 | 16.46% |\n| 餐饮业 | 66.44 | 3.08% |\n\n- 批发业占合计的 92%，是整体下降的主要原因。\n- 零售业和餐饮业保持增长，其中零售业增速最快。\n\n口径：`fact_sales_monthly.sales_ytd`，行业按国民经济行业分类大类汇总。"
+                  }
+                ],
+                "stopReason": "stop"
+              }
+            }
+          ]
+        },
+        {
+          "name": "月度趋势草稿",
+          "createdAt": "2026-09-30T10:00:00.000Z",
+          "messages": [
+            {
+              "at": "2026-09-30T10:00:00.000Z",
+              "message": {
+                "role": "user",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "零售业 2025 年每月的销售额是多少？"
+                  }
+                ]
+              }
+            },
+            {
+              "at": "2026-09-30T10:00:03.000Z",
+              "message": {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "零售业 2025 年 1–12 月的月度销售额在 38–46 亿元之间，12 月最高（45.9 亿元）。需要的话我可以画成折线图。"
+                  }
+                ],
+                "stopReason": "stop"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "新任务",
+      "createdAt": "2026-10-01T11:00:00.000Z",
+      "sessions": [
+        {
+          "name": "新会话",
+          "createdAt": "2026-10-01T11:00:00.000Z",
+          "messages": []
+        }
+      ]
+    }
+  ],
+  "knowledge": {
+    "doc/business.md": "---\nknowledgeId: business-definitions\nname: 业务定义\ndescription: 行业口径与指标单位。\n---\n\n# 业务口径\n\n- 行业门类按国民经济行业分类：批发业 51、零售业 52、餐饮业 62。\n- 累计销售额单位为亿元。\n",
+    "doc/db_schema.md": "---\nknowledgeId: db-schema\nname: 数据库结构\ndescription: 销售事实表的字段说明。\n---\n\n# 数据库结构\n\n## fact_sales_monthly\n\n| 字段 | 含义 |\n| --- | --- |\n| company_id | 企业 |\n| snapshot_month | 月份 |\n| sales_ytd | 本年累计销售额 |\n| sales_ytd_last_year | 上年同期累计销售额 |\n",
+    "doc/query_patterns.md": "---\nknowledgeId: query-patterns\nname: 查询模式\ndescription: 常用的汇总查询写法。\n---\n\n# 查询模式\n\n按行业大类汇总累计值时，先过滤月份，再按 `industry_code_large` 分组。\n",
+    "doc/learning.md": "---\nknowledgeId: learning\nname: 经验记录\ndescription: 过去回答中确认过的经验。\n---\n\n# 经验记录\n\n暂无。\n"
+  }
+}
