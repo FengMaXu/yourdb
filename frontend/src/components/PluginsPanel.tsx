@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { UI } from './workspace-ui';
 import { Search, RefreshCw, Plus, Loader2, Database, PlugZap, Server, Sparkles } from 'lucide-react';
 import {
     type MCPConfig,
@@ -46,12 +47,23 @@ function PaneTabs({ label, value, onChange, items }: { label: string; value: str
     );
 }
 
-/** A frameless icon action whose label slides out on hover (styles in index.css until phase 3.8). */
+/** A frameless icon action whose label slides out on hover or keyboard focus. */
 function RevealButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
     return (
-        <button type="button" className="icon-reveal-btn" onClick={onClick} disabled={disabled} aria-label={label}>
+        <button
+            type="button"
+            className="group/reveal inline-flex h-[34px] cursor-pointer items-center border-0 bg-transparent px-2 whitespace-nowrap text-[#78716c] [font:inherit] transition-colors enabled:hover:text-[#1f2937] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]"
+            onClick={onClick}
+            disabled={disabled}
+            aria-label={label}
+        >
             {children}
-            <span className="header-icon-label" aria-hidden="true">{label}</span>
+            <span
+                className="inline-block max-w-0 overflow-hidden text-[0.82rem] whitespace-nowrap opacity-0 transition-[max-width,opacity,margin] group-focus-visible/reveal:ml-1.5 group-focus-visible/reveal:max-w-[8em] group-focus-visible/reveal:opacity-100 group-enabled/reveal:group-hover/reveal:ml-1.5 group-enabled/reveal:group-hover/reveal:max-w-[8em] group-enabled/reveal:group-hover/reveal:opacity-100 motion-reduce:transition-none"
+                aria-hidden="true"
+            >
+                {label}
+            </span>
         </button>
     );
 }
@@ -357,15 +369,15 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
     };
 
     return (
-        <section className="workspace-page" aria-labelledby="plugins-page-title">
-            <header className="workspace-page-header">
+        <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="plugins-page-title">
+            <header className="flex h-14 flex-none items-center border-b border-[var(--hairline)] px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-[var(--text-primary)]">
                 <h1 id="plugins-page-title">{tab === 'MCP' ? t('plugins.mcp') : t('plugins.skills')}</h1>
             </header>
 
-            <div className="workspace-page-body scrollable-area min-w-0 max-[420px]:p-3 [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full">
+            <div className={cn('scrollable-area min-w-0 max-[420px]:p-3 [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full', 'flex min-h-0 flex-auto flex-col overflow-y-auto p-8 max-[720px]:p-4 [&>*]:w-full [&>*]:max-w-[960px]')}>
                 {/* MCP */}
                 {tab === 'MCP' && (
-                    <div className="plugins-pane">
+                    <div className="flex min-h-0 flex-1 flex-col">
                         <PaneTabs label={t('plugins.mcp')} value={mcpTab} onChange={setMcpTab} items={[{ value: '已安装', label: t('plugins.installed') }, { value: '设置', label: t('plugins.settings') }]} />
 
                         <div className="mb-6 flex flex-wrap items-start justify-between gap-3 min-[721px]:flex-nowrap min-[721px]:items-center min-[721px]:gap-4">
@@ -384,7 +396,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         </div>
 
                         {mcpError && (
-                            <div role="alert" aria-live="assertive" className="ui-alert plugins-error" data-tone="error">
+                            <div role="alert" aria-live="assertive" className={cn(UI.alert, 'mb-4')} data-tone="error">
                                 {mcpError}
                             </div>
                         )}
@@ -471,13 +483,13 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
 
                 {/* Skills */}
                 {tab === 'Skills' && (
-                    <div className="plugins-pane">
+                    <div className="flex min-h-0 flex-1 flex-col">
                         <PaneTabs label={t('plugins.skills')} value={skillsTab} onChange={setSkillsTab} items={[{ value: '已安装', label: t('plugins.installed') }, { value: '设置', label: t('plugins.settings') }]} />
 
                         <div className="mb-6 flex flex-wrap items-start justify-between gap-3 min-[721px]:flex-nowrap min-[721px]:items-center min-[721px]:gap-4">
-                            <div className="plugins-search">
+                            <div className="relative w-[min(320px,100%)] [&_input]:pl-9 [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-3 [&_svg]:-translate-y-1/2 [&_svg]:text-[#a8a29e]">
                                 <Search className="size-[15px]" aria-hidden="true" />
-                                <input className="ui-input" type="search" placeholder={t('plugins.searchSkill') || "搜索 Skill"} value={skillQuery} onChange={e => setSkillQuery(e.target.value)} aria-label={t('plugins.searchSkill') || '搜索 Skill'} />
+                                <input className={UI.input} type="search" placeholder={t('plugins.searchSkill') || "搜索 Skill"} value={skillQuery} onChange={e => setSkillQuery(e.target.value)} aria-label={t('plugins.searchSkill') || '搜索 Skill'} />
                             </div>
                             <RevealButton label={t('plugins.refresh')} onClick={loadSkills}>
                                 <RefreshCw className="size-[17px]" aria-hidden="true" />
@@ -485,35 +497,35 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         </div>
 
                         {skillsError ? (
-                            <div role="alert" aria-live="assertive" className="ui-alert plugins-error" data-tone="error">{skillsError}</div>
+                            <div role="alert" aria-live="assertive" className={cn(UI.alert, 'mb-4')} data-tone="error">{skillsError}</div>
                         ) : null}
                         {isLoadingSkills ? (
-                            <div role="status" className="plugins-status">{t('plugins.loadingSkills')}</div>
+                            <div role="status" className="mt-16 text-center text-[0.875rem] text-muted-foreground">{t('plugins.loadingSkills')}</div>
                         ) : skills.length === 0 ? (
-                            <div role="status" className="plugins-status">
+                            <div role="status" className="mt-16 text-center text-[0.875rem] text-muted-foreground">
                                 {t('plugins.noSkills')}
                             </div>
                         ) : filteredSkills.length === 0 ? (
-                            <div role="status" className="plugins-status">
+                            <div role="status" className="mt-16 text-center text-[0.875rem] text-muted-foreground">
                                 {t('plugins.noSearchResults')}
                             </div>
                         ) : (
-                            <ul className="skill-list">
+                            <ul className="m-0 grid list-none gap-2.5 p-0">
                                 {filteredSkills.map((skill, index) => (
-                                    <li key={skill.name} className="skill-card" style={{ '--i': index } as React.CSSProperties}>
-                                        <span className="ui-card-icon" aria-hidden="true"><Sparkles className="size-[18px]" /></span>
+                                    <li key={skill.name} className="grid animate-rise-sm grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-4 rounded-[14px] border border-border bg-white px-5 py-[18px] transition-[border-color,box-shadow] [animation-delay:calc(var(--i)*50ms)] hover:border-input hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-16px_rgba(28,25,23,0.18)] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:grid-cols-[auto_minmax(0,1fr)] max-[720px]:[&>:last-child]:col-start-2" style={{ '--i': index } as React.CSSProperties}>
+                                        <span className={UI.cardIcon} aria-hidden="true"><Sparkles className="size-[18px]" /></span>
                                         <div>
-                                            <div className="skill-card-name">{skill.name}</div>
-                                            <p className="skill-card-desc">{skill.description}</p>
+                                            <div className="font-mono text-[0.9rem] font-[650] text-foreground">{skill.name}</div>
+                                            <p className="mt-1 mb-0 text-[0.85rem] leading-[1.6] text-muted-foreground">{skill.description}</p>
                                             {skill.when_to_use && (
-                                                <p className="skill-card-meta"><span>{t('plugins.whenToUse')}：</span>{skill.when_to_use}</p>
+                                                <p className="mt-2.5 mb-0 text-[0.8rem] leading-[1.6] break-all text-body [&_span]:text-muted-foreground"><span>{t('plugins.whenToUse')}：</span>{skill.when_to_use}</p>
                                             )}
                                             {/* The runtime's skill list carries no file location; show the row only when one is known. */}
                                             {skill.location && (
-                                                <p className="skill-card-meta ui-mono"><span>{t('plugins.path')}：</span>{skill.location}</p>
+                                                <p className={cn(UI.mono, 'mt-2.5 mb-0 text-[0.8rem] leading-[1.6] break-all text-body [&_span]:text-muted-foreground')}><span>{t('plugins.path')}：</span>{skill.location}</p>
                                             )}
                                         </div>
-                                        <span className="ui-pill">{skill.source_scope}</span>
+                                        <span className={UI.pill}>{skill.source_scope}</span>
                                     </li>
                                 ))}
                             </ul>
