@@ -29,6 +29,7 @@
     "check:affected": "node scripts/check-affected.mjs",
     "test:scripts": "node --test scripts/check-affected.test.mjs",
     "smoke:charts": "node scripts/smoke-charts-browser.mjs",
+    "visual:snapshot": "node scripts/visual-snapshot.mjs",
     "verify:backend": "npm run verify:architecture && npm run typecheck && npm run typecheck:negative --workspace=@data-agent/runtime && npm test && npm run build:distribution && node scripts/smoke-web-host.mjs && node scripts/smoke-charts-browser.mjs",
     "verify:backend:packaged": "npm run verify:backend && node scripts/package-electron-manual.mjs frontend/release-final/win-unpacked && node scripts/smoke-electron.mjs frontend/release-final/win-unpacked",
     "eval:spider2": "node evaluations/spider2/run.mjs",
@@ -42,6 +43,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   },
