@@ -119,11 +119,11 @@ const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: numb
                     )}
                 </div>
                 <button type="button" className="mcp-btn" onClick={onTest} disabled={testing}>
-                    {testing && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                    {testing && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
                     {t('plugins.test')}
                 </button>
                 <button type="button" className="mcp-btn mcp-btn-primary" onClick={onSave} disabled={saving}>
-                    {saving && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                    {saving && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
                     {t('plugins.saveConfig')}
                 </button>
             </footer>

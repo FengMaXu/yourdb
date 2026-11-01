@@ -361,7 +361,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                     disabled={isLoadingMCP}
                                     aria-label={t('plugins.refresh')}
                                 >
-                                    {isLoadingMCP ? <Loader2 size={17} className="animate-spin" aria-hidden="true" /> : <RefreshCw size={17} aria-hidden="true" />}
+                                    {isLoadingMCP ? <Loader2 size={17} className="legacy-animate-spin" aria-hidden="true" /> : <RefreshCw size={17} aria-hidden="true" />}
                                     <span className="header-icon-label" aria-hidden="true">{t('plugins.refresh')}</span>
                                 </button>
                                 {/* The settings tab's plugin list has its own add button. */}
@@ -417,12 +417,12 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                                     <>
                                                         {server.enabled && (
                                                             <button type="button" className="mcp-btn" onClick={() => void handleRestartMCPServer(server.name)} disabled={isRestarting || isToggling}>
-                                                                {isRestarting && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                                                                {isRestarting && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
                                                                 {t('plugins.reconnect')}
                                                             </button>
                                                         )}
                                                         <button type="button" className="mcp-btn" onClick={() => void handleToggleMCPEnabled(server.name, !server.enabled)} disabled={isToggling || isRestarting}>
-                                                            {isToggling && <Loader2 size={14} className="animate-spin" aria-hidden="true" />}
+                                                            {isToggling && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
                                                             {server.enabled ? t('plugins.disable') : t('plugins.enable')}
                                                         </button>
                                                     </>

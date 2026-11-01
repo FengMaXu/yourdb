@@ -35,7 +35,7 @@ body {
   height: 100%;
 }
 
-.sr-only {
+.legacy-sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -523,7 +523,7 @@ body {
   }
 }
 
-.animate-spin {
+.legacy-animate-spin {
   animation: spin 0.8s linear infinite;
 }
 
@@ -1861,7 +1861,7 @@ body {
   .agent-orbit-icon.is-animated .agent-orbit-electron-group,
   .agent-orbit-icon.is-animated .agent-orbit-electron-glow,
   .agent-orbit-icon.is-animated .agent-orbit-electron-core,
-  .animate-spin,
+  .legacy-animate-spin,
   .result-pending::before,
   .editor-modal-overlay,
   .editor-modal,

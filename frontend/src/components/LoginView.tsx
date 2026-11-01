@@ -85,7 +85,7 @@ const LoginView: React.FC<LoginViewProps> = ({ embedded = false }) => {
                 {error && <div className="auth-error" role="alert" aria-live="assertive">{error}</div>}
 
                 <button className="auth-submit" type="submit" disabled={submitting}>
-                    {submitting ? <Loader2 size={17} className="animate-spin" /> : isRegister ? <UserPlus size={17} /> : <LogIn size={17} />}
+                    {submitting ? <Loader2 size={17} className="legacy-animate-spin" /> : isRegister ? <UserPlus size={17} /> : <LogIn size={17} />}
                     <span>{submitting ? t('auth.submitting') : isRegister ? t('auth.createAccount') : t('auth.signIn')}</span>
                 </button>
 

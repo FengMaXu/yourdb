@@ -632,11 +632,11 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                             <div className="ui-actions settings-action-row">
                                 <button type="button" className="ui-btn" onClick={handleTestDB} disabled={isTestingDB}>
-                                    {isTestingDB ? <Loader2 size={15} className="animate-spin" /> : null}
+                                    {isTestingDB ? <Loader2 size={15} className="legacy-animate-spin" /> : null}
                                     {isTestingDB ? t('settings.testing') : t('settings.dbTest')}
                                 </button>
                                 <button type="button" className="ui-btn ui-btn-primary" onClick={handleSaveDB} disabled={isSavingDB}>
-                                    {isSavingDB ? <Loader2 size={15} className="animate-spin" /> : null}
+                                    {isSavingDB ? <Loader2 size={15} className="legacy-animate-spin" /> : null}
                                     {t('settings.save')}
                                 </button>
                             </div>
@@ -679,8 +679,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                 </div>
                             )}
                             <div className="ui-actions settings-action-row">
-                                <button type="button" onClick={handleTestPython} className="ui-btn" disabled={isTestingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isTestingPython ? <Loader2 size={15} className="animate-spin" /> : null}{isTestingPython ? t('settings.testingPython') : t('settings.testPython')}</button>
-                                <button type="button" onClick={handleSavePython} className="ui-btn ui-btn-primary" disabled={isSavingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isSavingPython ? <Loader2 size={15} className="animate-spin" /> : null}{t('settings.savePython')}</button>
+                                <button type="button" onClick={handleTestPython} className="ui-btn" disabled={isTestingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isTestingPython ? <Loader2 size={15} className="legacy-animate-spin" /> : null}{isTestingPython ? t('settings.testingPython') : t('settings.testPython')}</button>
+                                <button type="button" onClick={handleSavePython} className="ui-btn ui-btn-primary" disabled={isSavingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isSavingPython ? <Loader2 size={15} className="legacy-animate-spin" /> : null}{t('settings.savePython')}</button>
                             </div>
                         </section>
                     </div>
