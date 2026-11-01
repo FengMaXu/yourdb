@@ -9,7 +9,7 @@
  * model or a database: the sessions only hold completed messages.
  *
  *   node scripts/visual-fixture.mjs                 build into a temp dir and start the Web Host on it
- *   node scripts/visual-fixture.mjs --build <dir>   only build the data dir (and <dir>/knowledge)
+ *   node scripts/visual-fixture.mjs --build <dir>   only build the data dir (knowledge goes to <dir>/knowledge-root)
  *
  * The Web Host serves frontend/dist (build it first) on DATA_AGENT_PORT, default 8790.
  * Needs the built packages (npm run build).
