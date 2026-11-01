@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, RefreshCw, Plus, Loader2, Database, PlugZap, Server } from './icons/Typicons';
+import { Search, RefreshCw, Plus, Loader2, Database, PlugZap, Server, Sparkles } from './icons/Typicons';
 import {
     type MCPConfig,
     type MCPServerConfig,
@@ -329,7 +329,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
             <div className="workspace-page-body plugins-page-body scrollable-area">
                 {/* MCP */}
                 {tab === 'MCP' && (
-                    <div style={{ display: 'flex', flex: 1, flexDirection: 'column' }}>
+                    <div className="plugins-pane">
                         <div className="plugins-tab-list" role="tablist" aria-label={t('plugins.mcp')}>
                             <button
                                 type="button"
@@ -375,7 +375,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         </div>
 
                         {mcpError && (
-                            <div role="alert" aria-live="assertive" style={{ marginBottom: '16px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', fontSize: '0.85rem' }}>
+                            <div role="alert" aria-live="assertive" className="ui-alert plugins-error" data-tone="error">
                                 {mcpError}
                             </div>
                         )}
@@ -460,7 +460,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
 
                 {/* Skills */}
                 {tab === 'Skills' && (
-                    <div style={{ display: 'flex', flex: 1, flexDirection: 'column' }}>
+                    <div className="plugins-pane">
                         <div className="plugins-tab-list" role="tablist" aria-label={t('plugins.skills')}>
                             <button
                                 type="button"
@@ -483,9 +483,9 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         </div>
 
                         <div className="plugins-skills-toolbar">
-                            <div className="plugins-search-box" style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '8px 16px', display: 'flex', alignItems: 'center', width: '300px' }}>
-                                <Search size={16} color="#9ca3af" style={{ marginRight: '8px' }} />
-                                <input placeholder={t('plugins.searchSkill') || "搜索 Skill"} value={skillQuery} onChange={e => setSkillQuery(e.target.value)} aria-label={t('plugins.searchSkill') || '搜索 Skill'} style={{ border: 'none', background: 'transparent', outline: 'none', width: '100%', fontSize: '0.85rem' }} />
+                            <div className="plugins-search">
+                                <Search size={15} aria-hidden="true" />
+                                <input className="ui-input" type="search" placeholder={t('plugins.searchSkill') || "搜索 Skill"} value={skillQuery} onChange={e => setSkillQuery(e.target.value)} aria-label={t('plugins.searchSkill') || '搜索 Skill'} />
                             </div>
                             <button type="button" className="icon-reveal-btn" onClick={loadSkills} aria-label={t('plugins.refresh')}>
                                 <RefreshCw size={17} aria-hidden="true" />
@@ -494,39 +494,38 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         </div>
 
                         {skillsError ? (
-                            <div role="alert" aria-live="assertive" style={{ marginBottom: '16px', padding: '10px 12px', borderRadius: '10px', border: '1px solid #fecaca', background: '#fff1f2', color: '#b91c1c', fontSize: '0.85rem' }}>{skillsError}</div>
+                            <div role="alert" aria-live="assertive" className="ui-alert plugins-error" data-tone="error">{skillsError}</div>
                         ) : null}
                         {isLoadingSkills ? (
-                            <div role="status" style={{ textAlign: 'center', color: '#6b7280', marginTop: '64px' }}>{t('plugins.loadingSkills')}</div>
+                            <div role="status" className="plugins-status">{t('plugins.loadingSkills')}</div>
                         ) : skills.length === 0 ? (
-                            <div role="status" style={{ textAlign: 'center', color: '#6b7280', marginTop: '64px' }}>
+                            <div role="status" className="plugins-status">
                                 {t('plugins.noSkills')}
                             </div>
                         ) : filteredSkills.length === 0 ? (
-                            <div role="status" style={{ textAlign: 'center', color: '#6b7280', marginTop: '64px' }}>
+                            <div role="status" className="plugins-status">
                                 {t('plugins.noSearchResults')}
                             </div>
                         ) : (
-                            <div style={{ display: 'grid', gap: '12px' }}>
-                                {filteredSkills.map(skill => (
-                                    <div key={skill.name} style={{ border: '1px solid #e5e7eb', borderRadius: '12px', padding: '16px', background: '#fff' }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-                                            <div>
-                                                <div style={{ fontWeight: 700, color: '#1f2937' }}>{skill.name}</div>
-                                                <div style={{ fontSize: '0.9rem', color: '#6b7280', marginTop: '4px' }}>{skill.description}</div>
-                                            </div>
-                                            <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>{skill.source_scope}</div>
+                            <ul className="skill-list">
+                                {filteredSkills.map((skill, index) => (
+                                    <li key={skill.name} className="skill-card" style={{ '--i': index } as React.CSSProperties}>
+                                        <span className="ui-card-icon" aria-hidden="true"><Sparkles size={18} /></span>
+                                        <div>
+                                            <div className="skill-card-name">{skill.name}</div>
+                                            <p className="skill-card-desc">{skill.description}</p>
+                                            {skill.when_to_use && (
+                                                <p className="skill-card-meta"><span>{t('plugins.whenToUse')}：</span>{skill.when_to_use}</p>
+                                            )}
+                                            {/* The runtime's skill list carries no file location; show the row only when one is known. */}
+                                            {skill.location && (
+                                                <p className="skill-card-meta ui-mono"><span>{t('plugins.path')}：</span>{skill.location}</p>
+                                            )}
                                         </div>
-                                        {skill.when_to_use && (
-                                            <div style={{ fontSize: '0.85rem', color: '#374151', marginTop: '10px' }}>{t('plugins.whenToUse')}：{skill.when_to_use}</div>
-                                        )}
-                                        {/* The runtime's skill list carries no file location; show the row only when one is known. */}
-                                        {skill.location && (
-                                            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '10px', wordBreak: 'break-all' }}>{t('plugins.path')}：{skill.location}</div>
-                                        )}
-                                    </div>
+                                        <span className="ui-pill">{skill.source_scope}</span>
+                                    </li>
                                 ))}
-                            </div>
+                            </ul>
                         )}
                     </div>
                 )}

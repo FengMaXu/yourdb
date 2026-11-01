@@ -6,6 +6,7 @@ import {
     Paperclip,
     Plus,
     X,
+    ChevronRight,
 } from './icons/Typicons';
 import { FileIcon } from './FileIcons';
 import {
@@ -1010,22 +1011,28 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             >
                 {messages.length === 0 && (
                     <div className="chat-starter">
+                        <span className="chat-starter-caption" aria-hidden="true">-- {t('chat.starterCaption')}</span>
                         <h2 className="chat-starter-title">{t('chat.starterTitle')}</h2>
                         <p className="chat-starter-hint">{t('chat.starterHint')}</p>
                         <div className="chat-starter-grid">
-                            {STARTER_PROMPTS.map((kind) => (
+                            {STARTER_PROMPTS.map((kind, index) => (
                                 <button
                                     key={kind}
                                     type="button"
                                     className="chat-starter-card"
+                                    style={{ '--i': index } as React.CSSProperties}
                                     onClick={() => {
                                         // Examples are generic; the user adapts one to their own data before sending.
                                         setInputValue(t(`chat.starter.${kind}.prompt`));
                                         textareaRef.current?.focus();
                                     }}
                                 >
-                                    <span className="chat-starter-kind">{t(`chat.starter.${kind}.label`)}</span>
+                                    <span className="chat-starter-kind">
+                                        <span className="chat-starter-index" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                                        {t(`chat.starter.${kind}.label`)}
+                                    </span>
                                     <span className="chat-starter-prompt">{t(`chat.starter.${kind}.prompt`)}</span>
+                                    <ChevronRight size={16} className="chat-starter-arrow" aria-hidden="true" />
                                 </button>
                             ))}
                         </div>

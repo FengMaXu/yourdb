@@ -39,6 +39,21 @@ const CHAT_PANEL_MIN_WIDTH = 560;
 // Hovering the collapsed rail peeks the full sidebar, pushing the page right; short delays keep a passing pointer from flickering it.
 const SIDEBAR_PEEK_OPEN_DELAY = 80;
 const SIDEBAR_PEEK_CLOSE_DELAY = 180;
+const NARROW_QUERY = '(max-width: 720px)';
+
+/** Tracks a CSS media query, so layout defaults can follow the window. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches);
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const list = window.matchMedia(query);
+    const update = () => setMatches(list.matches);
+    update();
+    list.addEventListener('change', update);
+    return () => list.removeEventListener('change', update);
+  }, [query]);
+  return matches;
+}
 
 const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelConfigured, onRecheckModel, onModelMissing }) => {
   const { t } = useLanguage();
@@ -47,7 +62,9 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   // The sidebar follows the tool panel (closed while it is open, open otherwise).
   // A manual toggle overrides that only until the tool panel next opens or closes.
   const [sidebarOverride, setSidebarOverride] = useState<boolean | null>(null);
-  const isSidebarOpen = sidebarOverride ?? !isToolPanelOpen;
+  // On a narrow window the full sidebar would squeeze the page, so it starts as the rail.
+  const isNarrow = useMediaQuery(NARROW_QUERY);
+  const isSidebarOpen = sidebarOverride ?? (!isToolPanelOpen && !isNarrow);
   const [isSidebarPeeking, setIsSidebarPeeking] = useState(false);
   const [activeView, setActiveView] = useState<WorkspaceView>(CHAT_VIEW);
   const sidebarPeekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
