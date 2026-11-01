@@ -231,7 +231,9 @@ export interface MCPPresetField {
     required: boolean;
     placeholder?: string;
     help?: string;
-    choices?: { value: string; label: string }[];
+    /** Where the user gets the value, such as an API key page. */
+    link?: { label: string; url: string };
+    choices?: { value: string; label: string; detail?: string }[];
     defaultValue?: string[];
     /** Whether a value is saved; secret values themselves are never sent to the page. */
     configured?: boolean;

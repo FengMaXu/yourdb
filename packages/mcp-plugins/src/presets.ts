@@ -10,7 +10,9 @@ export interface McpPresetField {
   readonly required: boolean;
   readonly placeholder?: string;
   readonly help?: string;
-  readonly choices?: readonly { readonly value: string; readonly label: string }[];
+  /** Where the user gets the value, such as an API key page. */
+  readonly link?: { readonly label: string; readonly url: string };
+  readonly choices?: readonly { readonly value: string; readonly label: string; readonly detail?: string }[];
   /** Used when the user has not chosen; only for choices. */
   readonly defaultValue?: readonly string[];
 }
@@ -42,13 +44,13 @@ const list = (values: McpPresetValues, key: string, fallback: readonly string[])
 
 /** 企查查智能体数据平台 (agent.qcc.com/guide): one Streamable HTTP server per data group, Bearer API key. */
 const QCC_GROUPS = [
-  { value: "company", label: "企业信息（工商、股东、对外投资）" },
-  { value: "risk", label: "风险信息（失信、被执行、裁判文书）" },
-  { value: "operation", label: "经营信息（招投标、资质、税务）" },
-  { value: "ipr", label: "知识产权（专利、商标、著作权）" },
-  { value: "executive", label: "董监高信息" },
-  { value: "history", label: "历史工商信息（需企业实名认证）" },
-  { value: "tender", label: "招标查查·标讯" },
+  { value: "company", label: "企业信息", detail: "工商登记、股东、对外投资" },
+  { value: "risk", label: "风险信息", detail: "失信、被执行、裁判文书" },
+  { value: "operation", label: "经营信息", detail: "招投标、资质、税务" },
+  { value: "ipr", label: "知识产权", detail: "专利、商标、著作权" },
+  { value: "executive", label: "董监高", detail: "董事、监事、高管的风险与任职" },
+  { value: "history", label: "历史工商", detail: "历史登记与股东变更，需企业实名认证" },
+  { value: "tender", label: "招标标讯", detail: "招标查查的招投标公告" },
 ] as const;
 const DEFAULT_QCC_GROUPS = ["company", "risk", "operation", "ipr"];
 
@@ -57,11 +59,20 @@ export const QCC_PRESET: McpPreset = {
   title: "企查查",
   description: "查询企业工商、风险、经营与知识产权信息，用于补充数据库中的企业名单。需要企查查智能体数据平台的 API Key。",
   fields: [
-    { key: "apiKey", label: "API Key", kind: "secret", required: true, placeholder: "在 agent.qcc.com 个人中心获取", help: "企查查按调用计费，费用由该 Key 所属账户承担。" },
+    {
+      key: "apiKey",
+      label: "API Key",
+      kind: "secret",
+      required: true,
+      placeholder: "Bearer 开头的 API Key，原样粘贴即可",
+      help: "在 agent.qcc.com 注册登录后，于个人中心复制 API Key，带不带 Bearer 前缀都可以。按调用计费，费用由该 Key 所属账户承担。",
+      link: { label: "获取 API Key", url: "https://agent.qcc.com/profile/api-key" },
+    },
     { key: "groups", label: "数据分组", kind: "choices", required: true, choices: QCC_GROUPS, defaultValue: DEFAULT_QCC_GROUPS },
   ],
   connections(values) {
-    const apiKey = text(values, "apiKey");
+    // The platform shows the key as a header value: users paste it whole, prefix included, and it is sent once.
+    const apiKey = text(values, "apiKey").replace(/^bearer\s+/i, "");
     const known = new Set<string>(QCC_GROUPS.map((group) => group.value));
     return list(values, "groups", DEFAULT_QCC_GROUPS).filter((group) => known.has(group)).map((group) => ({
       id: `qcc_${group}`,

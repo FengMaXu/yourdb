@@ -306,7 +306,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           {activeView.kind !== 'chat' && (
             <div className="workspace-page-shell">
               {activeView.kind === 'plugins'
-                ? <PluginsPanel tab={activeView.tab} />
+                ? <PluginsPanel tab={activeView.tab} onOpenDatabaseSettings={() => setActiveView({ kind: 'settings', section: 'database' })} />
                 : <SettingsPanel section={activeView.section} />}
             </div>
           )}

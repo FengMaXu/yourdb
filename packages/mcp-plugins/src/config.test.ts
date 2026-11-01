@@ -8,6 +8,8 @@ describe("MCP plugin configuration", () => {
       { id: "qcc_company", transport: "streamable-http", url: "https://agent.qcc.com/mcp/company/stream", headers: { Authorization: "Bearer k" } },
       { id: "qcc_risk", transport: "streamable-http", url: "https://agent.qcc.com/mcp/risk/stream", headers: { Authorization: "Bearer k" } },
     ]);
+    // A key pasted with its "Bearer " prefix is sent once.
+    expect(QCC_PRESET.connections({ apiKey: " Bearer k ", groups: ["company"] })).toMatchObject([{ headers: { Authorization: "Bearer k" } }]);
     // Without a choice, the four everyday groups.
     expect(QCC_PRESET.connections({ apiKey: "k" }).map((spec) => spec.id)).toEqual(["qcc_company", "qcc_risk", "qcc_operation", "qcc_ipr"]);
   });
