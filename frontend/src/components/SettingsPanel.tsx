@@ -5,8 +5,8 @@ import ChannelsSettings from './ChannelsSettings';
 import {
     Settings as SettingsIcon,
     User, Link, Eye, ExternalLink, Loader2, Terminal, Database
-} from './icons/Typicons';
-import { RiCloud, RiKey2, RiUsb } from './icons/RemixIcons';
+} from 'lucide-react';
+import { Cloud, KeyRound, Usb } from 'lucide-react';
 import {
     type AIConfig,
     type DatabaseDriver,
@@ -586,14 +586,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                             <div className={cn(UI.grid2, 'max-[720px]:gap-4')}>
                                 <div className={UI.field}>
                                     <label className={UI.label} htmlFor="settings-db-host">
-                                        <RiCloud size={15} aria-hidden="true" />
+                                        <Cloud size={15} aria-hidden="true" />
                                         <span>{t('settings.dbHost')}</span>
                                     </label>
                                     <input id="settings-db-host" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} placeholder="localhost" value={dbHost} onChange={e => setDbHost(e.target.value)} />
                                 </div>
                                 <div className={UI.field}>
                                     <label className={UI.label} htmlFor="settings-db-port">
-                                        <RiUsb size={15} aria-hidden="true" />
+                                        <Usb size={15} aria-hidden="true" />
                                         <span>{t('settings.dbPort')}</span>
                                     </label>
                                     <input id="settings-db-port" className={cn(UI.input, UI.mono)} type="number" placeholder={String(DB_DRIVER_DEFAULTS[dbDriver].port)} value={dbPort} onChange={e => setDbPort(parseInt(e.target.value) || DB_DRIVER_DEFAULTS[dbDriver].port)} />
@@ -610,7 +610,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                 </div>
                                 <div className={UI.field}>
                                     <label className={UI.label} htmlFor="settings-db-password">
-                                        <RiKey2 size={15} aria-hidden="true" />
+                                        <KeyRound size={15} aria-hidden="true" />
                                         <span>{t('settings.dbPassword')}</span>
                                     </label>
                                     <input id="settings-db-password" className={cn(UI.input, UI.mono)} type="password" placeholder="••••••••" value={dbPassword} onChange={e => setDbPassword(e.target.value)} />

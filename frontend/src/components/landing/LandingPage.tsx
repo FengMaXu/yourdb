@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 // The landing page's own faces, self-hosted (fontsource): Google Fonts is often unreachable from mainland China.
 import '@fontsource-variable/inter/opsz.css';
 import '@fontsource-variable/noto-serif-sc';
-import { ArrowRight, Download, Languages, X } from '../icons/Typicons';
+import { ArrowRight, Download, Languages, X } from 'lucide-react';
 import { BrandMark, BrandWordmark } from '../Brand';
 import { SkipLink } from '../SkipLink';
 import { useLanguage } from '../../context/LanguageContext';

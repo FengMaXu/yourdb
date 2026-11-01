@@ -1,34 +1,75 @@
 /*
- * The part of Tailwind's Preflight that shadcn/ui components assume, applied only to them
- * (every one carries data-slot) until phase 4 brings in Preflight for the whole app:
- * no native border, and a border utility draws in the theme's border colour, not currentColor.
+ * Global base styles, after Tailwind's Preflight in the base layer: the page itself, focus
+ * rings, and where yourdb keeps a different default from Preflight's.
  */
-[data-slot],
-[data-slot] *,
-[data-slot]::before,
-[data-slot]::after,
-[data-slot] *::before,
-[data-slot] *::after {
-  border: 0 solid var(--border);
+
+/* Borders draw in the theme's hairline unless a utility says otherwise (as shadcn/ui expects). */
+*,
+::before,
+::after,
+::backdrop,
+::file-selector-button {
+  border-color: var(--border);
 }
 
-/* Row borders (border-b on <tr>) only draw on a collapsed table. */
-table[data-slot] {
-  border-collapse: collapse;
+/* The app has always set text at the browser's normal line height; Preflight's 1.5 would loosen every line. */
+html,
+:host {
+  line-height: normal;
 }
 
-/* Form controls inside shadcn components: inherit type and colour, no native background (Preflight). */
-:is(button, input, select, textarea):is([data-slot], [data-slot] *) {
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  background-color: transparent;
-  border-radius: 0;
+body {
+  height: 100dvh;
+  min-height: 100%;
+  overflow: hidden;
+  background: var(--frame-backdrop);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* A rule inside a shadcn component draws as Preflight draws it: a 1px top border. */
-[data-slot] hr {
-  height: 0;
-  color: inherit;
-  border-top-width: 1px;
+@media (max-width: 720px) {
+  body {
+    overflow: auto;
+  }
+}
+
+#root {
+  height: 100%;
+}
+
+:is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--accent-strong);
+  outline-offset: 2px;
+}
+
+/* Reduced motion: no smooth scrolling anywhere. */
+@media (prefers-reduced-motion: reduce) {
+  html,
+  * {
+    scroll-behavior: auto;
+  }
+}
+
+/*
+ * Brand artwork (components/Brand.tsx): sized by height, sitting on the text baseline. Kept in
+ * the base layer, not as utilities, so a page that resizes it (the landing page, a [&_.brand-wordmark]
+ * utility) wins.
+ */
+.brand-wordmark {
+  display: inline-block;
+  flex-shrink: 0;
+  width: auto;
+  height: 0.95em;
+  aspect-ratio: 2300 / 674;
+  vertical-align: -0.23em;
+}
+
+.brand-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  width: auto;
+  height: 1em;
+  aspect-ratio: 1;
 }

@@ -45,6 +45,50 @@
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2378716c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
 }
 
+/* App tokens beyond shadcn's: surfaces, text, motion, layout sizes, the sidebar tree. */
+:root {
+  --status-error: #dc2626;
+  --bubble-bg: #f5f5f4;
+  --bubble-radius: 10px;
+  --frame-backdrop: #ebeae7;
+  --frame-surface: #ffffff;
+  --frame-rail: #fafaf9;
+  --hairline: var(--border);
+  --font-code: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
+  --font-mono: var(--font-code);
+  --sidebar-width: 184px;
+  --sidebar-rail-width: 64px;
+  --thread-line: rgba(120, 53, 15, 0.14);
+  --thread-muted: #a8a29e;
+  --surface-bg: #ffffff;
+  --tool-panel-width: 410px;
+  --text-primary: #1f2937;
+  --text-secondary: #4b5563;
+  --text-tertiary: #6b7280;
+  --text-placeholder: #6b7280;
+  --accent-strong: var(--brand);
+  --font-size-caption: 0.75rem;
+  --font-size-body-sm: 0.875rem;
+  --accent-color: #f04438;
+  --border-light: #e5e7eb;
+  --border-medium: #d1d5db;
+
+  --shadow-ring: 0 0 0 4px rgba(240, 68, 56, 0.12);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --agent-detail-font-size: 0.86rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --tree-indent: 16px;
+  --tree-inset: 12px;
+  --tree-row-bg: var(--frame-rail);
+  --tree-row-hover: #f2f1ef;
+  --tree-row-active: #ecebe8;
+  --tree-guide: #d6d3ce;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

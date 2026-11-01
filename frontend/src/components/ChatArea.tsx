@@ -8,7 +8,7 @@ import {
     Plus,
     X,
     ChevronRight,
-} from './icons/Typicons';
+} from 'lucide-react';
 import { FileIcon } from './FileIcons';
 import {
     uploadWorkspaceFile,
@@ -26,7 +26,7 @@ import type { ToolData } from './ToolPanel';
 import { useSession, type Session, type Task } from '../hooks/useSession';
 import { useLanguage } from '../context/LanguageContext';
 import AgentOrbitIcon from './AgentOrbitIcon';
-import { RiInfoCard } from './icons/RemixIcons';
+import { IdCard } from 'lucide-react';
 import { isAgentMessageEmpty } from '../utils/agent-message';
 import { groupIntoTurns } from '../utils/agent-turns';
 import AgentTurn from './AgentTurn';
@@ -1001,7 +1001,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         disabled={!hasTools && !isToolPanelOpen}
                         aria-label={isToolPanelOpen ? t('chat.closeDetails') : t('chat.openDetails')}
                     >
-                        <RiInfoCard size={17} aria-hidden="true" />
+                        <IdCard size={17} aria-hidden="true" />
                         <span className="inline-block max-w-0 overflow-hidden text-[0.82rem] whitespace-nowrap opacity-0 transition-[max-width,opacity,margin] group-focus-visible/details:ml-1.5 group-focus-visible/details:max-w-[8em] group-focus-visible/details:opacity-100 group-enabled/details:group-hover/details:ml-1.5 group-enabled/details:group-hover/details:max-w-[8em] group-enabled/details:group-hover/details:opacity-100 motion-reduce:transition-none max-[720px]:hidden" aria-hidden="true">{t('chat.details')}</span>
                     </button>
                 </div>

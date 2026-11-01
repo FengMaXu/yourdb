@@ -5,7 +5,7 @@ import {
     Image,
     FileText,
     File as BaseFileIcon,
-} from './icons/Typicons';
+} from 'lucide-react';
 
 interface FileIconProps {
     filename: string;
