@@ -95,6 +95,8 @@
   --animate-dot-pulse: dot-pulse 2.4s var(--ease-out) infinite;
   --animate-ring-pulse: ring-pulse 2.4s var(--ease-out) infinite;
   --animate-pop: pop 260ms var(--ease-out);
+  --animate-node-pulse: node-pulse 1.6s var(--ease-out) infinite;
+  --animate-dot-breathe: dot-breathe 1.2s ease-in-out infinite;
 
   @keyframes rise {
     from {
@@ -140,6 +142,17 @@
   @keyframes pop {
     0% { transform: scale(0.6); }
     60% { transform: scale(1.12); }
+  }
+
+  /* A running step's node on the tool thread: a ring spreads past the surface gap and fades. */
+  @keyframes node-pulse {
+    0% { box-shadow: 0 0 0 3px var(--frame-surface), 0 0 0 3px rgba(194, 65, 12, 0.32); }
+    100% { box-shadow: 0 0 0 3px var(--frame-surface), 0 0 0 9px rgba(194, 65, 12, 0); }
+  }
+
+  @keyframes dot-breathe {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
   }
 
   @keyframes blink {

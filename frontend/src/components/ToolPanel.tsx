@@ -1,16 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import {
-    X,
-    ChevronUp,
-    ChevronDown,
-    Hammer,
-    Code,
-    Copy,
-    Check,
-    FileCode,
-    Database,
-    Terminal,
-} from './icons/Typicons';
+import { Check, ChevronDown, ChevronUp, Code, Copy, Database, FileCode, Hammer, Terminal, X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import type { WidgetSpec } from '../api/client';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -54,27 +44,33 @@ const useCopy = () => {
 
 const getToolIcon = (name: string) => {
     const n = name.toLowerCase();
-    if (n.includes('sql') || n.includes('query') || n.includes('database') || n.includes('mysql')) return <Database size={14} />;
-    if (n.includes('code') || n.includes('execute') || n.includes('python') || n.includes('script')) return <Terminal size={14} />;
-    if (n.includes('file') || n.includes('read') || n.includes('write')) return <FileCode size={14} />;
-    return <Hammer size={14} />;
+    if (n.includes('sql') || n.includes('query') || n.includes('database') || n.includes('mysql')) return <Database className="size-3.5" />;
+    if (n.includes('code') || n.includes('execute') || n.includes('python') || n.includes('script')) return <Terminal className="size-3.5" />;
+    if (n.includes('file') || n.includes('read') || n.includes('write')) return <FileCode className="size-3.5" />;
+    return <Hammer className="size-3.5" />;
 };
+
+/** Monospace text on the section's soft surface: JSON, plain results, unparsed arguments. */
+const MONO = 'm-0 px-3 py-2.5 font-[family-name:var(--font-code)] text-[0.72rem] leading-[1.65] break-words whitespace-pre-wrap text-[#292524]';
+/** A small square icon action in the panel (close, copy). */
+const ICON_ACTION = 'flex items-center justify-center rounded-md border-0 bg-transparent transition-[background-color,color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]';
 
 const JsonHighlight: React.FC<{ data: any }> = ({ data }) => {
     const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
-    return <pre className="json-highlight">{jsonStr}</pre>;
+    return <pre className={MONO}>{jsonStr}</pre>;
 };
 
+/** Code with line numbers on a dark ground. */
 const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
     const lines = code.split('\n');
     return (
-        <div className="code-highlight">
-            <table className="code-table">
+        <div className="overflow-x-auto rounded-b-lg bg-[#1e1e2e] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-white/20">
+            <table className="w-full border-collapse font-[family-name:var(--font-code)] text-[0.72rem] leading-[1.6]">
                 <tbody>
                     {lines.map((line, i) => (
                         <tr key={i}>
-                            <td className="line-number">{i + 1}</td>
-                            <td className="line-content">{line || ' '}</td>
+                            <td className="w-10 min-w-10 bg-black/10 pr-2.5 pl-3 text-right align-top text-[#6b7280] select-none">{i + 1}</td>
+                            <td className="px-3.5 whitespace-pre text-[#d4d4d8]">{line || ' '}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -87,7 +83,7 @@ const ArgsRenderer: React.FC<{ args: any }> = ({ args }) => {
     const argsObj = typeof args === 'string' ? (() => { try { return JSON.parse(args); } catch { return null; } })() : args;
 
     if (!argsObj || typeof argsObj !== 'object') {
-        return <pre className="formatted-text">{typeof args === 'string' ? args : JSON.stringify(args, null, 2)}</pre>;
+        return <pre className={MONO}>{typeof args === 'string' ? args : JSON.stringify(args, null, 2)}</pre>;
     }
 
     const { code, query, sql, ...rest } = argsObj;
@@ -95,13 +91,13 @@ const ArgsRenderer: React.FC<{ args: any }> = ({ args }) => {
     const hasOtherFields = Object.keys(rest).length > 0;
 
     return (
-        <div className="args-formatted">
+        <div className="text-[0.74rem]">
             {hasOtherFields && (
-                <div className="args-fields">
+                <div className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3.5 gap-y-1.5 px-3 py-2.5">
                     {Object.entries(rest).map(([key, value]) => (
-                        <div className="arg-field" key={key}>
-                            <span className="arg-label">{key}</span>
-                            <span className="arg-value">
+                        <div className="contents" key={key}>
+                            <span className="min-w-0 text-[0.72rem] font-medium wrap-anywhere text-[#b45309]">{key}</span>
+                            <span className="min-w-0 font-[family-name:var(--font-code)] text-[0.72rem] wrap-anywhere text-[var(--text-primary)]">
                                 {typeof value === 'string' ? value : JSON.stringify(value)}
                             </span>
                         </div>
@@ -109,9 +105,9 @@ const ArgsRenderer: React.FC<{ args: any }> = ({ args }) => {
                 </div>
             )}
             {codeContent && (
-                <div className="args-code-section">
-                    <div className="args-code-label">
-                        <Code size={12} />
+                <div className="border-t border-[var(--thread-line)]">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 font-[family-name:var(--font-code)] text-[0.64rem] font-medium tracking-[0.08em] text-[var(--thread-muted)] uppercase">
+                        <Code className="size-3" />
                         <span>{code ? 'Code' : query ? 'Query' : 'SQL'}</span>
                     </div>
                     <CodeBlock code={String(codeContent)} />
@@ -125,7 +121,12 @@ const ArgsRenderer: React.FC<{ args: any }> = ({ args }) => {
 const ResultRenderer: React.FC<{ result?: string }> = ({ result }) => {
     const { t } = useLanguage();
     if (!result) {
-        return <span className="result-pending">{t('tools.processing')}</span>;
+        return (
+            <span className="flex items-center gap-2 p-3 font-[family-name:var(--font-code)] text-[0.72rem] text-[var(--text-tertiary)]">
+                <span className="size-2 flex-none animate-dot-breathe rounded-full bg-[#3b82f6] motion-reduce:animate-none" aria-hidden="true" />
+                {t('tools.processing')}
+            </span>
+        );
     }
 
     const trimmed = result.trim();
@@ -139,7 +140,7 @@ const ResultRenderer: React.FC<{ result?: string }> = ({ result }) => {
         if (parsed !== null) return <JsonHighlight data={parsed} />;
     }
 
-    return <pre className="formatted-text">{result}</pre>;
+    return <pre className={MONO}>{result}</pre>;
 };
 
 type ThreadSectionProps = {
@@ -155,16 +156,22 @@ type ThreadSectionProps = {
 const ThreadSection: React.FC<ThreadSectionProps> = ({ label, copyText, copyKey, copiedKey, onCopy, scroll, children }) => {
     const { t } = useLanguage();
     return (
-        <section className="thread-section">
-            <div className="thread-section-label">
+        <section>
+            <div className="mb-1 flex min-h-6 items-center gap-1.5 text-[0.64rem] font-medium tracking-[0.08em] text-[var(--thread-muted)] uppercase">
                 <span>{label}</span>
                 {copyText && (
-                    <button type="button" className="copy-btn" onClick={() => onCopy(copyText, copyKey)} title={t('tools.copy')} aria-label={t('tools.copy')}>
-                        {copiedKey === copyKey ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+                    <button
+                        type="button"
+                        className={cn(ICON_ACTION, 'ml-auto min-h-6 min-w-6 rounded-[4px] p-1 text-[var(--text-tertiary)] hover:bg-[rgba(120,53,15,0.08)] hover:text-[#111827]')}
+                        onClick={() => onCopy(copyText, copyKey)}
+                        title={t('tools.copy')}
+                        aria-label={t('tools.copy')}
+                    >
+                        {copiedKey === copyKey ? <Check className="size-3" color="#10b981" /> : <Copy className="size-3" />}
                     </button>
                 )}
             </div>
-            <div className={`thread-section-body ${scroll ? 'is-scroll' : ''}`}>{children}</div>
+            <div className={cn('overflow-hidden rounded-lg bg-[var(--bubble-bg)]', scroll && 'max-h-[360px] overflow-auto')}>{children}</div>
         </section>
     );
 };
@@ -187,26 +194,34 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ tool, index, open, onToggle, co
     const statusLabel = tool.status === 'error' ? t('tools.statusError') : tool.status === 'done' ? t('tools.statusDone') : t('tools.statusRunning');
 
     return (
-        <li className={`thread-item is-${tone} ${open ? 'is-open' : ''}`}>
-            <span className="thread-node" aria-hidden="true" />
+        // The thread line runs down the left; it starts at the first node and stops at the last.
+        <li className="relative pl-6 before:absolute before:top-0 before:bottom-0 before:left-1.5 before:w-px before:bg-[var(--thread-line)] first:before:top-[19px] last:before:bottom-[calc(100%-19px)]">
+            <span
+                className={cn(
+                    'absolute top-[15px] left-0.5 size-[9px] rounded-full bg-[#57534e] shadow-[0_0_0_3px_var(--frame-surface)]',
+                    tone === 'running' && 'animate-node-pulse border-[1.5px] border-[var(--accent-strong)] bg-white motion-reduce:animate-none',
+                    tone === 'error' && 'bg-[var(--status-error)]',
+                )}
+                aria-hidden="true"
+            />
             <button
                 type="button"
-                className="thread-head"
+                className="group/head flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent py-[9px] pr-1 pl-0 text-left font-[family-name:var(--font-code)] text-[0.78rem] text-[var(--text-primary)] select-none focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]"
                 aria-expanded={open}
                 aria-controls={contentId}
                 onClick={onToggle}
             >
-                <span className="thread-index">{String(index + 1).padStart(2, '0')}</span>
-                <span className="thread-icon" aria-hidden="true">{getToolIcon(tool.name)}</span>
-                <span className="thread-name" title={tool.name}>{tool.name}</span>
-                <span className={`thread-status is-${tone}`}>{statusLabel}</span>
-                <span className="thread-chevron" aria-hidden="true">
-                    {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                <span className="flex-none text-[0.7rem] text-[var(--thread-muted)] tabular-nums">{String(index + 1).padStart(2, '0')}</span>
+                <span className="inline-flex flex-none text-[var(--text-tertiary)]" aria-hidden="true">{getToolIcon(tool.name)}</span>
+                <span className="min-w-0 flex-auto truncate font-medium transition-colors pointer-fine:group-hover/head:text-[var(--accent-strong)]" title={tool.name}>{tool.name}</span>
+                <span className={cn('flex-none text-[0.68rem]', tone === 'running' ? 'text-[var(--accent-strong)]' : tone === 'error' ? 'text-[var(--status-error)]' : 'text-[var(--thread-muted)]')}>{statusLabel}</span>
+                <span className="inline-flex flex-none text-[var(--thread-muted)] pointer-fine:group-hover/head:text-[var(--text-secondary)]" aria-hidden="true">
+                    {open ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
                 </span>
             </button>
 
             {open && (
-                <div id={contentId} className="thread-body">
+                <div id={contentId} className="flex flex-col gap-3 pt-0.5 pb-4">
                     {tool.args && (
                         <ThreadSection label={t('tools.args')} copyText={argsText} copyKey={`args-${tool.toolCallId}`} copiedKey={copiedKey} onCopy={onCopy}>
                             <ArgsRenderer args={tool.args} />
@@ -251,25 +266,31 @@ const ToolPanel: React.FC<ToolPanelProps> = ({ tools = [], onClose }) => {
     }, [tools.length]);
 
     return (
-        <aside className="tool-panel">
-            <div className="tool-panel-header">
-                <div className="tool-panel-header-main">
-                    <span className="tool-panel-title">{t('tools.details')}</span>
-                    <span className="tool-panel-count">{tools.length}</span>
+        // Beside the chat on a wide window; over it, from the right, below 1100px; full width below 720px.
+        <aside
+            className={cn(
+                'relative m-0 flex max-w-none min-w-[300px] flex-auto flex-col overflow-hidden border-0 border-l border-[var(--hairline)] bg-[var(--frame-surface)]',
+                'max-[1100px]:absolute max-[1100px]:inset-y-0 max-[1100px]:right-0 max-[1100px]:z-20 max-[1100px]:w-[min(var(--tool-panel-width),calc(100%-12px))] max-[1100px]:min-w-0 max-[1100px]:shadow-[-18px_0_34px_-28px_rgba(17,24,39,0.64)] max-[720px]:w-full',
+            )}
+        >
+            <div className="box-border flex h-14 min-h-14 items-center justify-between border-b border-[var(--hairline)] bg-[var(--frame-surface)] pr-3.5 pl-[22px]">
+                <div className="flex items-center gap-2.5">
+                    <span className="text-[0.94rem] font-bold tracking-[-0.01em] text-[#1f2937]">{t('tools.details')}</span>
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[rgba(120,53,15,0.08)] px-2 font-[family-name:var(--font-code)] text-[0.76rem] font-medium text-[#7c6b5e]">{tools.length}</span>
                 </div>
-                <button type="button" className="close-btn" onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
-                    <X size={16} aria-hidden="true" />
+                <button type="button" className={cn(ICON_ACTION, 'size-8 min-h-8 min-w-8 p-0 text-[#78716c] hover:text-[#1f2937]')} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
+                    <X className="size-4" aria-hidden="true" />
                 </button>
             </div>
 
-            <div ref={contentRef} className="tool-panel-content scrollable-area">
+            <div ref={contentRef} className="scrollable-area flex-1 pt-3.5 pr-3.5 pb-7 pl-4">
                 {tools.length === 0 ? (
-                    <div className="tool-panel-empty">
-                        <strong>{t('tools.noCalls')}</strong>
+                    <div className="flex flex-col gap-1.5 px-3 py-6 text-center text-[length:var(--font-size-caption)] leading-[1.45] text-[var(--text-secondary)]">
+                        <strong className="text-[length:var(--font-size-body-sm)] text-[var(--text-primary)]">{t('tools.noCalls')}</strong>
                         <span>{t('tools.noCallsHint')}</span>
                     </div>
                 ) : (
-                    <ol className="tool-thread">
+                    <ol className="m-0 list-none p-0 font-[family-name:var(--font-code)]">
                         {tools.map((tool, index) => {
                             const open = openOverrides[tool.toolCallId] ?? (tool.toolCallId === lastToolId || tool.status === 'error');
                             return (
