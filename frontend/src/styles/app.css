@@ -18,7 +18,6 @@
 @import "./ui.css" layer(legacy);
 @import "./workspace.css" layer(legacy);
 @import "./chat-trace.css" layer(legacy);
-@import "../components/plugins/mcp-settings.css" layer(legacy);
 
 /* Generate utilities only for class names in src, not for words in docs and the rest of the repo. */
 @import "tailwindcss/utilities.css" layer(utilities) source(none);

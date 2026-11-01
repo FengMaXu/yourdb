@@ -16,3 +16,12 @@
 table[data-slot] {
   border-collapse: collapse;
 }
+
+/* Form controls inside shadcn components: inherit type and colour, no native background (Preflight). */
+:is(button, input, select, textarea):is([data-slot], [data-slot] *) {
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  background-color: transparent;
+  border-radius: 0;
+}
