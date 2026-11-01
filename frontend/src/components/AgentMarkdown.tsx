@@ -6,6 +6,7 @@
  * active session so generated report images render as compact preview triggers in chat.
  */
 
+import { FILE_ACTION_BUTTON, FILE_ACTIONS } from './file-actions';
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -92,20 +93,20 @@ function renderFileActions(
     };
 
     return (
-        <span className="agent-file-action-row">
+        <span className="mt-1 inline-flex max-w-full flex-wrap items-center gap-2 align-top">
             <a
                 href={resolved}
                 download={title}
-                className="agent-file-label agent-file-label-link"
+                className="max-w-[min(100%,560px)] min-w-0 truncate font-semibold text-[#2563eb] underline decoration-[#bfdbfe] underline-offset-2 hover:text-[#1d4ed8] hover:decoration-current focus-visible:text-[#1d4ed8] focus-visible:decoration-current focus-visible:outline-none"
                 {...linkProps}
             >
                 {children}
             </a>
-            <span className="agent-file-actions">
+            <span className={FILE_ACTIONS}>
                 {canPreview && openPreview && previewUrl && (
                     <button
                         type="button"
-                        className="agent-file-action-btn"
+                        className={FILE_ACTION_BUTTON}
                         onClick={(event) => {
                             event.preventDefault();
                             openPreview(previewUrl, title, fileType);
@@ -118,7 +119,7 @@ function renderFileActions(
                 )}
                 <button
                     type="button"
-                    className="agent-file-action-btn"
+                    className={FILE_ACTION_BUTTON}
                     onClick={triggerDownload}
                     title={downloadLabel}
                     aria-label={downloadLabel}
@@ -142,13 +143,13 @@ export const createMarkdownComponents = (
         const image = <img src={resolvedSrc} alt={alt || title} loading="lazy" {...props} />;
 
         if (!openPreview || !resolvedSrc) {
-            return <span className="agent-inline-image-frame">{image}</span>;
+            return <span className="relative my-2.5 inline-flex max-h-80 max-w-[min(100%,720px)] overflow-hidden align-top [&_img]:block [&_img]:h-auto [&_img]:max-h-80 [&_img]:w-auto [&_img]:max-w-full [&_img]:object-contain">{image}</span>;
         }
 
         return (
             <button
                 type="button"
-                className="agent-inline-image-trigger"
+                className="group/image relative my-2.5 inline-flex max-h-80 max-w-[min(100%,720px)] cursor-zoom-in overflow-hidden rounded-lg border border-[#dbe3ec] bg-[#f8fafc] p-0 text-left align-top [font:inherit] transition-[border-color,box-shadow] hover:border-[#94a3b8] hover:shadow-[0_8px_22px_-18px_rgba(15,23,42,0.85)] focus-visible:border-[#94a3b8] focus-visible:shadow-[0_8px_22px_-18px_rgba(15,23,42,0.85)] focus-visible:outline-none [&_img]:block [&_img]:h-auto [&_img]:max-h-80 [&_img]:w-auto [&_img]:max-w-full [&_img]:object-contain"
                 onClick={(event) => {
                     event.stopPropagation();
                     openPreview(resolvedSrc, title, fileType);
@@ -157,7 +158,7 @@ export const createMarkdownComponents = (
                 title={title}
             >
                 {image}
-                <span className="agent-inline-image-action" aria-hidden="true">
+                <span className="absolute right-2 bottom-2 inline-flex size-[30px] translate-y-[3px] items-center justify-center rounded-full bg-[rgba(15,23,42,0.78)] text-white opacity-0 transition-[opacity,transform] group-hover/image:translate-y-0 group-hover/image:opacity-100 group-focus-visible/image:translate-y-0 group-focus-visible/image:opacity-100" aria-hidden="true">
                     <Eye size={16} strokeWidth={2} />
                 </span>
             </button>
