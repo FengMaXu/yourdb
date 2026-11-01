@@ -113,10 +113,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const knowledgeImportInputRef = useRef<HTMLInputElement>(null);
 
 
-    // Successes fade on their own; an error stays until it is dismissed.
+    // Successes fade on their own; an error stays until it is dismissed. Each kind has one toast,
+    // which a newer one replaces, as the sidebar's own toast did.
     const showToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
-        if (type === 'error') notify.error(text, { duration: Infinity, closeButton: true });
-        else notify.success(text, { duration: 3000 });
+        if (type === 'error') notify.error(text, { id: 'sidebar-error', duration: Infinity, closeButton: true });
+        else notify.success(text, { id: 'sidebar-notice', duration: 3000 });
     }, []);
 
     const loadKnowledgeFiles = useCallback(async () => {
@@ -147,19 +148,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         if (knowledgeExpanded) void loadKnowledgeFiles();
     }, [knowledgeExpanded, loadKnowledgeFiles]);
 
-    useEffect(() => {
-        if (!editorOpen) return;
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                setEditorOpen(false);
-                setSelectedFile(null);
-                setFileContent('');
-                setIsEditing(false);
-            }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [editorOpen]);
 
     const toggleExclusiveSection = (section: 'tasks' | 'knowledge' | 'plugins') => {
         // From the icon rail, a section icon expands the sidebar straight into that section.
@@ -255,8 +243,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         }
     };
 
+    // Closing keeps the file on screen until the dialog's exit animation ends; resetEditor then clears it.
     const closeEditor = () => {
         setEditorOpen(false);
+    };
+
+    const resetEditor = () => {
         setSelectedFile(null);
         setFileContent('');
         setIsEditing(false);
@@ -560,7 +552,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
 
             </nav>
 
-            <Dialog open={editorOpen && selectedFile !== null} onOpenChange={(open) => { if (!open) closeEditor(); }}>
+            <Dialog
+                open={editorOpen && selectedFile !== null}
+                onOpenChange={(open) => { if (!open) closeEditor(); }}
+                onOpenChangeComplete={(open) => { if (!open) resetEditor(); }}
+            >
                 {selectedFile && (
                     <DialogContent
                         showCloseButton={false}

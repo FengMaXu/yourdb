@@ -40,8 +40,6 @@ const TRANSPORTS: Array<{ value: MCPServerConfig['transport']; labelKey: string;
 ];
 
 const BRAND_FOCUS = 'focus-visible:outline-2 focus-visible:outline-brand';
-/** A bare <button>: no native border or fill (there is no Preflight until phase 4). */
-const PLAIN = 'border-0 bg-transparent';
 const FIELD = 'm-0 flex min-w-0 flex-col gap-2 border-0 p-0';
 const FIELD_HEAD = 'flex w-full flex-wrap items-center gap-x-2 gap-y-1 p-0 text-[0.85rem] font-semibold text-foreground';
 const HELP = 'm-0 text-[0.78rem] leading-relaxed text-muted-foreground';
@@ -77,7 +75,7 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
                     <span>{t('plugins.listTitle')}</span>
                     <button
                         type="button"
-                        className={cn(PLAIN, 'inline-grid size-[26px] place-items-center rounded-[7px] text-muted-foreground transition-[background-color,color,transform] hover:bg-[#efeeec] hover:text-foreground active:scale-[0.92] focus-visible:outline-offset-1', BRAND_FOCUS)}
+                        className={cn('inline-grid size-[26px] place-items-center rounded-[7px] text-muted-foreground transition-[background-color,color,transform] hover:bg-[#efeeec] hover:text-foreground active:scale-[0.92] focus-visible:outline-offset-1', BRAND_FOCUS)}
                         onClick={onAdd}
                         aria-label={t('plugins.add')}
                         title={t('plugins.add')}
@@ -94,7 +92,6 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
                                 <button
                                     type="button"
                                     className={cn(
-                                        PLAIN,
                                         'relative flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-[9px] text-left transition-[background-color,box-shadow] hover:bg-[#f2f1ef] focus-visible:outline-offset-1',
                                         'aria-[current=true]:bg-white aria-[current=true]:shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)]',
                                         BRAND_FOCUS,
@@ -304,7 +301,6 @@ const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: Mc
                                 role="radio"
                                 aria-checked={server.transport === option.value || (option.value === 'http' && server.transport === 'streamable-http')}
                                 className={cn(
-                                    PLAIN,
                                     'grid gap-0.5 rounded-[9px] p-2 text-center transition-[background-color,box-shadow] focus-visible:outline-offset-1',
                                     'not-aria-checked:hover:bg-white/55 aria-checked:bg-white aria-checked:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_0_0_1px_var(--border)]',
                                     BRAND_FOCUS,
