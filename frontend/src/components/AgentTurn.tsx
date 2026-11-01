@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AGENT_BODY, AGENT_ICON_SVG, AGENT_ROW, MESSAGE_COLUMN, agentIcon } from './chat-styles';
 import { MARKDOWN_ANSWER, MARKDOWN_DOCUMENT } from './markdown-styles';
 import type { WidgetSpec } from '../api/client';
 import { useLanguage } from '../context/LanguageContext';
@@ -134,11 +135,11 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
     };
 
     return (
-        <div className="message agent agent-turn">
-            <div className={`agent-icon-red ${running ? 'is-running' : 'is-idle'}`}>
-                <AgentOrbitIcon size={32} animated={running} className="agent-message-icon" />
+        <div className={`${AGENT_ROW} agent-turn`}>
+            <div className={agentIcon(running)}>
+                <AgentOrbitIcon size={32} animated={running} className={AGENT_ICON_SVG} />
             </div>
-            <div className="message-content-wrapper">
+            <div className={MESSAGE_COLUMN}>
                 {hasProcess && (
                     <div className={`agent-trace ${running ? 'is-running' : 'is-done'} ${failed ? 'has-error' : ''}`}>
                         <button
@@ -165,7 +166,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 )}
 
                 {resultText && (
-                    <div className={`message-content agent-message-body agent-turn-result ${MARKDOWN_ANSWER}`}>
+                    <div className={`${AGENT_BODY} agent-turn-result ${MARKDOWN_ANSWER}`}>
                         <AgentMarkdown currentSessionId={currentSessionId}>{resultText}</AgentMarkdown>
                     </div>
                 )}
