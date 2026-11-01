@@ -77,57 +77,6 @@ body {
   background: var(--border-medium);
 }
 
-/* Chinese reads better with more air between lines than Latin text does. */
-
-.agent-thinking-line {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--text-secondary);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-.agent-hint-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-tertiary);
-  font-family: inherit;
-  font-size: var(--agent-detail-font-size);
-  line-height: 1.58;
-  background: transparent;
-  border: none;
-  padding: 0;
-  text-align: left;
-}
-
-.agent-hint-line.is-error {
-  color: #b91c1c;
-}
-
-.agent-hint-subline {
-  padding-left: 13px;
-  min-width: 0;
-}
-
-.agent-hint-subline-text {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: pre;
-}
-
-.agent-hint-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 999px;
-  background: currentColor;
-  opacity: 0.6;
-  flex-shrink: 0;
-}
-
 /* ──────── Tool Panel: Formatted Views ──────── */
 
 @keyframes pulse-badge {
@@ -222,16 +171,6 @@ body {
 
 body {
   background: var(--frame-backdrop);
-}
-
-/* Detail pass: shared error red, gray rounded blocks, active section in the toolbar accent */
-
-.agent-hint-line.is-error {
-  color: var(--status-error);
-}
-
-.agent-hint-line.is-error .agent-hint-dot {
-  opacity: 1;
 }
 
 /* ──────── Sidebar trees: one row style for tasks, knowledge and plugins ──────── */
