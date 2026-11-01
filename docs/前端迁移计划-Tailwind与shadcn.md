@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: done
 ---
 
 # 前端样式体系迁移计划：手写全局 CSS → Tailwind CSS v4 + shadcn/ui
@@ -255,7 +255,19 @@ AI Elements 模式（Confirmation、Plan、Context、Sources 等）在对应功�
 | 截图对比的测试数据 | 准备固定测试数据，配合冻结时钟（第 0 阶段 PR 0.1、PR 0.2） |
 | 第 0 阶段是否单独做 | 是。完成后评估原型结论，再决定是否进入第 1 阶段 |
 
-## 11. 修订记录
+## 11. 实施结果（2026-11-01）
+
+全部阶段已合并（PR #217–#236）。与计划不同的地方：
+
+- **固定测试数据**是可读的 `evaluations/visual/fixture-data/fixture.json`，由 `scripts/visual-fixture.mjs` 每次生成新的数据目录，而不是提交一个 SQLite 数据目录。待回答的澄清卡片只存在于运行中的操作里，无法从完成的历史生成，未覆盖。
+- **入口样式**是 `src/styles/app.css`，不是 `src/index.css`；`index.css` 已删除。层顺序为 `theme, base, landing, components, utilities`：落地页（D12）保留自己的样式表，放在独立的 `landing` 层。
+- **D11 修订**：不用 `@tailwindcss/typography`，Markdown 样式收拢在 `components/markdown-styles.ts`（见 D11）。
+- **shadcn `add`**：base-nova 组件从 npm 包 `cn` 导入，CLI 把它装进 `dependencies` 且不安装 `@base-ui/react`。处理方法写在 `src/lib/utils.ts` 顶部。组件需要的变体与工具类从 shadcn 4.23.0 复制为 `styles/shadcn.css`。
+- **Preflight 之后保留的差异**：`html` 行高保持 `normal`（应用一直如此，Preflight 的 1.5 会放松所有行）；边框默认颜色为 `--border`（shadcn 的约定）；Markdown、步骤挂件、文件预览恢复列表符号与标题字号。
+- **内联样式**：图表画布尺寸和进度条宽度保留内联，前者是 ECharts 挂载时测量的尺寸，后者是数据。
+- 全程以 `scripts/visual-snapshot.mjs` 对照 develop 基线；有意的差异（图标换成 lucide、几处 1–3 px 偏移、窄屏下文件预览改为真正全屏）在各 PR 中说明。
+
+## 12. 修订记录
 
 - 2026-11-01 初稿。
 - 2026-11-01 按审阅意见（`docs/前端迁移计划-Tailwind与shadcn-审阅意见.md`）修订：

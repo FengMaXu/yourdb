@@ -20,6 +20,8 @@ const SHARED = [
     '[&_th]:bg-[#fafaf9] [&_th]:text-[0.85em] [&_th]:font-semibold [&_th]:text-[#57534e]',
     '[&_tbody_tr]:transition-colors [&_tbody_tr:hover]:bg-[#fcfbfa]',
     '[&_a]:text-[var(--accent-strong)] [&_a]:underline-offset-[3px]',
+    // Preflight takes list markers away; Markdown lists keep them.
+    '[&_ul]:list-disc [&_ol]:list-decimal',
 ].join(' ');
 
 /** A Markdown document, such as a knowledge file or a note. */

@@ -6,7 +6,7 @@ import ChartSpecWidget from './ChartSpecWidget';
 import { useLanguage } from '../../context/LanguageContext';
 import { usePreview } from '../../context/PreviewContext';
 import { resolveInternalUrl, resolveWorkspacePreviewUrl } from '../../utils/resolveInternalUrl';
-import { Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from '../icons/Typicons';
+import { Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from 'lucide-react';
 
 export type WidgetKind = 'kpi' | 'metric_cards' | 'table' | 'chart' | 'steps' | 'rich_text' | 'echarts' | 'file_link';
 
@@ -365,7 +365,7 @@ const renderChart = (widget: WidgetSpec, t: (key: string) => string) => {
 const renderSteps = (widget: WidgetSpec, t: (key: string) => string) => {
     const steps = Array.isArray(widget.data) ? widget.data : [];
     return (
-        <ol className="m-0 grid gap-2.5 pl-5">
+        <ol className="m-0 grid list-decimal gap-2.5 pl-5">
             {steps.map((step, index) => (
                 <li key={index} className="text-[#111827]">
                     <div className="font-semibold">{toDisplayText(step.title ?? step.label, `${t('widgets.step')} ${index + 1}`)}</div>
@@ -397,7 +397,7 @@ const renderRichTextBlock = (block: any, t: (key: string) => string) => {
     }
     if ((block.type === 'ol' || block.type === 'ul' || block.type === 'list') && Array.isArray(block.items)) {
         const List = block.type === 'ul' || block.type === 'list' ? 'ul' : 'ol';
-        return <List className="m-0 pl-5">{block.items.slice(0, 10).map((item: any, index: number) => <li key={index}>{String(item)}</li>)}</List>;
+        return <List className={`m-0 pl-5 ${List === 'ul' ? 'list-disc' : 'list-decimal'}`}>{block.items.slice(0, 10).map((item: any, index: number) => <li key={index}>{String(item)}</li>)}</List>;
     }
     return block.text ?? block.content ?? JSON.stringify(block);
 };

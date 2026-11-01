@@ -10,7 +10,7 @@ import { FILE_ACTION_BUTTON, FILE_ACTIONS } from './file-actions';
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Download, Eye } from './icons/Typicons';
+import { Download, Eye } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import { usePreview } from '../context/PreviewContext';
 import {
