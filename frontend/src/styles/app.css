@@ -12,6 +12,7 @@
 
 @import "tailwindcss/theme.css" layer(theme);
 @import "./theme.css" layer(theme);
+@import "./base.css" layer(base);
 
 @import "../index.css" layer(legacy);
 @import "./ui.css" layer(legacy);
@@ -24,3 +25,5 @@
 @source "../";
 /* Only @utility and @property definitions: Tailwind emits the utilities into its utilities layer itself. */
 @import "tw-animate-css";
+/* Directives for the shadcn/ui components; its one plain rule is layered inside the file. */
+@import "./shadcn.css";
