@@ -216,7 +216,6 @@ body {
   letter-spacing: 0.02em;
 }
 
-
 /* A faint grid, like ruled paper for numbers. */
 
 .legacy-animate-spin {
@@ -2315,102 +2314,6 @@ body {
 
 /* Semantic Asset Viewer */
 
-.plugins-page button:focus-visible,
-.plugins-page input:focus-visible,
-.plugins-page select:focus-visible,
-.plugins-page textarea:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 2px;
-}
-
-.plugins-page-body {
-  flex: 1;
-  min-width: 0;
-  padding: 32px;
-  overflow-y: auto;
-}
-
-.plugins-tab-list {
-  display: flex;
-  gap: 28px;
-  margin-bottom: 20px;
-  border-bottom: 1px solid var(--hairline, #ecebe8);
-}
-
-.plugins-tab {
-  position: relative;
-  padding: 0 0 12px;
-  border: 0;
-  background: none;
-  color: #78716c;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color var(--duration-quick) var(--ease-out);
-}
-
-.plugins-tab::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 2px 2px 0 0;
-  background: #1c1917;
-  transform: scaleX(0);
-  transition: transform var(--duration-ui) var(--ease-out);
-}
-
-.plugins-tab:hover {
-  color: #1c1917;
-}
-
-.plugins-tab[aria-selected='true'] {
-  color: #1c1917;
-  font-weight: 600;
-}
-
-.plugins-tab[aria-selected='true']::after {
-  transform: scaleX(1);
-}
-
-.plugins-tab:focus-visible {
-  outline: 2px solid var(--accent-strong);
-  outline-offset: 4px;
-  border-radius: 4px;
-}
-
-.plugins-lead {
-  margin: 0;
-  max-width: 64ch;
-  font-size: 0.875rem;
-  line-height: 1.6;
-  color: #78716c;
-}
-
-.plugins-toolbar-actions {
-  display: flex;
-  gap: 4px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .plugins-tab,
-  .plugins-tab::after {
-    transition: none;
-  }
-}
-
-.plugins-mcp-toolbar,
-.plugins-skills-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-}
-
 /* Plugins modal input focus */
 
 @media (max-width: 720px) {
@@ -2477,32 +2380,11 @@ body {
   }
 
   /* Outranks .workspace-page-body:not(.is-split) below. */
-  .workspace-page-body.plugins-page-body:not(.is-split) {
-    padding: 16px;
-  }
-
-  .plugins-tab-list,
-  .plugins-mcp-toolbar,
-  .plugins-skills-toolbar {
-    flex-wrap: wrap;
-    gap: 12px;
-    align-items: flex-start;
-  }
-
-  .plugins-page-body input,
-  .plugins-page-body select,
-  .plugins-page-body textarea {
-    max-width: 100%;
-  }
 }
 
 @media (max-width: 420px) {
   .editor-modal-overlay {
     padding: 0;
-  }
-
-  .workspace-page-body.plugins-page-body:not(.is-split) {
-    padding: 12px;
   }
 }
 

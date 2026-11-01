@@ -1,6 +1,12 @@
-import React from 'react';
-import { Check, ExternalLink, Loader2, Plus, PlugZap, Server, Terminal } from '../icons/Typicons';
+import React, { useState } from 'react';
+import { Check, ChevronRight, ExternalLink, Plus, PlugZap, Server, Terminal } from 'lucide-react';
 import type { MCPPreset, MCPPresetField, MCPServerConfig } from '../../api/client';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
+import { MCP_CODE, MCP_INPUT, McpBadge, McpButton, McpDot, McpIconTile, McpStatus, REDUCED_MOTION } from './parts';
 
 export interface McpStatusMeta {
     label: string;
@@ -33,9 +39,30 @@ const TRANSPORTS: Array<{ value: MCPServerConfig['transport']; labelKey: string;
     { value: 'sse', labelKey: 'SSE', captionKey: 'plugins.transportSse' },
 ];
 
+const BRAND_FOCUS = 'focus-visible:outline-2 focus-visible:outline-brand';
+/** A bare <button>: no native border or fill (there is no Preflight until phase 4). */
+const PLAIN = 'border-0 bg-transparent';
+const FIELD = 'm-0 flex min-w-0 flex-col gap-2 border-0 p-0';
+const FIELD_HEAD = 'flex w-full flex-wrap items-center gap-x-2 gap-y-1 p-0 text-[0.85rem] font-semibold text-foreground';
+const HELP = 'm-0 text-[0.78rem] leading-relaxed text-muted-foreground';
+const GROUP = 'flex flex-col gap-[18px]';
+const ROW = 'grid grid-cols-1 gap-3.5 min-[761px]:grid-cols-2';
+
 function subtitle(server: MCPServerConfig, t: (key: string) => string): string {
     if (server.preset) return t('plugins.preset');
     return server.transport === 'stdio' ? t('plugins.transportStdio') : server.transport === 'sse' ? t('plugins.transportSse') : t('plugins.transportHttp');
+}
+
+function Required() {
+    return <span className="ml-[3px] text-brand" aria-hidden="true">*</span>;
+}
+
+function Configured({ children }: { children: React.ReactNode }) {
+    return (
+        <span className="inline-flex h-5 items-center gap-[3px] rounded-full bg-[#ecfdf5] pr-[7px] pl-[5px] text-[0.72rem] font-[550] whitespace-nowrap text-[#047857]">
+            <Check className="size-3" aria-hidden="true" />{children}
+        </span>
+    );
 }
 
 /** The MCP settings tab: plugins on the left, the selected one's form on the right. */
@@ -43,25 +70,42 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
     const { servers, selected, onSelect, onAdd, statusOf, t } = props;
     const server = selected === null ? undefined : servers[selected];
     return (
-        <div className="mcp-settings">
-            <aside className="mcp-list" aria-label={t('plugins.listTitle')}>
-                <div className="mcp-list-head">
+        // overflow-clip, not hidden: the footer below must stick to the page's scroller.
+        <div className={cn('grid min-h-0 flex-1 grid-cols-1 overflow-clip rounded-2xl border border-border bg-white min-[761px]:grid-cols-[232px_minmax(0,1fr)]', REDUCED_MOTION)}>
+            <aside className="flex min-h-0 flex-col gap-0.5 overflow-y-auto border-b border-border bg-[#fafaf9] px-2.5 py-3 min-[761px]:border-r min-[761px]:border-b-0" aria-label={t('plugins.listTitle')}>
+                <div className="flex items-center justify-between pt-0.5 pr-1 pb-2 pl-2 text-xs font-semibold text-muted-foreground">
                     <span>{t('plugins.listTitle')}</span>
-                    <button type="button" className="mcp-icon-btn" onClick={onAdd} aria-label={t('plugins.add')} title={t('plugins.add')}>
-                        <Plus size={15} aria-hidden="true" />
+                    <button
+                        type="button"
+                        className={cn(PLAIN, 'inline-grid size-[26px] place-items-center rounded-[7px] text-muted-foreground transition-[background-color,color,transform] hover:bg-[#efeeec] hover:text-foreground active:scale-[0.92] focus-visible:outline-offset-1', BRAND_FOCUS)}
+                        onClick={onAdd}
+                        aria-label={t('plugins.add')}
+                        title={t('plugins.add')}
+                    >
+                        <Plus className="size-[15px]" aria-hidden="true" />
                     </button>
                 </div>
-                {servers.length === 0 && <p className="mcp-list-empty">{t('plugins.noSrvHint')}</p>}
-                <ul>
+                {servers.length === 0 && <p className="m-2 text-[0.8rem] leading-[1.55] text-muted-foreground">{t('plugins.noSrvHint')}</p>}
+                <ul className="m-0 grid list-none auto-cols-[minmax(160px,max-content)] grid-flow-col gap-0.5 overflow-x-auto p-0 pb-0.5 min-[761px]:auto-cols-auto min-[761px]:grid-flow-row min-[761px]:grid-cols-1 min-[761px]:overflow-x-visible min-[761px]:pb-0">
                     {servers.map((item, index) => {
                         const status = statusOf(item);
                         return (
                             <li key={`${item.name || 'new'}-${index}`}>
-                                <button type="button" className="mcp-list-item" aria-current={selected === index ? 'true' : undefined} onClick={() => onSelect(index)}>
-                                    <span className="mcp-dot" data-live={item.enabled && status?.live ? 'true' : undefined} style={{ color: item.enabled ? (status?.fg ?? '#a8a29e') : '#d6d3d1' }} aria-hidden="true" />
-                                    <span className="mcp-list-text">
-                                        <span className="mcp-list-title">{item.preset?.title ?? (item.name || t('plugins.unnamedSrv'))}</span>
-                                        <span className="mcp-list-sub">{subtitle(item, t)}</span>
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        PLAIN,
+                                        'relative flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-[9px] text-left transition-[background-color,box-shadow] hover:bg-[#f2f1ef] focus-visible:outline-offset-1',
+                                        'aria-[current=true]:bg-white aria-[current=true]:shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)]',
+                                        BRAND_FOCUS,
+                                    )}
+                                    aria-current={selected === index ? 'true' : undefined}
+                                    onClick={() => onSelect(index)}
+                                >
+                                    <McpDot color={item.enabled ? (status?.fg ?? '#a8a29e') : '#d6d3d1'} live={item.enabled && status?.live} />
+                                    <span className="grid min-w-0 gap-px">
+                                        <span className="truncate text-sm font-semibold text-foreground">{item.preset?.title ?? (item.name || t('plugins.unnamedSrv'))}</span>
+                                        <span className="text-xs text-muted-foreground">{subtitle(item, t)}</span>
                                     </span>
                                 </button>
                             </li>
@@ -70,9 +114,9 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
                 </ul>
             </aside>
 
-            <section className="mcp-editor">
+            <section className="flex min-h-0 min-w-0 flex-col">
                 {!server || selected === null ? (
-                    <div className="mcp-editor-empty">{t('plugins.selectHint')}</div>
+                    <div className="m-auto px-6 py-12 text-sm text-muted-foreground">{t('plugins.selectHint')}</div>
                 ) : (
                     <Editor key={selected} {...props} server={server} index={selected} />
                 )}
@@ -84,47 +128,47 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
 const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: number }> = ({ server, index, statusOf, onField, onRemove, onSave, onTest, saving, testing, testResult, t, onPresetValue }) => {
     const status = statusOf(server);
     const Icon = server.preset ? PlugZap : server.transport === 'stdio' ? Terminal : Server;
+    const switchId = `mcp-enabled-${index}`;
     return (
         <>
-            <header className="mcp-editor-head">
-                <span className="mcp-editor-icon" aria-hidden="true"><Icon size={18} /></span>
-                <div className="mcp-editor-title">
-                    <h4>{server.preset?.title ?? (server.name || t('plugins.unnamedSrv'))}</h4>
-                    <div className="mcp-editor-meta">
-                        {server.preset && <span className="mcp-badge">{t('plugins.preset')}</span>}
-                        {status && <span className="mcp-status" data-live={status.live ? 'true' : undefined} style={{ color: status.fg, background: status.bg }}>{status.label}</span>}
+            <header className="flex animate-fade flex-wrap items-center gap-3.5 border-b border-border px-4 py-5 min-[761px]:flex-nowrap min-[761px]:px-7">
+                <McpIconTile><Icon /></McpIconTile>
+                <div className="min-w-0 flex-1">
+                    <h4 className="mb-1.5 text-[1.1rem] leading-tight font-[650] tracking-[-0.005em] text-foreground">{server.preset?.title ?? (server.name || t('plugins.unnamedSrv'))}</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                        {server.preset && <McpBadge>{t('plugins.preset')}</McpBadge>}
+                        {status && <McpStatus {...status} />}
                     </div>
                 </div>
-                <label className="mcp-switch">
-                    <input type="checkbox" role="switch" checked={server.enabled} onChange={(e) => onField(index, 'enabled', e.target.checked)} />
-                    <span className="mcp-switch-track" aria-hidden="true"><span className="mcp-switch-thumb" /></span>
-                    <span className="mcp-switch-label">{t('plugins.enableServer')}</span>
-                </label>
+                <div className="flex basis-full items-center gap-2.5 min-[761px]:basis-auto">
+                    <Switch
+                        id={switchId}
+                        checked={server.enabled}
+                        onCheckedChange={(checked) => onField(index, 'enabled', checked)}
+                        className="data-[size=default]:h-5 data-[size=default]:w-9 data-checked:bg-brand data-unchecked:bg-[#d6d3d1] hover:data-unchecked:bg-[#cfccc9] focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                    />
+                    <label htmlFor={switchId} className="cursor-pointer text-[0.85rem] text-foreground select-none">{t('plugins.enableServer')}</label>
+                </div>
             </header>
 
-            <div className="mcp-editor-body">
+            <div className="flex flex-1 animate-rise-sm flex-col gap-7 overflow-y-auto px-4 pt-6 pb-8 [animation-duration:320ms] min-[761px]:px-7 [&>*]:max-w-[680px]">
                 {server.preset
                     ? <PresetForm preset={server.preset} server={server} index={index} onPresetValue={onPresetValue} t={t} />
                     : <CustomForm server={server} index={index} onField={onField} onRemove={onRemove} t={t} />}
             </div>
 
-            <footer className="mcp-editor-foot">
-                <div className="mcp-test-result" role={testResult ? (testResult.success ? 'status' : 'alert') : undefined} aria-live="polite">
+            {/* Flush with the page scroller's edge, past its bottom padding (32px, 16px on a narrow screen). */}
+            <footer className="sticky -bottom-4 z-[1] flex flex-wrap items-center gap-2.5 border-t border-border bg-[#fafaf9]/92 px-4 py-3.5 backdrop-blur-[8px] min-[721px]:-bottom-8 min-[761px]:flex-nowrap min-[761px]:px-7">
+                <div className="min-w-0 flex-1 basis-full text-[0.82rem] min-[761px]:basis-auto" role={testResult ? (testResult.success ? 'status' : 'alert') : undefined} aria-live="polite">
                     {testResult && (
-                        <span className={testResult.success ? 'is-ok' : 'is-error'}>
-                            {testResult.success ? <Check size={14} aria-hidden="true" /> : null}
+                        <span className={cn('inline-flex animate-rise-sm items-center gap-[5px] break-words [animation-duration:260ms]', testResult.success ? 'text-[#047857]' : 'text-[#b91c1c]')}>
+                            {testResult.success ? <Check className="size-3.5" aria-hidden="true" /> : null}
                             {testResult.message}
                         </span>
                     )}
                 </div>
-                <button type="button" className="mcp-btn" onClick={onTest} disabled={testing}>
-                    {testing && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
-                    {t('plugins.test')}
-                </button>
-                <button type="button" className="mcp-btn mcp-btn-primary" onClick={onSave} disabled={saving}>
-                    {saving && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
-                    {t('plugins.saveConfig')}
-                </button>
+                <McpButton onClick={onTest} disabled={testing} busy={testing}>{t('plugins.test')}</McpButton>
+                <McpButton primary onClick={onSave} disabled={saving} busy={saving}>{t('plugins.saveConfig')}</McpButton>
             </footer>
         </>
     );
@@ -132,7 +176,7 @@ const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: numb
 
 const PresetForm: React.FC<{ preset: MCPPreset; server: MCPServerConfig; index: number; onPresetValue: McpSettingsProps['onPresetValue']; t: McpSettingsProps['t'] }> = ({ preset, server, index, onPresetValue, t }) => (
     <>
-        <p className="mcp-lead">{preset.description}</p>
+        <p className="m-0 text-sm leading-[1.7] text-body">{preset.description}</p>
         {preset.fields.map((field) => field.kind === 'choices'
             ? <ChoiceField key={field.key} field={field} server={server} index={index} onPresetValue={onPresetValue} />
             : <TextField key={field.key} presetId={preset.id} field={field} server={server} index={index} onPresetValue={onPresetValue} t={t} />)}
@@ -144,19 +188,24 @@ const TextField: React.FC<{ presetId: string; field: MCPPresetField; server: MCP
     const secret = field.kind === 'secret';
     const value = secret ? (server.field_inputs?.[field.key] ?? '') : String(server.field_values?.[field.key] ?? '');
     return (
-        <div className="mcp-field">
-            <div className="mcp-field-head">
-                <label htmlFor={id}>{field.label}{field.required && <span className="mcp-required" aria-hidden="true">*</span>}</label>
-                {secret && field.configured && <span className="mcp-configured"><Check size={12} aria-hidden="true" />{t('plugins.secretConfigured')}</span>}
+        <div className={FIELD}>
+            <div className={FIELD_HEAD}>
+                <label htmlFor={id} className="cursor-pointer whitespace-nowrap">{field.label}{field.required && <Required />}</label>
+                {secret && field.configured && <Configured>{t('plugins.secretConfigured')}</Configured>}
                 {field.link && (
-                    <a className="mcp-link" href={field.link.url} target="_blank" rel="noreferrer">
-                        {field.link.label}<ExternalLink size={12} aria-hidden="true" />
+                    <a
+                        className={cn('group/link ml-auto inline-flex items-center gap-1 rounded-[4px] text-[0.8rem] font-medium whitespace-nowrap text-brand no-underline hover:underline hover:underline-offset-[3px] focus-visible:outline-offset-2', BRAND_FOCUS)}
+                        href={field.link.url}
+                        target="_blank"
+                        rel="noreferrer"
+                    >
+                        {field.link.label}<ExternalLink className="size-3 transition-transform group-hover/link:translate-x-px group-hover/link:-translate-y-px" aria-hidden="true" />
                     </a>
                 )}
             </div>
-            <input
+            <Input
                 id={id}
-                className="mcp-input"
+                className={MCP_INPUT}
                 type={secret ? 'password' : 'text'}
                 autoComplete="off"
                 spellCheck={false}
@@ -164,7 +213,7 @@ const TextField: React.FC<{ presetId: string; field: MCPPresetField; server: MCP
                 onChange={(e) => onPresetValue(index, field.key, e.target.value, secret)}
                 placeholder={secret && field.configured ? t('plugins.secretKeep') : (field.placeholder || '')}
             />
-            {field.help && <p className="mcp-help">{field.help}</p>}
+            {field.help && <p className={HELP}>{field.help}</p>}
         </div>
     );
 };
@@ -173,85 +222,116 @@ const ChoiceField: React.FC<{ field: MCPPresetField; server: MCPServerConfig; in
     const saved = server.field_values?.[field.key];
     const chosen = Array.isArray(saved) ? saved : (field.defaultValue || []);
     return (
-        <fieldset className="mcp-field">
-            <legend className="mcp-field-head"><span>{field.label}{field.required && <span className="mcp-required" aria-hidden="true">*</span>}</span>{field.choices && <span className="mcp-field-count">{field.choices.filter((choice) => chosen.includes(choice.value)).length} / {field.choices.length}</span>}</legend>
-            <div className="mcp-choices">
+        <fieldset className={FIELD}>
+            <legend className={cn(FIELD_HEAD, 'mb-2')}>
+                <span>{field.label}{field.required && <Required />}</span>
+                {field.choices && <span className="ml-auto text-xs font-medium text-muted-foreground tabular-nums">{field.choices.filter((choice) => chosen.includes(choice.value)).length} / {field.choices.length}</span>}
+            </legend>
+            <div className="grid auto-rows-fr grid-cols-[repeat(auto-fill,minmax(196px,1fr))] gap-2">
                 {(field.choices || []).map((choice) => {
                     const on = chosen.includes(choice.value);
                     return (
-                        <label key={choice.value} className="mcp-choice" data-checked={on ? 'true' : undefined}>
+                        <label
+                            key={choice.value}
+                            data-checked={on ? 'true' : undefined}
+                            className={cn(
+                                'group/choice relative flex cursor-pointer items-start gap-2.5 rounded-[11px] border border-input bg-white p-3 transition-[border-color,background-color,box-shadow,transform] hover:border-[#d6d3d1] hover:bg-[#fafaf9] active:scale-[0.985]',
+                                'data-[checked=true]:border-brand/50 data-[checked=true]:bg-[#fffbf7] data-[checked=true]:shadow-[inset_0_0_0_0.5px_rgba(194,65,12,0.5)]',
+                            )}
+                        >
                             <input
                                 type="checkbox"
+                                className="peer absolute size-px opacity-0"
                                 checked={on}
                                 onChange={(e) => onPresetValue(index, field.key, e.target.checked ? [...chosen, choice.value] : chosen.filter((value) => value !== choice.value), false)}
                             />
-                            <span className="mcp-choice-box" aria-hidden="true"><Check size={11} /></span>
-                            <span className="mcp-choice-text">
-                                <span className="mcp-choice-label">{choice.label}</span>
-                                {choice.detail && <span className="mcp-choice-detail">{choice.detail}</span>}
+                            <span
+                                className="mt-px grid size-4 flex-none place-items-center rounded-[5px] border-[1.5px] border-[#d6d3d1] bg-white text-transparent transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand group-data-[checked=true]/choice:animate-pop group-data-[checked=true]/choice:border-brand group-data-[checked=true]/choice:bg-brand group-data-[checked=true]/choice:text-white"
+                                aria-hidden="true"
+                            >
+                                <Check className="size-[11px]" />
+                            </span>
+                            <span className="grid min-w-0 content-start gap-[3px]">
+                                <span className="text-[0.85rem] font-semibold text-foreground">{choice.label}</span>
+                                {choice.detail && <span className="text-xs leading-normal text-muted-foreground">{choice.detail}</span>}
                             </span>
                         </label>
                     );
                 })}
             </div>
-            {field.help && <p className="mcp-help">{field.help}</p>}
+            {field.help && <p className={cn(HELP, 'mt-2')}>{field.help}</p>}
         </fieldset>
     );
 };
 
 const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: McpSettingsProps['onField']; onRemove: McpSettingsProps['onRemove']; t: McpSettingsProps['t'] }> = ({ server, index, onField, onRemove, t }) => {
+    const [advancedOpen, setAdvancedOpen] = useState(false);
     const stdio = server.transport === 'stdio';
     const text = (id: string, label: string, field: keyof MCPServerConfig, placeholder: string, required = false) => (
-        <div className="mcp-field">
-            <div className="mcp-field-head"><label htmlFor={id}>{label}{required && <span className="mcp-required" aria-hidden="true">*</span>}</label></div>
-            <input id={id} className="mcp-input" value={String(server[field] ?? '')} onChange={(e) => onField(index, field, e.target.value)} placeholder={placeholder} spellCheck={false} />
+        <div className={FIELD}>
+            <div className={FIELD_HEAD}><label htmlFor={id} className="cursor-pointer whitespace-nowrap">{label}{required && <Required />}</label></div>
+            <Input id={id} className={MCP_INPUT} value={String(server[field] ?? '')} onChange={(e) => onField(index, field, e.target.value)} placeholder={placeholder} spellCheck={false} />
         </div>
     );
     const mapping = (id: string, label: string, field: 'env_input' | 'headers_input', summary: MCPServerConfig['env'], placeholder: string) => (
-        <div className="mcp-field">
-            <div className="mcp-field-head">
-                <label htmlFor={id}>{label}</label>
-                {summary?.configured && <span className="mcp-configured"><Check size={12} aria-hidden="true" />{t('plugins.configured').replace('{count}', String(summary.count))}</span>}
+        <div className={FIELD}>
+            <div className={FIELD_HEAD}>
+                <label htmlFor={id} className="cursor-pointer whitespace-nowrap">{label}</label>
+                {summary?.configured && <Configured>{t('plugins.configured').replace('{count}', String(summary.count))}</Configured>}
             </div>
-            <textarea id={id} className="mcp-input mcp-code" rows={3} value={server[field] ?? ''} onChange={(e) => onField(index, field, e.target.value)} placeholder={placeholder} spellCheck={false} />
+            <Textarea
+                id={id}
+                className={cn(MCP_INPUT, MCP_CODE, 'h-auto min-h-[76px] resize-y py-2.5 leading-[1.55]')}
+                rows={3}
+                value={server[field] ?? ''}
+                onChange={(e) => onField(index, field, e.target.value)}
+                placeholder={placeholder}
+                spellCheck={false}
+            />
         </div>
     );
     return (
         <>
-            <div className="mcp-group">
+            <div className={GROUP}>
                 {text('mcp-server-name', t('plugins.name'), 'name', 'my-server', true)}
-                <div className="mcp-field">
-                    <div className="mcp-field-head"><span id="mcp-transport-label">{t('plugins.transport')}</span></div>
-                    <div className="mcp-segmented" role="radiogroup" aria-labelledby="mcp-transport-label">
+                <div className={FIELD}>
+                    <div className={FIELD_HEAD}><span id="mcp-transport-label">{t('plugins.transport')}</span></div>
+                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-[#f5f5f4] p-1" role="radiogroup" aria-labelledby="mcp-transport-label">
                         {TRANSPORTS.map((option) => (
                             <button
                                 key={option.value}
                                 type="button"
                                 role="radio"
                                 aria-checked={server.transport === option.value || (option.value === 'http' && server.transport === 'streamable-http')}
+                                className={cn(
+                                    PLAIN,
+                                    'grid gap-0.5 rounded-[9px] p-2 text-center transition-[background-color,box-shadow] focus-visible:outline-offset-1',
+                                    'not-aria-checked:hover:bg-white/55 aria-checked:bg-white aria-checked:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_0_0_1px_var(--border)]',
+                                    BRAND_FOCUS,
+                                )}
                                 onClick={() => onField(index, 'transport', option.value)}
                             >
-                                <span>{option.labelKey}</span>
-                                <small>{t(option.captionKey)}</small>
+                                <span className="text-[0.85rem] font-semibold text-foreground">{option.labelKey}</span>
+                                <small className="text-[0.72rem] text-muted-foreground">{t(option.captionKey)}</small>
                             </button>
                         ))}
                     </div>
                 </div>
             </div>
 
-            <div className="mcp-group">
-                <h5 className="mcp-group-title">{t('plugins.sectionConnection')}</h5>
+            <div className={GROUP}>
+                <h5 className="m-0 text-xs font-semibold text-muted-foreground">{t('plugins.sectionConnection')}</h5>
                 {stdio ? (
                     <>
-                        <div className="mcp-row">
+                        <div className={ROW}>
                             {text('mcp-server-command', t('plugins.command'), 'command', 'npx / python')}
                             {text('mcp-server-script', t('plugins.scriptArgs'), 'script', 'server.py')}
                         </div>
-                        <div className="mcp-field">
-                            <div className="mcp-field-head"><label htmlFor="mcp-server-args">{t('plugins.arguments')}</label></div>
-                            <input
+                        <div className={FIELD}>
+                            <div className={FIELD_HEAD}><label htmlFor="mcp-server-args" className="cursor-pointer whitespace-nowrap">{t('plugins.arguments')}</label></div>
+                            <Input
                                 id="mcp-server-args"
-                                className="mcp-input mcp-code"
+                                className={cn(MCP_INPUT, MCP_CODE)}
                                 value={server.args_input ?? JSON.stringify(server.args || [])}
                                 onChange={(e) => onField(index, 'args_input', e.target.value)}
                                 placeholder='["-y", "some-mcp-server"]'
@@ -268,17 +348,30 @@ const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: Mc
                 )}
             </div>
 
-            <details className="mcp-advanced">
-                <summary>{t('plugins.sectionAdvanced')}</summary>
-                <div className="mcp-group">
-                    {text('mcp-server-description', t('plugins.description'), 'description', t('plugins.descriptionPlaceholder'))}
-                    <div className="mcp-row">
-                        {text('mcp-server-tool-prefix', t('plugins.toolPrefix'), 'tool_prefix', 'db')}
-                        {text('mcp-server-type', t('plugins.serverType'), 'server_type', 'service')}
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="border-t border-border pt-[18px]">
+                <CollapsibleTrigger
+                    className={cn('group/adv inline-flex w-fit items-center gap-1.5 rounded-[4px] text-[0.85rem] font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-offset-[3px]', BRAND_FOCUS)}
+                >
+                    <ChevronRight className="size-3.5 transition-transform group-data-panel-open/adv:rotate-90" aria-hidden="true" />
+                    {t('plugins.sectionAdvanced')}
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                    <div className={cn(GROUP, 'mt-[18px] animate-rise-sm [animation-duration:260ms]')}>
+                        {text('mcp-server-description', t('plugins.description'), 'description', t('plugins.descriptionPlaceholder'))}
+                        <div className={ROW}>
+                            {text('mcp-server-tool-prefix', t('plugins.toolPrefix'), 'tool_prefix', 'db')}
+                            {text('mcp-server-type', t('plugins.serverType'), 'server_type', 'service')}
+                        </div>
+                        <button
+                            type="button"
+                            className="self-start rounded-[4px] border-0 bg-transparent p-0 text-[0.82rem] font-medium text-[#b91c1c] hover:underline hover:underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b91c1c]"
+                            onClick={() => onRemove(index)}
+                        >
+                            {t('plugins.deleteConfig')}
+                        </button>
                     </div>
-                    <button type="button" className="mcp-danger" onClick={() => onRemove(index)}>{t('plugins.deleteConfig')}</button>
-                </div>
-            </details>
+                </CollapsibleContent>
+            </Collapsible>
         </>
     );
 };

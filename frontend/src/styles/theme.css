@@ -84,12 +84,17 @@
   --radius-xl: var(--radius-card);
 }
 
-/* Motion tokens: animate-rise, animate-type-in, animate-blink. The curve is --ease-out from the legacy root until phase 4. */
+/* Motion tokens (animate-*). The curve is --ease-out from the legacy root until phase 4. */
 @theme {
   --animate-rise: rise 520ms var(--ease-out) both;
   --animate-rise-quick: rise 260ms var(--ease-out) both;
   --animate-type-in: type-in 520ms var(--ease-out) both;
   --animate-blink: blink 1.1s steps(1) 900ms infinite both;
+  --animate-rise-sm: rise-sm 420ms var(--ease-out) both;
+  --animate-fade: fade 260ms var(--ease-out) both;
+  --animate-dot-pulse: dot-pulse 2.4s var(--ease-out) infinite;
+  --animate-ring-pulse: ring-pulse 2.4s var(--ease-out) infinite;
+  --animate-pop: pop 260ms var(--ease-out);
 
   @keyframes rise {
     from {
@@ -107,6 +112,34 @@
     to {
       clip-path: inset(0 0 0 0);
     }
+  }
+
+  @keyframes rise-sm {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes fade {
+    from { opacity: 0; }
+  }
+
+  /* A live status dot: a copy of it grows and fades. */
+  @keyframes dot-pulse {
+    0% { transform: scale(1); opacity: 0.45; }
+    70%, 100% { transform: scale(2.6); opacity: 0; }
+  }
+
+  /* A live status pill's dot: a ring in its own colour spreads and fades. */
+  @keyframes ring-pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+    70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 0%, transparent); }
+  }
+
+  @keyframes pop {
+    0% { transform: scale(0.6); }
+    60% { transform: scale(1.12); }
   }
 
   @keyframes blink {

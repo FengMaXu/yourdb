@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, RefreshCw, Plus, Loader2, Database, PlugZap, Server, Sparkles } from './icons/Typicons';
+import { Search, RefreshCw, Plus, Loader2, Database, PlugZap, Server, Sparkles } from 'lucide-react';
 import {
     type MCPConfig,
     type MCPServerConfig,
@@ -11,6 +11,9 @@ import {
 import { getMcpConfigViaRuntime, getMcpServersViaRuntime, listSkillsViaRuntime, restartMcpServerViaRuntime, saveMcpConfigViaRuntime, testMcpServerViaRuntime } from '../api/runtime-client';
 import { useLanguage } from '../context/LanguageContext';
 import McpSettings from './plugins/McpSettings';
+import { McpButton, McpIconTile, McpStatus, REDUCED_MOTION } from './plugins/parts';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
 export type PluginsTab = 'MCP' | 'Skills';
 
@@ -18,6 +21,39 @@ interface PluginsPanelProps {
     tab: PluginsTab;
     /** Opens Settings → Database, where the database server is configured. */
     onOpenDatabaseSettings?: () => void;
+}
+
+/** The installed / settings switch above each pane: text tabs over a hairline, the current one underlined in ink. */
+function PaneTabs({ label, value, onChange, items }: { label: string; value: string; onChange: (value: string) => void; items: Array<{ value: string; label: string }> }) {
+    return (
+        <Tabs value={value} onValueChange={(next) => onChange(String(next))} className="mb-5 gap-0">
+            <TabsList
+                variant="line"
+                aria-label={label}
+                className="h-auto w-full flex-wrap justify-start gap-x-3 gap-y-3 rounded-none min-[721px]:gap-x-7 border-b border-border p-0"
+            >
+                {items.map((item) => (
+                    <TabsTrigger
+                        key={item.value}
+                        value={item.value}
+                        className="h-auto flex-none rounded-none border-0 px-0 pt-0 pb-3 text-[0.9rem] font-medium text-muted-foreground hover:text-foreground focus-visible:rounded-[4px] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand data-active:font-semibold data-active:text-foreground group-data-horizontal/tabs:after:-bottom-px group-data-horizontal/tabs:after:rounded-t-[2px]"
+                    >
+                        {item.label}
+                    </TabsTrigger>
+                ))}
+            </TabsList>
+        </Tabs>
+    );
+}
+
+/** A frameless icon action whose label slides out on hover (styles in index.css until phase 3.8). */
+function RevealButton({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
+    return (
+        <button type="button" className="icon-reveal-btn" onClick={onClick} disabled={disabled} aria-label={label}>
+            {children}
+            <span className="header-icon-label" aria-hidden="true">{label}</span>
+        </button>
+    );
 }
 
 /** MCP and Skills management shown in the main pane; the sidebar picks the tab. */
@@ -321,55 +357,28 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
     };
 
     return (
-        <section className="workspace-page plugins-page" aria-labelledby="plugins-page-title">
+        <section className="workspace-page" aria-labelledby="plugins-page-title">
             <header className="workspace-page-header">
                 <h1 id="plugins-page-title">{tab === 'MCP' ? t('plugins.mcp') : t('plugins.skills')}</h1>
             </header>
 
-            <div className="workspace-page-body plugins-page-body scrollable-area">
+            <div className="workspace-page-body scrollable-area min-w-0 max-[420px]:p-3 [&_input]:max-w-full [&_select]:max-w-full [&_textarea]:max-w-full">
                 {/* MCP */}
                 {tab === 'MCP' && (
                     <div className="plugins-pane">
-                        <div className="plugins-tab-list" role="tablist" aria-label={t('plugins.mcp')}>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={mcpTab === '已安装'}
-                                className="plugins-tab"
-                                onClick={() => setMcpTab('已安装')}
-                            >
-                                {t('plugins.installed')}
-                            </button>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={mcpTab === '设置'}
-                                className="plugins-tab"
-                                onClick={() => setMcpTab('设置')}
-                            >
-                                {t('plugins.settings')}
-                            </button>
-                        </div>
+                        <PaneTabs label={t('plugins.mcp')} value={mcpTab} onChange={setMcpTab} items={[{ value: '已安装', label: t('plugins.installed') }, { value: '设置', label: t('plugins.settings') }]} />
 
-                        <div className="plugins-mcp-toolbar">
-                            <p className="plugins-lead">{t('plugins.mcpDesc')}</p>
-                            <div className="plugins-toolbar-actions">
-                                <button
-                                    type="button"
-                                    className="icon-reveal-btn"
-                                    onClick={() => void loadMCPData()}
-                                    disabled={isLoadingMCP}
-                                    aria-label={t('plugins.refresh')}
-                                >
-                                    {isLoadingMCP ? <Loader2 size={17} className="legacy-animate-spin" aria-hidden="true" /> : <RefreshCw size={17} aria-hidden="true" />}
-                                    <span className="header-icon-label" aria-hidden="true">{t('plugins.refresh')}</span>
-                                </button>
+                        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 min-[721px]:flex-nowrap min-[721px]:items-center min-[721px]:gap-4">
+                            <p className="m-0 max-w-[64ch] text-sm leading-relaxed text-muted-foreground">{t('plugins.mcpDesc')}</p>
+                            <div className="flex gap-1">
+                                <RevealButton label={t('plugins.refresh')} onClick={() => void loadMCPData()} disabled={isLoadingMCP}>
+                                    {isLoadingMCP ? <Loader2 className="size-[17px] animate-spin" aria-hidden="true" /> : <RefreshCw className="size-[17px]" aria-hidden="true" />}
+                                </RevealButton>
                                 {/* The settings tab's plugin list has its own add button. */}
                                 {mcpTab === '已安装' && (
-                                    <button type="button" className="icon-reveal-btn" onClick={addMcpServer} aria-label={t('plugins.add')}>
-                                        <Plus size={17} aria-hidden="true" />
-                                        <span className="header-icon-label" aria-hidden="true">{t('plugins.add')}</span>
-                                    </button>
+                                    <RevealButton label={t('plugins.add')} onClick={addMcpServer}>
+                                        <Plus className="size-[17px]" aria-hidden="true" />
+                                    </RevealButton>
                                 )}
                             </div>
                         </div>
@@ -381,9 +390,9 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         )}
 
                         {mcpTab === '已安装' && (
-                            <ul className="mcp-cards">
+                            <ul className={cn('m-0 grid list-none gap-2.5 p-0', REDUCED_MOTION)}>
                                 {displayedMcpServers.length === 0 && (
-                                    <li role="status" className="mcp-cards-empty">{t('plugins.noServers')}</li>
+                                    <li role="status" className="mt-16 text-center text-sm text-muted-foreground">{t('plugins.noServers')}</li>
                                 )}
                                 {displayedMcpServers.map((server, index) => {
                                     const isToggling = pendingToggleServer === server.name;
@@ -394,37 +403,39 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                     const live = statusesLoaded && server.connected;
                                     const CardIcon = isHostManaged(server) ? Database : server.preset ? PlugZap : Server;
                                     return (
-                                        <li key={server.key} className="mcp-card" data-off={server.enabled ? undefined : 'true'} style={{ '--i': index } as React.CSSProperties}>
-                                            <span className="mcp-card-icon" aria-hidden="true"><CardIcon size={18} /></span>
-                                            <div className="mcp-card-main">
-                                                <div className="mcp-card-title">
-                                                    <span>{server.preset?.title ?? server.name}</span>
-                                                    <span className="mcp-status" data-live={live ? 'true' : undefined} style={{ color: statusMeta.fg, background: statusMeta.bg }}>{statusMeta.label}</span>
+                                        <li
+                                            key={server.key}
+                                            className="grid animate-rise-sm grid-cols-[auto_minmax(0,1fr)] items-start gap-4 rounded-[14px] border border-border bg-white p-4 transition-[border-color,box-shadow] [animation-delay:calc(var(--i)*60ms)] hover:border-input hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-16px_rgba(28,25,23,0.18)] min-[761px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[761px]:items-center min-[761px]:px-5 min-[761px]:py-[18px]"
+                                            style={{ '--i': index } as React.CSSProperties}
+                                        >
+                                            <McpIconTile off={!server.enabled}><CardIcon /></McpIconTile>
+                                            <div className="min-w-0">
+                                                <div className="mb-1 flex flex-wrap items-center gap-2 text-[0.95rem] font-semibold text-foreground">
+                                                    <span className={server.enabled ? undefined : 'text-muted-foreground'}>{server.preset?.title ?? server.name}</span>
+                                                    <McpStatus {...statusMeta} live={live} />
                                                     {live && server.tool_count > 0 && (
-                                                        <span className="mcp-card-count">{t('plugins.toolCount').replace('{count}', String(server.tool_count))}</span>
+                                                        <span className="text-xs font-medium text-muted-foreground tabular-nums">{t('plugins.toolCount').replace('{count}', String(server.tool_count))}</span>
                                                     )}
                                                 </div>
-                                                <p className="mcp-card-desc">{server.description || t('plugins.noDesc')}</p>
+                                                <p className="m-0 text-[0.85rem] leading-relaxed text-muted-foreground">{server.description || t('plugins.noDesc')}</p>
                                             </div>
-                                            <div className="mcp-card-actions">
+                                            <div className="col-start-2 flex gap-2 min-[761px]:col-start-auto">
                                                 {isHostManaged(server) ? (
                                                     statusesLoaded && !server.connected && onOpenDatabaseSettings && (
-                                                        <button type="button" className="mcp-btn" onClick={onOpenDatabaseSettings}>
+                                                        <McpButton onClick={onOpenDatabaseSettings}>
                                                             {t('plugins.configureDatabase')}
-                                                        </button>
+                                                        </McpButton>
                                                     )
                                                 ) : (
                                                     <>
                                                         {server.enabled && (
-                                                            <button type="button" className="mcp-btn" onClick={() => void handleRestartMCPServer(server.name)} disabled={isRestarting || isToggling}>
-                                                                {isRestarting && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
+                                                            <McpButton onClick={() => void handleRestartMCPServer(server.name)} disabled={isRestarting || isToggling} busy={isRestarting}>
                                                                 {t('plugins.reconnect')}
-                                                            </button>
+                                                            </McpButton>
                                                         )}
-                                                        <button type="button" className="mcp-btn" onClick={() => void handleToggleMCPEnabled(server.name, !server.enabled)} disabled={isToggling || isRestarting}>
-                                                            {isToggling && <Loader2 size={14} className="legacy-animate-spin" aria-hidden="true" />}
+                                                        <McpButton onClick={() => void handleToggleMCPEnabled(server.name, !server.enabled)} disabled={isToggling || isRestarting} busy={isToggling}>
                                                             {server.enabled ? t('plugins.disable') : t('plugins.enable')}
-                                                        </button>
+                                                        </McpButton>
                                                     </>
                                                 )}
                                             </div>
@@ -461,36 +472,16 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                 {/* Skills */}
                 {tab === 'Skills' && (
                     <div className="plugins-pane">
-                        <div className="plugins-tab-list" role="tablist" aria-label={t('plugins.skills')}>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={skillsTab === '已安装'}
-                                className="plugins-tab"
-                                onClick={() => setSkillsTab('已安装')}
-                            >
-                                {t('plugins.installed')}
-                            </button>
-                            <button
-                                type="button"
-                                role="tab"
-                                aria-selected={skillsTab === '设置'}
-                                className="plugins-tab"
-                                onClick={() => setSkillsTab('设置')}
-                            >
-                                {t('plugins.settings')}
-                            </button>
-                        </div>
+                        <PaneTabs label={t('plugins.skills')} value={skillsTab} onChange={setSkillsTab} items={[{ value: '已安装', label: t('plugins.installed') }, { value: '设置', label: t('plugins.settings') }]} />
 
-                        <div className="plugins-skills-toolbar">
+                        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 min-[721px]:flex-nowrap min-[721px]:items-center min-[721px]:gap-4">
                             <div className="plugins-search">
-                                <Search size={15} aria-hidden="true" />
+                                <Search className="size-[15px]" aria-hidden="true" />
                                 <input className="ui-input" type="search" placeholder={t('plugins.searchSkill') || "搜索 Skill"} value={skillQuery} onChange={e => setSkillQuery(e.target.value)} aria-label={t('plugins.searchSkill') || '搜索 Skill'} />
                             </div>
-                            <button type="button" className="icon-reveal-btn" onClick={loadSkills} aria-label={t('plugins.refresh')}>
-                                <RefreshCw size={17} aria-hidden="true" />
-                                <span className="header-icon-label" aria-hidden="true">{t('plugins.refresh')}</span>
-                            </button>
+                            <RevealButton label={t('plugins.refresh')} onClick={loadSkills}>
+                                <RefreshCw className="size-[17px]" aria-hidden="true" />
+                            </RevealButton>
                         </div>
 
                         {skillsError ? (
@@ -510,7 +501,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                             <ul className="skill-list">
                                 {filteredSkills.map((skill, index) => (
                                     <li key={skill.name} className="skill-card" style={{ '--i': index } as React.CSSProperties}>
-                                        <span className="ui-card-icon" aria-hidden="true"><Sparkles size={18} /></span>
+                                        <span className="ui-card-icon" aria-hidden="true"><Sparkles className="size-[18px]" /></span>
                                         <div>
                                             <div className="skill-card-name">{skill.name}</div>
                                             <p className="skill-card-desc">{skill.description}</p>
