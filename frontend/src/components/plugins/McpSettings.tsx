@@ -1,7 +1,6 @@
 import React from 'react';
 import { Check, ExternalLink, Loader2, Plus, PlugZap, Server, Terminal } from '../icons/Typicons';
 import type { MCPPreset, MCPPresetField, MCPServerConfig } from '../../api/client';
-import './mcp-settings.css';
 
 export interface McpStatusMeta {
     label: string;

@@ -3737,7 +3737,7 @@ body {
   --frame-backdrop: #ebeae7;
   --frame-surface: #ffffff;
   --frame-rail: #fafaf9;
-  --hairline: #ecebe8;
+  --hairline: var(--border);
   --font-code: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
   --font-mono: var(--font-code);
   --sidebar-width: 184px;
@@ -3755,7 +3755,7 @@ body {
   --text-tertiary: #6b7280;
   --text-placeholder: #6b7280;
   --text-success: #047857;
-  --accent-strong: #c2410c;
+  --accent-strong: var(--brand);
   --font-size-caption: 0.75rem;
   --font-size-body-sm: 0.875rem;
   --accent-color: #f04438;

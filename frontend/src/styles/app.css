@@ -1,0 +1,26 @@
+/*
+ * The one stylesheet entry. Every rule sits in a cascade layer, in this order:
+ *   theme      Tailwind's design tokens and ours (theme.css)
+ *   base       empty until phase 4 brings in Tailwind's Preflight
+ *   legacy     the hand-written stylesheets being migrated away
+ *   components shadcn/ui components
+ *   utilities  Tailwind utilities, which therefore beat legacy rules
+ * Nothing may be left outside a layer: unlayered CSS beats every layer.
+ * See docs/前端迁移计划-Tailwind与shadcn.md.
+ */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "./theme.css" layer(theme);
+
+@import "../index.css" layer(legacy);
+@import "./ui.css" layer(legacy);
+@import "./workspace.css" layer(legacy);
+@import "./chat-trace.css" layer(legacy);
+@import "../components/plugins/mcp-settings.css" layer(legacy);
+
+/* Generate utilities only for class names in src, not for words in docs and the rest of the repo. */
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "../";
+/* Only @utility and @property definitions: Tailwind emits the utilities into its utilities layer itself. */
+@import "tw-animate-css";

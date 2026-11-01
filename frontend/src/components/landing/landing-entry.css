@@ -1,0 +1,2 @@
+/* The landing page's own styles, loaded with it, in the legacy layer like every hand-written sheet (styles/app.css). */
+@import "./landing.css" layer(legacy);
