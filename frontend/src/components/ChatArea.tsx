@@ -1174,7 +1174,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         ref={fileInputRef}
                         type="file"
                         multiple
-                        style={{ display: 'none' }}
+                        hidden
                         onChange={handleUploadChange}
                     />
                     <button
