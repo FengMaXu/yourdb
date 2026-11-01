@@ -88,7 +88,7 @@ status: proposed
 | D8 | 加 `@/*` 路径别名（`tsconfig.app.json` 的 `paths`，加上 Vite 的 `resolve.alias`）；`vite.config.ts` 是 ESM，用 `fileURLToPath(new URL('./src', import.meta.url))`，不用 `__dirname` | shadcn CLI 靠别名决定文件放哪、怎么改写 import |
 | D9 | **不执行** `shadcn init`，手写 `components.json` 和主题 CSS，之后只用 `shadcn add` 添加组件 | `init` 会改写全局 CSS；手写可以完全掌控写入内容。也可以在临时目录里运行一次 `init`，把生成的内容拷过来 |
 | D10 | 回答过程折叠改用 Trace + Collapsible 实现；`utils/agent-turns.ts` 的分组、结果切分和计时逻辑原样保留 | 只换界面层，逻辑和测试不动 |
-| D11 | Markdown 回答用 `@tailwindcss/typography` 的 `prose` 风格，用变量调成我们的配色；表格、代码块单独定制 | 现有 `.markdown-content` 规则散落在多处（`code` 和 `pre code` 各定义 3 次），收拢后更好维护 |
+| D11 | Markdown 的样式收拢到一处（`components/markdown-styles.ts`：文档与回答共用标题、代码、引用、表格，只在间距、表宽、链接上不同）。**实施时修订：** 不引入 `@tailwindcss/typography`——要保持现有外观，`prose` 的根字号、行高、颜色和几乎每个元素的间距都得逐一覆盖，比直接写一份还长 | 现有 `.markdown-content` 规则散落在多处（`code` 和 `pre code` 各定义 3 次），收拢后更好维护 |
 | D12 | 落地页最后处理，可以不迁 | 它的作用域独立（`.lp`），有自己的构建模式和视觉语言，迁移收益最低 |
 | D13 | 图表（ECharts 画布）和看板 iframe 不受影响；`WidgetRenderer` 的 37 处内联样式在第 3 阶段改成工具类 | 画布和 iframe 内部不受宿主页面 CSS 影响 |
 | D14 | **前端新增的所有依赖都放进 `frontend/package.json` 的 `devDependencies`**；`shadcn add` 自动写进 `dependencies` 的包要手动移过去 | `frontend/package.json` 的 `dependencies` 只有主进程要用的 `@modelcontextprotocol/sdk` 和 `mysql2`，React、ECharts、lucide 都在 `devDependencies`。electron-builder 会把 `dependencies` 打进安装包；渲染进程的代码已经被 Vite 打进 `dist/`，再放进 `dependencies` 会在安装包里重复一份 |
