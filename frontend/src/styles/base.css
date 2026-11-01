@@ -1,0 +1,18 @@
+/*
+ * The part of Tailwind's Preflight that shadcn/ui components assume, applied only to them
+ * (every one carries data-slot) until phase 4 brings in Preflight for the whole app:
+ * no native border, and a border utility draws in the theme's border colour, not currentColor.
+ */
+[data-slot],
+[data-slot] *,
+[data-slot]::before,
+[data-slot]::after,
+[data-slot] *::before,
+[data-slot] *::after {
+  border: 0 solid var(--border);
+}
+
+/* Row borders (border-b on <tr>) only draw on a collapsed table. */
+table[data-slot] {
+  border-collapse: collapse;
+}
