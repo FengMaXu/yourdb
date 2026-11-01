@@ -157,7 +157,12 @@ async function snapshot(browser, { url, viewport, clock, storage }) {
   const close = async () => { browser.listeners.delete(listener); await browser.send("Target.closeTarget", { targetId }).catch(() => undefined); };
   const listener = (message) => {
     if (message.sessionId !== sessionId) return;
-    if (message.method === "Runtime.exceptionThrown") errors.push(message.params.exceptionDetails.exception?.description ?? message.params.exceptionDetails.text);
+    if (message.method === "Runtime.exceptionThrown") {
+      const details = message.params.exceptionDetails;
+      const text = details.exception?.description ?? details.text;
+      // The browser's own built-in extensions (Edge's translate helper, say) can throw in the page; only the app's errors count.
+      if (!/chrome-extension:\/\//.test(`${details.url ?? ""} ${text}`)) errors.push(text);
+    }
     if (message.method === "Network.requestWillBeSent") { inflight.add(message.params.requestId); lastActivity = Date.now(); }
     if (message.method === "Network.loadingFinished" || message.method === "Network.loadingFailed") { inflight.delete(message.params.requestId); lastActivity = Date.now(); }
   };
