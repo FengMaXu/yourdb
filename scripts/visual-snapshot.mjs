@@ -8,7 +8,7 @@
  *
  *   node scripts/visual-snapshot.mjs --update          write the baselines (run on develop)
  *   node scripts/visual-snapshot.mjs                   compare against them (run on the branch)
- *   node scripts/visual-snapshot.mjs --only chat       only pages whose name contains "chat"
+ *   node scripts/visual-snapshot.mjs --only chat,mcp   only pages whose name contains "chat" or "mcp"
  *
  * Options: --baseline <dir> (default .artifacts/visual/baseline), --out <dir> (default
  * .artifacts/visual/current; diffs go to <out>/diff), --max-diff-ratio <n> (share of pixels
@@ -35,7 +35,7 @@ import { buildVisualFixture, startVisualHost } from "./visual-fixture.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const option = (name, fallback) => { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : fallback; };
 const update = process.argv.includes("--update");
-const only = option("--only");
+const only = option("--only")?.split(",").map((name) => name.trim()).filter(Boolean);
 const baselineDir = path.resolve(root, option("--baseline", ".artifacts/visual/baseline"));
 const outDir = path.resolve(root, option("--out", ".artifacts/visual/current"));
 const maxDiffRatio = Number(option("--max-diff-ratio", "0.001"));
@@ -124,9 +124,11 @@ async function launch(userDataDir) {
       if (message.error) reject(new Error(`${message.error.message} ${message.error.data ?? ""}`)); else resolve(message.result);
     } else for (const listener of listeners) listener(message);
   });
+  // A renderer that dies (for example out of memory) never answers: fail the call instead of hanging the run.
   const send = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = nextId++;
-    pending.set(id, { resolve, reject });
+    const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} got no answer within 60 s`)); }, 60_000);
+    pending.set(id, { resolve: (value) => { clearTimeout(timer); resolve(value); }, reject: (error) => { clearTimeout(timer); reject(error); } });
     socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
   });
   return { send, listeners, close: () => { socket.close(); child.kill(); } };
@@ -244,7 +246,7 @@ try {
   const tasks = (await runtime("task.list")).items;
   const sessions = (await Promise.all(tasks.map((task) => runtime("session.list", { taskId: task.id })))).flatMap((result, index) => result.items.map((item) => ({ ...item, taskId: tasks[index].id })));
 
-  for (const page of PAGES.filter((item) => !only || item.name.includes(only))) {
+  for (const page of PAGES.filter((item) => !only || only.some((name) => item.name.includes(name)))) {
     for (const viewport of VIEWPORTS) {
       const name = `${page.name}--${viewport.name}`;
       const session = page.session ? sessions.find((item) => item.name === page.session) : undefined;
