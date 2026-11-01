@@ -975,7 +975,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     return (
         <main id="main-content" className="chat-area" aria-labelledby="chat-page-title">
             <header className="breadcrumb-header">
-                <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
+                <h1 id="chat-page-title" className="legacy-sr-only">{t('chat.pageTitle')}</h1>
                 <div className="breadcrumb-main">
                     <span className="breadcrumb-mark" aria-hidden="true">
                         <AgentOrbitIcon
@@ -1012,7 +1012,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             <div
                 ref={chatContainerRef}
                 onScroll={handleScroll}
-                className="chat-message-list scrollable-area flex flex-col gap-6 p-6"
+                className="chat-message-list scrollable-area"
             >
                 {messages.length === 0 && (
                     <div className="chat-starter">
@@ -1081,7 +1081,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
 
                 {pendingClarification && (
                     <div className="message agent clarification-message" role="alert" aria-live="assertive">
-                        <div className="agent-icon-red is-idle flex-shrink-0 flex items-center justify-center">
+                        <div className="agent-icon-red is-idle">
                             <AgentOrbitIcon size={32} animated={false} className="agent-message-icon" />
                         </div>
                         <div className="message-content-wrapper">
@@ -1142,7 +1142,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="chat-input-container p-4 border-t border-gray-100 bg-white">
+            <div className="chat-input-container">
                 {attachedFiles.length > 0 && (
                     <ul className="chat-attachments" aria-label={t('chat.attachedFiles')}>
                         {attachedFiles.map((file) => (
@@ -1183,11 +1183,11 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         title={t('chat.uploadTooltip')}
                         aria-label={t('chat.uploadTooltip')}
                     >
-                        {isUploading ? <Loader2 size={18} className="animate-spin" /> : <Paperclip size={18} />}
+                        {isUploading ? <Loader2 size={18} className="legacy-animate-spin" /> : <Paperclip size={18} />}
                     </button>
                     <textarea
                         ref={textareaRef}
-                        className="chat-input flex-1"
+                        className="chat-input"
                         placeholder={isStreaming ? (t('chat.steerPlaceholder') || '执行中补充说明...') : t('chat.placeholder')}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -1234,7 +1234,7 @@ const ChatArea: React.FC<ChatAreaProps> = (props) => {
     return (
         <main id="main-content" className="chat-area" aria-labelledby="chat-page-title">
             <header className="breadcrumb-header">
-                <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
+                <h1 id="chat-page-title" className="legacy-sr-only">{t('chat.pageTitle')}</h1>
                 <div className="breadcrumb-main">
                     <span className="breadcrumb-mark" aria-hidden="true">
                         <AgentOrbitIcon size={32} className="breadcrumb-icon is-idle" animated={false} />

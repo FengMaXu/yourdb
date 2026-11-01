@@ -134,7 +134,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
 
     return (
         <div className="message agent agent-turn">
-            <div className={`agent-icon-red flex-shrink-0 flex items-center justify-center ${running ? 'is-running' : 'is-idle'}`}>
+            <div className={`agent-icon-red ${running ? 'is-running' : 'is-idle'}`}>
                 <AgentOrbitIcon size={32} animated={running} className="agent-message-icon" />
             </div>
             <div className="message-content-wrapper">
@@ -164,7 +164,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 )}
 
                 {resultText && (
-                    <div className="message-content prose prose-sm max-w-none agent-message-body markdown-content agent-turn-result">
+                    <div className="message-content agent-message-body markdown-content agent-turn-result">
                         <AgentMarkdown currentSessionId={currentSessionId}>{resultText}</AgentMarkdown>
                     </div>
                 )}

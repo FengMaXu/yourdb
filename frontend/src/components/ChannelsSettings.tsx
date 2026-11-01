@@ -28,7 +28,7 @@ const QrLink: React.FC<{ url: string; expiresAt: number }> = ({ url, expiresAt }
     const seconds = Math.max(0, Math.round((expiresAt - now) / 1000));
     return (
         <div className="channel-qr">
-            {image ? <img src={image} width={168} height={168} alt="用飞书扫码接入" /> : <Loader2 size={24} className="animate-spin" />}
+            {image ? <img src={image} width={168} height={168} alt="用飞书扫码接入" /> : <Loader2 size={24} className="legacy-animate-spin" />}
             <div className="channel-qr-text">
                 <div>用手机飞书扫码，按页面提示创建机器人并确认授权。</div>
                 <div>也可以 <a href={url} target="_blank" rel="noreferrer">在本机飞书中打开</a>。</div>
@@ -110,7 +110,7 @@ const AccessList: React.FC = () => {
                 </div>
                 <button type="button" className="ui-btn" onClick={() => { void apply(listChannelAccessViaRuntime); }}>刷新</button>
             </div>
-            {!access ? <Loader2 size={20} className="animate-spin" /> : (
+            {!access ? <Loader2 size={20} className="legacy-animate-spin" /> : (
                 <>
                     <div>
                         <h4 className="ui-subhead">待处理的申请</h4>
@@ -195,7 +195,7 @@ const ChannelsSettings: React.FC = () => {
     if (unavailable) {
         return <p className="ui-lead">当前运行方式没有启用消息渠道，或暂时无法读取渠道状态。</p>;
     }
-    if (!channels) return <Loader2 size={20} className="animate-spin" />;
+    if (!channels) return <Loader2 size={20} className="legacy-animate-spin" />;
 
     return (
         <div className="settings-tab-content ui-stack ui-enter">
@@ -211,7 +211,7 @@ const ChannelsSettings: React.FC = () => {
                             <h3 className="ui-card-title">{channel.label}<span className="ui-pill" data-tone={state.tone}>{state.text}</span></h3>
                             {channel.provisionable && (
                                 <button type="button" className={channel.state === 'unconfigured' ? 'ui-btn ui-btn-primary' : 'ui-btn'} disabled={working} onClick={() => run(channel.id, provisionChannelViaRuntime)}>
-                                    {working ? <Loader2 size={16} className="animate-spin" /> : null}
+                                    {working ? <Loader2 size={16} className="legacy-animate-spin" /> : null}
                                     {channel.state === 'unconfigured' ? '扫码接入' : '重新扫码'}
                                 </button>
                             )}
