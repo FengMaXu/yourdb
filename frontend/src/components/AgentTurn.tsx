@@ -67,9 +67,11 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
     const widgets = agents.flatMap((agent) => Object.values(agent.widgetsById));
     const lastAgent = agents[agents.length - 1];
 
-    // Open while running, folded once done; a click by the user wins from then on.
+    // Open while running, folded once done unless the turn ended without a result
+    // (interrupted, or stopped after a tool): then the process is all there is to read.
+    // A click by the user wins from then on.
     const [userOpen, setUserOpen] = useState<boolean | null>(null);
-    const open = userOpen ?? running;
+    const open = userOpen ?? (running || !resultText);
 
     // Time the turn: a clock while running, the moment it finished afterwards.
     const [now, setNow] = useState(() => Date.now());

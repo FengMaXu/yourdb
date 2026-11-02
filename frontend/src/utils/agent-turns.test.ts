@@ -49,13 +49,42 @@ describe('splitTurn', () => {
         expect(view.steps.map((step) => step.kind)).toEqual(['thought', 'note', 'tool', 'thought']);
     });
 
-    it('keeps tool calls made after the last text inside the process', () => {
+    it('keeps text followed by a tool call in the process, with no result yet', () => {
         const view = splitTurn([
             agent('a1', { content: 'Working on it.' }),
             agent('a2', { toolCallsById: { c1: { toolCallId: 'c1' } } }),
         ]);
-        expect(view.resultText).toBe('Working on it.');
-        expect(view.steps.map((step) => step.kind)).toEqual(['tool']);
+        expect(view.result).toBeUndefined();
+        expect(view.resultText).toBe('');
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool']);
+    });
+
+    it('keeps text written alongside a tool call in the process', () => {
+        const view = splitTurn([
+            agent('a1', { toolCallsById: { c1: { toolCallId: 'c1' } } }),
+            agent('a2', { content: 'Two things to confirm first:', toolCallsById: { c2: { toolCallId: 'c2' } } }),
+        ]);
+        expect(view.result).toBeUndefined();
+        expect(view.steps.map((step) => step.kind)).toEqual(['tool', 'note', 'tool']);
+    });
+
+    it('keeps text followed by a skill activation in the process', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Loading the chart guide.' }),
+            agent('a2', { skillActivations: [{ name: 'chart' }] as TurnAgentLike['skillActivations'] }),
+        ]);
+        expect(view.result).toBeUndefined();
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'skill']);
+    });
+
+    it('takes the final text after the last tool call as the result', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Checking.', toolCallsById: { c1: { toolCallId: 'c1' } } }),
+            agent('a2', { reasoningContent: 'done' }),
+            agent('a3', { content: 'Answer.' }),
+        ]);
+        expect(view.result?.id).toBe('a3');
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool', 'thought']);
     });
 
     it('has no result when the agent wrote no text', () => {
