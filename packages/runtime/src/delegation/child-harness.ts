@@ -12,6 +12,7 @@ import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-s
 import type { ChildExecutionRequest, ChildExecutor, ChildRecovery, ChildUsage, DelegationLedgerRecord, RawChildExecution } from "./index.js";
 import { ToolPromptCatalog } from "../agent/tool-prompt-catalog.js";
 import { withToolPromptCatalog } from "../agent/tool-prompt-models.js";
+import { withCoalescedDeltas } from "../agent/coalesced-stream-models.js";
 import { infrastructureFailureOf } from "../agent/infrastructure-failure.js";
 
 /** Explorers answer bounded fact questions; fewer turns keep the parent waiting less. */
@@ -316,7 +317,7 @@ export class HarnessChildExecutor implements ChildExecutor {
         return outcome;
       }
       const tools = request.toolDefinitions.map((definition) => definition.tool);
-      const models = withToolPromptCatalog(boundedModels(this.options.models, budget), new ToolPromptCatalog(request.toolDefinitions));
+      const models = withCoalescedDeltas(withToolPromptCatalog(boundedModels(this.options.models, budget), new ToolPromptCatalog(request.toolDefinitions)));
       const created = await AgentHarness.create({
         session,
         models,

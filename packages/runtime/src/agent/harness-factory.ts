@@ -19,6 +19,7 @@ import { createPiAgentController } from "../facets/agent-controller.js";
 import { unwrapApplicationSession, type SessionInput } from "../session-store.js";
 import { ToolPromptCatalog } from "./tool-prompt-catalog.js";
 import { withToolPromptCatalog } from "./tool-prompt-models.js";
+import { withCoalescedDeltas } from "./coalesced-stream-models.js";
 import { isSkillAvailable, renderSkillCatalog, type SkillCatalogEntry } from "./skill-prompt-catalog.js";
 import { LENGTH_CONTINUATION_PROMPT, LengthContinuationGuard } from "./length-continuation.js";
 import { RUNTIME_INJECTED_LABEL } from "../runtime-injected.js";
@@ -257,9 +258,10 @@ export async function createPiSessionHost(options: DataAgentSessionHostOptions):
     ...definition,
     tool: tools[index]!,
   }));
-  const models = withToolPromptCatalog(piRuntime.models, new ToolPromptCatalog(effectiveDefinitions), {
+  // Gathered deltas keep the session file from storing one durable frame per streamed token.
+  const models = withCoalescedDeltas(withToolPromptCatalog(piRuntime.models, new ToolPromptCatalog(effectiveDefinitions), {
     renderPreamble: (activeToolNames) => renderSkillCatalog(currentSkills(), activeToolNames, grantedToolNames),
-  });
+  }));
   const created = await AgentHarness.create({
     session: nativeSession,
     models,
