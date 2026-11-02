@@ -31,6 +31,16 @@ describe("protocol application host", () => {
     expect(runtime.replayAfter(300, { userId: "local" })).toEqual({ events: [], complete: true });
   });
 
+  it("names its event stream by instance, so a cursor from another process is recognizable", async () => {
+    const runtime = new DataAgentRuntime();
+    await runtime.dispatch({ protocolVersion: 1, requestId: "req-1", command: { type: "runtime.probe" } }, context);
+    const position = runtime.eventStreamPosition();
+    expect(position.latestSequence).toBe(1);
+    expect(position.instanceId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(runtime.eventStreamPosition().instanceId).toBe(position.instanceId);
+    expect(new DataAgentRuntime().eventStreamPosition().instanceId).not.toBe(position.instanceId);
+  });
+
   it("requires a native Application Agent adapter to return an operation identity", async () => {
     const runtime = new DataAgentRuntime({ agent: { prompt: async () => ({ operationId: "pi-operation-1" }) } });
     const result = await runtime.dispatch({ protocolVersion: 1, requestId: "prompt", command: { type: "agent.prompt", prompt: "hello" } }, context);

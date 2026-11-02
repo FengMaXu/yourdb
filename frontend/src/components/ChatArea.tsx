@@ -19,7 +19,7 @@ import {
     type AgentProgressStage,
     type AgentTerminalReason,
 } from '../api/client';
-import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime } from '../api/runtime-client';
+import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeConnectionState, type RuntimeResyncReason, type RuntimeSessionState } from '../api/runtime-client';
 import { attachRunViaRuntime, sendChatViaRuntime, type ChatStreamOptions, type RuntimeChatHandle } from '../api/chat-events';
 import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData } from './ToolPanel';
@@ -108,6 +108,10 @@ const advanceStage = (message: AgentMessage, stage: AgentProgressStage): AgentMe
         visitedStages,
     };
 };
+
+/** A resync reads the session state up to this many times, waiting 1, 2, 4… s between tries. */
+const RESYNC_ATTEMPTS = 4;
+const RESYNC_RETRY_MS = 1_000;
 
 const setTerminalReason = (message: AgentMessage, reason: AgentTerminalReason): AgentMessage => ({
     ...message,
@@ -252,11 +256,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>(() => currentTranscript.map(fromSnapshotMessage));
     const [isStreaming, setIsStreaming] = useState(false);
-    const [isStreamReconnecting, setIsStreamReconnecting] = useState(false);
+    const [streamConnection, setStreamConnection] = useState<RuntimeConnectionState>('connected');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | null>(null);
+    // interrupted: the run ended with a server that went away; nothing reported how.
+    // rejected: the server refused to stream the session's events (signed out, no access).
+    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | 'interrupted' | 'rejected' | null>(null);
     const [pendingClarification, setPendingClarification] = useState<ClarificationRequest | null>(null);
     const [clarificationInput, setClarificationInput] = useState('');
     const [isSubmittingClarification, setIsSubmittingClarification] = useState(false);
@@ -320,7 +326,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         currentSessionIdRef.current = currentSession.id;
         replaceWithSnapshot(currentTranscript);
         setIsStreaming(false);
-        setIsStreamReconnecting(false);
+        setStreamConnection('connected');
         setRunReason(null);
         setPendingClarification(null);
         setClarificationInput('');
@@ -344,7 +350,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             replaceWithSnapshot(state.messages);
             setIsStreaming(true);
             followRun(sessionId, (onEvent, onError, onFinish, streamSessionId, stream) => (
-                attachRunViaRuntime(runId, state.eventSequence, onEvent, onError, onFinish, streamSessionId, stream)
+                attachRunViaRuntime(runId, { sequence: state.eventSequence, ...(state.eventInstance ? { instance: state.eventInstance } : {}) }, onEvent, onError, onFinish, streamSessionId, stream)
             ), true);
         }).catch((error) => console.error('Failed to read the session state', error));
         return () => { superseded = true; };
@@ -584,7 +590,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         let streamLostEvents = lostEvents;
-        streamHandleRef.current = start(
+        const handle: RuntimeChatHandle = start(
             (event: SSEEvent) => {
                 if (event.session_id && event.session_id !== currentSessionIdRef.current) {
                     return;
@@ -889,28 +895,88 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 setIsStreaming(false);
             },
             () => {
-                if (flushTimer) {
-                    clearTimeout(flushTimer);
-                    flushTimer = null;
-                }
-                flushAllBuffers();
-                setIsStreaming(false);
-                setIsSubmittingClarification(false);
-                activeAgentMessageIdRef.current = null;
-                pendingAgentMessageIdRef.current = null;
-                streamHandleRef.current = null;
-                setIsStreamReconnecting(false);
+                endRun();
                 if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             runSessionId,
             {
-                onResync: () => {
+                // Callbacks run after start() returned (the stream connects asynchronously), so `handle` is set.
+                onResync: (reason) => {
                     streamLostEvents = true;
-                    void resyncFromServer(runSessionId);
+                    void resyncRun(runSessionId, handle, reason, endRun);
                 },
-                onConnectionChange: (state) => setIsStreamReconnecting(state === 'reconnecting'),
+                onConnectionChange: (state) => {
+                    if (state !== 'rejected') {
+                        setStreamConnection(state);
+                        return;
+                    }
+                    // Retrying cannot help: stop following, and say why.
+                    if (streamHandleRef.current !== handle) return;
+                    handle.detach();
+                    endRun();
+                    setRunReason('rejected');
+                },
             },
         );
+        /** Every way a followed run ends locally: flush what was buffered and stop following. */
+        function endRun() {
+            if (flushTimer) {
+                clearTimeout(flushTimer);
+                flushTimer = null;
+            }
+            flushAllBuffers();
+            setIsStreaming(false);
+            setIsSubmittingClarification(false);
+            activeAgentMessageIdRef.current = null;
+            pendingAgentMessageIdRef.current = null;
+            streamHandleRef.current = null;
+            setStreamConnection('connected');
+        }
+        streamHandleRef.current = handle;
+    };
+
+    /**
+     * After a resync, one session state read tells what became of the run
+     * being followed. Still in progress: reload the conversation from that
+     * state and follow on. Over (no run, or another one): the run ended while
+     * its events were not followed, so the conversation is reloaded from the
+     * server and the turn closes. Only a server restart makes that ending an
+     * interruption; evicted events mean it finished normally. A run whose id
+     * is not known yet (its prompt is still being dispatched) is left to the
+     * dispatch.
+     */
+    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle, reason: RuntimeResyncReason, endRun: () => void) => {
+        const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === sessionId;
+        let state: RuntimeSessionState | undefined;
+        for (let attempt = 0; attempt < RESYNC_ATTEMPTS && current(); attempt += 1) {
+            try {
+                state = await getSessionStateViaRuntime(sessionId);
+                break;
+            } catch (error) {
+                console.error('Failed to read the session state for a resync', error);
+                if (attempt < RESYNC_ATTEMPTS - 1) await new Promise((resolve) => setTimeout(resolve, RESYNC_RETRY_MS * 2 ** attempt));
+            }
+        }
+        if (!current()) return;
+        const followed = handle.runId();
+        if (state) {
+            if (followed === undefined) return;
+            if (state.inProgressRun?.runId === followed) {
+                replaceWithSnapshot(state.messages);
+                return;
+            }
+        } else if (reason !== 'restarted') {
+            // Unreadable after every attempt: only a restart is reason enough to stop following.
+            return;
+        }
+        handle.detach();
+        endRun();
+        setPendingClarification(null);
+        if (state) replaceWithSnapshot(state.messages);
+        // After a restart the run was cut off. Otherwise it ended unseen: the server's
+        // transcript tells a failure; how else it ended is not known, so no status is claimed.
+        const lastAgent = state?.messages.filter((message) => message.role === 'agent').at(-1);
+        setRunReason(reason === 'restarted' ? 'interrupted' : lastAgent?.terminalReason === 'error' ? 'error' : null);
     };
 
     const handlePrimaryAction = async () => {
@@ -964,14 +1030,22 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const items = groupIntoTurns<UserMessage, AgentMessage>(messages);
         // A run that has not produced a step yet still shows that it is working.
         const last = items[items.length - 1];
-        if (isStreaming && last?.kind === 'user') {
+        if ((isStreaming || runReason === 'interrupted' || runReason === 'rejected') && last?.kind === 'user') {
             items.push({ kind: 'turn', key: `turn-${last.message.id}`, ...(last.message.timestamp !== undefined ? { startedAt: last.message.timestamp } : {}), agents: [] });
         }
         return items;
     })();
+    // One notice for the latest turn: the run was interrupted, or its event stream is down.
+    const turnNotice = runReason === 'interrupted'
+        ? t('chat.runInterrupted')
+        : runReason === 'rejected'
+            ? t('chat.streamRejected')
+            : !isStreaming || streamConnection === 'connected'
+                ? ''
+                : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
-        : (isStreaming && isStreamReconnecting ? t('chat.streamReconnecting') : '') || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
+        : turnNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
 
     return (
         <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
@@ -1072,7 +1146,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                             running={isStreaming && index === chatItems.length - 1}
                             startedAt={item.startedAt}
                             currentSessionId={currentSession.id}
-                            reconnecting={isStreaming && isStreamReconnecting && index === chatItems.length - 1}
+                            connectionNotice={index === chatItems.length - 1 ? turnNotice : ''}
                             toolLabel={(tool) => getToolHintLabel(tool, t)}
                             skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
                             onOpenToolPanel={onOpenToolPanel}
@@ -1167,7 +1241,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     {uploadError
                         ? <span className="text-[var(--status-error)]" role="alert">{t('chat.uploadFailed')}</span>
                         : <span>{isStreaming ? t('chat.steerHint') : null}</span>}
-                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : t('tools.statusError')}</span>}
+                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : runReason === 'interrupted' || runReason === 'rejected' ? t('chat.interrupted') : t('tools.statusError')}</span>}
                 </div>
                 <div className="relative flex min-h-14 items-end gap-2 rounded-[20px] border border-[var(--hairline)] bg-[var(--surface-bg)] px-3 py-2 shadow-none transition-[border-color,box-shadow,transform] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                     <input

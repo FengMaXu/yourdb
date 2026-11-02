@@ -134,7 +134,7 @@ describe('runtime chat event replay', () => {
     it('follows an already running run from the snapshot cursor without sending a prompt', async () => {
         const events: unknown[] = [];
         const onFinish = vi.fn();
-        const handle = attachRunViaRuntime('run-7', 41, (event) => events.push(event), vi.fn(), onFinish, 'session-1');
+        const handle = attachRunViaRuntime('run-7', { sequence: 41 }, (event) => events.push(event), vi.fn(), onFinish, 'session-1');
         await handle.finished;
         expect(runtimeOptions?.afterSequence).toBe(41);
         expect(dispatch).not.toHaveBeenCalled();
@@ -145,14 +145,14 @@ describe('runtime chat event replay', () => {
     });
 
     it('stops a followed run by its id, and detaching leaves it running', async () => {
-        const stopped = attachRunViaRuntime('run-7', 0, vi.fn(), vi.fn(), vi.fn(), 'session-1');
+        const stopped = attachRunViaRuntime('run-7', { sequence: 0 }, vi.fn(), vi.fn(), vi.fn(), 'session-1');
         await stopped.finished;
         stopped.cancel();
         expect(dispatch).toHaveBeenCalledWith({ type: 'agent.stop', operationId: 'run-7' }, 'session-1');
 
         dispatch.mockClear();
         const onFinish = vi.fn();
-        const detached = attachRunViaRuntime('run-8', 0, vi.fn(), vi.fn(), onFinish, 'session-1');
+        const detached = attachRunViaRuntime('run-8', { sequence: 0 }, vi.fn(), vi.fn(), onFinish, 'session-1');
         await detached.finished;
         detached.detach();
         expect(dispatch).not.toHaveBeenCalled();

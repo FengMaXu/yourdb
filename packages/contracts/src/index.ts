@@ -101,6 +101,8 @@ const SessionTranscriptResponseSchema = Type.Object({ type: Type.Literal("sessio
   pendingClarification: Type.Optional(Type.Union([Type.Object({ clarificationId: Type.String(), question: Type.String(), options: Type.Array(Type.String()) }), Type.Null()])),
   /** Last event sequence emitted before the snapshot; a client resumes the event stream after it. */
   eventSequence: Type.Optional(Type.Integer({ minimum: 0 })),
+  /** The server instance that issued eventSequence: sequences restart with the process. */
+  eventInstance: Type.Optional(Type.String()),
 });
 const ConfigGetResponseSchema = Type.Object({ type: Type.Literal("config.get.result"), config: Type.Unknown() });
 const ConfigSaveResponseSchema = Type.Object({ type: Type.Literal("config.save.result"), saved: Type.Boolean() });

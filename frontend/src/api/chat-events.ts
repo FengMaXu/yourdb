@@ -7,6 +7,8 @@ export interface RuntimeChatHandle {
   cancel: () => void;
   /** Stop following the stream only; the run continues on the server. */
   detach: () => void;
+  /** The run being followed, once the server has accepted it. */
+  runId: () => string | undefined;
   finished: Promise<void>;
 }
 
@@ -223,14 +225,14 @@ export function sendChatViaRuntime(
  */
 export function attachRunViaRuntime(
   runId: string,
-  afterSequence: number,
+  cursor: { readonly sequence: number; readonly instance?: string },
   onEvent: (event: SSEEvent) => void,
   onError: (err: unknown) => void,
   onFinish: () => void,
   sessionId?: string,
   stream: ChatStreamOptions = {},
 ): RuntimeChatHandle {
-  return streamRuntimeChat({ onEvent, onError, onFinish, sessionId, stream, afterSequence }, async () => runId);
+  return streamRuntimeChat({ onEvent, onError, onFinish, sessionId, stream, afterSequence: cursor.sequence, ...(cursor.instance ? { afterInstance: cursor.instance } : {}) }, async () => runId);
 }
 
 function streamRuntimeChat(
@@ -241,6 +243,7 @@ function streamRuntimeChat(
     readonly sessionId?: string;
     readonly stream: ChatStreamOptions;
     readonly afterSequence?: number;
+    readonly afterInstance?: string;
   },
   start: () => Promise<string | undefined>,
 ): RuntimeChatHandle {
@@ -291,6 +294,7 @@ function streamRuntimeChat(
   }, sessionId, {
     ...stream,
     ...(handlers.afterSequence !== undefined ? { afterSequence: handlers.afterSequence } : {}),
+    ...(handlers.afterInstance !== undefined ? { afterInstance: handlers.afterInstance } : {}),
     onConnected: () => markConnected(),
   });
   const finished = (async () => {
@@ -318,6 +322,7 @@ function streamRuntimeChat(
       isDone = true;
       unsubscribe();
     },
+    runId: () => operationId,
     finished,
   };
 }

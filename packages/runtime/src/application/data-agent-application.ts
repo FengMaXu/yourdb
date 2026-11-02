@@ -186,6 +186,7 @@ export class DataAgentApplication implements ApplicationCommandHost {
   }
   subscribe(listener: (event: DataAgentEventEnvelope) => void, filter?: ApplicationEventFilter): () => void { return this.runtime.subscribe(listener, filter); }
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay { return this.runtime.replayAfter(sequence, filter); }
+  eventStreamPosition(): { readonly instanceId: string; readonly latestSequence: number } { return this.runtime.eventStreamPosition(); }
 
   getConfig(key: string): Promise<unknown> { return this.metadata.getConfig(key); }
   setConfig(key: string, value: unknown): Promise<void> { return this.metadata.setConfig(key, value); }

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   DataAgentEventEnvelopeSchema,
   DataAgentResponseEnvelopeSchema,
@@ -112,6 +113,8 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   get clarificationManager(): ClarificationManager { return this.clarifications; }
   /** Correlation only: Pi owns the operation lifecycle and durable state. */
   private nextSequence = 1;
+  /** Event sequences restart with the process; this tells one process's cursors from another's. */
+  private readonly instanceId = randomUUID();
   private agent: RuntimeAgent | undefined;
 
   constructor(options: { metadata?: MetadataStore; sessions?: RuntimeSessionStore; workspace?: WorkspaceStore; pythonExecutable?: string; bundledPythonExecutable?: string; knowledge?: KnowledgeIndex; knowledgeRoot?: string; skillRoots?: string[]; projectRoot?: string; packagedRoot?: string; clarifications?: ClarificationManager; agent?: RuntimeAgent } = {}) {
@@ -146,6 +149,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
    * Replays buffered events after a cursor. The buffer is bounded, so a cursor
    * older than its first retained event means events were lost; `complete`
    * then tells the transport to have the client resynchronize from a snapshot.
+   * A cursor from another process is the transport's to detect, by instance.
    */
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay {
     const first = this.eventBuffer[0]?.sequence ?? this.nextSequence;
@@ -153,6 +157,10 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       events: this.eventBuffer.filter((event) => event.sequence > sequence && this.eventVisible(event, filter)),
       complete: sequence >= first - 1,
     };
+  }
+
+  eventStreamPosition(): { readonly instanceId: string; readonly latestSequence: number } {
+    return { instanceId: this.instanceId, latestSequence: this.nextSequence - 1 };
   }
 
   subscribe(listener: DataAgentEventListener, filter?: ApplicationEventFilter): () => void {
@@ -352,6 +360,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
         inProgressRun: current ? { runId: current.id, startedAt: current.startedAt } : null,
         pendingClarification: pending ? { clarificationId: pending.clarificationId, question: pending.question, options: [...pending.options] } : null,
         eventSequence,
+        eventInstance: this.instanceId,
       } };
     }
     if (command.command.type === "session.prepare") {

@@ -62,9 +62,39 @@ describe("runtime event stream", () => {
       const response = await fetch(`${address}/api/runtime/events?after_sequence=3`);
       const reader = response.body!.getReader();
       const text = await readUntil(reader, (value) => value.includes("event: resync"));
-      expect(text).toContain('event: resync\ndata: {"afterSequence":3}');
-      expect(text).not.toContain("id: ");
+      expect(text).toContain('event: resync\ndata: {"afterSequence":3,"latestSequence":300,"reason":"evicted"}');
+      expect(text.slice(text.indexOf("event: resync"))).not.toContain("id: ");
       await reader.cancel();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("says which instance it is first, and replays nothing against another instance's cursor", async () => {
+    const runtime = new DataAgentRuntime();
+    for (let index = 0; index < 3; index += 1) {
+      await runtime.dispatch({ protocolVersion: 1, requestId: `probe-${index}`, command: { type: "runtime.probe" } }, { userId: "web-dev", host: "web" });
+    }
+    const { instanceId } = runtime.eventStreamPosition();
+    const app = await createRuntimeServer(runtime, trustedWebContext);
+    const address = await app.listen({ port: 0, host: "127.0.0.1" });
+    try {
+      const same = await fetch(`${address}/api/runtime/events?after_sequence=1&instance=${instanceId}`);
+      const sameReader = same.body!.getReader();
+      const sameText = await readUntil(sameReader, (value) => value.includes("id: 3"));
+      expect(sameText).toContain(`event: hello\ndata: {"instanceId":"${instanceId}","latestSequence":3}`);
+      expect(sameText.indexOf("event: hello")).toBeLessThan(sameText.indexOf("id: 2"));
+      await sameReader.cancel();
+
+      const other = await fetch(`${address}/api/runtime/events?after_sequence=1&instance=previous-process`);
+      const otherReader = other.body!.getReader();
+      const otherText = await readUntil(otherReader, (value) => value.includes("event: resync"));
+      expect(otherText).toContain('event: resync\ndata: {"afterSequence":1,"latestSequence":3,"reason":"restarted"}');
+      await runtime.dispatch({ protocolVersion: 1, requestId: "after-restart", command: { type: "runtime.probe" } }, { userId: "web-dev", host: "web" });
+      const live = otherText + await readUntil(otherReader, (value) => value.includes("after-restart"));
+      expect(live).not.toContain("id: 2");
+      expect(live).toContain("id: 4");
+      await otherReader.cancel();
     } finally {
       await app.close();
     }

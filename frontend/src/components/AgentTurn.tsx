@@ -26,7 +26,8 @@ interface AgentTurnProps<A extends TurnAgentMessage> {
     running: boolean;
     startedAt?: number;
     currentSessionId: string;
-    reconnecting?: boolean;
+    /** Shown under the turn: the event stream is reconnecting or down, or the run was interrupted. */
+    connectionNotice?: string;
     toolLabel: (tool: ToolCallState) => string;
     skillLabel: (skill: A['skillActivations'][number]) => string;
     onOpenToolPanel?: () => void;
@@ -60,7 +61,7 @@ function Dot({ live }: { live: boolean }) {
  * remarks along the way), open while it runs and folded to one line when it is
  * done, followed by the result: its final text and every chart or table it made.
  */
-function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, currentSessionId, reconnecting, toolLabel, skillLabel, onOpenToolPanel }: AgentTurnProps<A>) {
+function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, currentSessionId, connectionNotice, toolLabel, skillLabel, onOpenToolPanel }: AgentTurnProps<A>) {
     const { t, language } = useLanguage();
     const lang = language === 'en' ? 'en' : 'zh';
     const { steps, result, resultText } = splitTurn(agents);
@@ -199,8 +200,8 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 {lastAgent?.retryNotice && (
                     <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{lastAgent.retryNotice}</span></div>
                 )}
-                {reconnecting && (
-                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{t('chat.streamReconnecting')}</span></div>
+                {connectionNotice && (
+                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{connectionNotice}</span></div>
                 )}
                 {result === undefined && !running && !hasProcess && lastAgent?.statusNotice && (
                     <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{lastAgent.statusNotice}</span></div>
