@@ -93,6 +93,8 @@ describe("Answering architecture boundaries", () => {
       fields: {
         ...scalarSpec,
         metric: "count",
+        reason: "the earlier value was a guess",
+        measures: { formula: { op: "count", of: "orders" } },
         output: { rowMode: "rows", rowCount: 4 },
         "measure.formula": { op: "average", of: "amount" },
         "selection.ties": "first",
@@ -100,6 +102,8 @@ describe("Answering architecture boundaries", () => {
     }, context("begin-paths"));
     const outcome = (path: string) => view.outcomes?.find((item) => item.path === path);
     expect(outcome("metric")).toMatchObject({ status: "rejected", message: expect.stringContaining("unknown field path metric") });
+    expect(outcome("reason")).toMatchObject({ status: "rejected", message: expect.stringContaining("reason is not a field path: it goes inside the field") });
+    expect(outcome("measures")).toMatchObject({ status: "rejected", message: expect.stringContaining('"measures.<name>"') });
     expect(outcome("output")).toMatchObject({ status: "rejected", message: 'output.rowMode "rows": use one of scalar, top_n, grouped, full, detail' });
     expect(outcome("measure.formula")).toMatchObject({ status: "rejected", message: expect.stringContaining("use one of count, count_distinct, sum") });
     expect(outcome("selection.ties")).toMatchObject({ status: "rejected", message: expect.stringContaining('"strict"') });

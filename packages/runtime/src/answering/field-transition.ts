@@ -167,7 +167,14 @@ function citeEvidence(path: string, cite: unknown, currentMessageId: string | un
 /** Parses one path's untrusted write. Pure and synchronous: nothing is checked against state yet. */
 export function parseFieldWrite(rawPath: string, input: unknown, currentMessageId?: string): ParsedField {
   const path = rawPath.trim();
-  if (!isSpecPath(path)) invalid(`unknown field path ${path}; use one of ${FIELD_PATHS.join(", ")}, or measures.<name> on a Report Task`);
+  if (!isSpecPath(path)) {
+    // Mistakes seen in practice get their own answer: a form key written as a path, and measures without a name.
+    if ((FORM_KEYS as readonly string[]).includes(path)) {
+      invalid(`${path} is not a field path: it goes inside the field it belongs to, e.g. {"population.entity": {"value": …, "${path}": …}}`);
+    }
+    if (path === "measures") invalid(`measures is written one measure per path, "measures.<name>": {formula, countGrain?, denominator?, window?}`);
+    invalid(`unknown field path ${path}; use one of ${FIELD_PATHS.join(", ")}, or measures.<name> on a Report Task`);
+  }
   if (input === "n/a") return { path, write: { kind: "not_applicable" }, evidence: [] };
   const body = record(input);
   // A value can itself be an object ({rowMode}, {op}, {name}); without any form key it is a bare value.

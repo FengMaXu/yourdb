@@ -36,7 +36,7 @@ export function assertDeliverable(tx: Pick<AnsweringTransaction, "getTask" | "ge
   const parent = tx.getTask(task.parent.taskId);
   if (!parent) throw new AnsweringError("TASK_NOT_FOUND", `Report Task ${task.parent.taskId} was not found`);
   if (parent.currentRevisionId !== task.parent.revisionId) {
-    throw new AnsweringError("PARENT_REVISION_STALE", `The Report Task changed since this chart query copied its shared fields; rebind the chart query to Revision ${parent.currentRevisionId}`, { currentRevisionId: parent.currentRevisionId });
+    throw new AnsweringError("PARENT_REVISION_STALE", `The Report Task changed since this chart query copied its shared fields; rebind it first with set_answer_spec({"taskId": "${task.taskId}", "rebind": true, "fields": {}}) and query the Revision that returns`, { currentRevisionId: parent.currentRevisionId });
   }
   const revision = tx.getRevision(parent.currentRevisionId);
   if (!revision) throw new AnsweringError("REVISION_NOT_FOUND", `Report Task Revision ${parent.currentRevisionId} was not found`);

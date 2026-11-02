@@ -568,6 +568,8 @@ export interface AnswerRevisionView {
   readonly deviations?: readonly Deviation[];
   /** The Report Task measure definition a chart query's measure is taken from. */
   readonly measureRef?: string;
+  /** For a Report Task: its chart queries still bound to an earlier Revision, which must rebind before querying. */
+  readonly staleChartQueries?: readonly TaskId[];
 }
 
 export interface QueryExecutionView {

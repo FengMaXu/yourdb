@@ -185,11 +185,16 @@ function applyWrites(base: FieldBody, writes: readonly PreparedWrite[], register
 }
 
 /** What the view adds about the call and the task rather than the Revision. */
-function taskExtras(tx: Pick<AnsweringTransaction, "getTask">, task: Pick<QueryTaskRecord, "role" | "parent">, outcomes?: readonly FieldOutcome[]): Partial<AnswerRevisionView> {
+function taskExtras(tx: Pick<AnsweringTransaction, "getTask" | "listChartQueries">, task: Pick<QueryTaskRecord, "taskId" | "currentRevisionId" | "role" | "parent">, outcomes?: readonly FieldOutcome[]): Partial<AnswerRevisionView> {
+  // A changed Report Task leaves its chart queries bound to the Revision they copied: say so before they are queried.
+  const stale = task.role === "report"
+    ? tx.listChartQueries(task.taskId).filter((chart) => chart.parent?.revisionId !== task.currentRevisionId).map((chart) => chart.taskId)
+    : [];
   return {
     ...(outcomes ? { outcomes } : {}),
     ...(task.role ? { role: task.role } : {}),
     ...(task.parent ? { parent: { ...task.parent, current: tx.getTask(task.parent.taskId)?.currentRevisionId === task.parent.revisionId } } : {}),
+    ...(stale.length > 0 ? { staleChartQueries: stale } : {}),
   };
 }
 

@@ -34,6 +34,15 @@ async function probed(answering: InMemoryAnswering, path: string) {
   return { view, observation, decide };
 }
 
+describe("selection.orderBy", () => {
+  it("takes the column and direction as text or as {column, direction}", () => {
+    expect(parseFieldValue("selection", { n: 10, orderBy: "revenue desc" })).toEqual({ n: 10, orderBy: "revenue desc" });
+    expect(parseFieldValue("selection", { n: 10, orderBy: { column: "revenue", direction: "DESC" } })).toEqual({ n: 10, orderBy: "revenue desc" });
+    expect(() => parseFieldValue("selection", { n: 10, orderBy: { column: "revenue", direction: "down" } })).toThrow('direction must be "asc" or "desc"');
+    expect(() => parseFieldValue("selection", { n: 10 })).toThrow('e.g. "revenue desc"');
+  });
+});
+
 describe("set: each path on its own, one Revision per call", () => {
   it("lands every applied path as one Revision charged once", async () => {
     const answering = service();
