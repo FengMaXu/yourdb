@@ -186,9 +186,10 @@ function applyWrites(base: FieldBody, writes: readonly PreparedWrite[], register
 
 /** What the view adds about the call and the task rather than the Revision. */
 function taskExtras(tx: Pick<AnsweringTransaction, "getTask" | "listChartQueries">, task: Pick<QueryTaskRecord, "taskId" | "currentRevisionId" | "role" | "parent">, outcomes?: readonly FieldOutcome[]): Partial<AnswerRevisionView> {
-  // A changed Report Task leaves its chart queries bound to the Revision they copied: say so before they are queried.
+  // A changed Report Task leaves its open chart queries bound to the Revision they copied: say so before they
+  // are queried. Published and closed ones keep what they delivered; rebinding would reopen them.
   const stale = task.role === "report"
-    ? tx.listChartQueries(task.taskId).filter((chart) => chart.parent?.revisionId !== task.currentRevisionId).map((chart) => chart.taskId)
+    ? tx.listChartQueries(task.taskId).filter((chart) => chart.lifecycle === "open" && chart.parent?.revisionId !== task.currentRevisionId).map((chart) => chart.taskId)
     : [];
   return {
     ...(outcomes ? { outcomes } : {}),

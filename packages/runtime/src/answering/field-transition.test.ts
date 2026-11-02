@@ -40,6 +40,10 @@ describe("selection.orderBy", () => {
     expect(parseFieldValue("selection", { n: 10, orderBy: { column: "revenue", direction: "DESC" } })).toEqual({ n: 10, orderBy: "revenue desc" });
     expect(() => parseFieldValue("selection", { n: 10, orderBy: { column: "revenue", direction: "down" } })).toThrow('direction must be "asc" or "desc"');
     expect(() => parseFieldValue("selection", { n: 10 })).toThrow('e.g. "revenue desc"');
+    // A direction that is there but unusable is refused, never read as ascending.
+    for (const direction of [1, "", "  "]) expect(() => parseFieldValue("selection", { n: 10, orderBy: { column: "revenue", direction } })).toThrow('direction must be "asc" or "desc"');
+    expect(() => parseFieldValue("selection", { n: 10, orderBy: { col: "revenue", dir: "desc" } })).toThrow("unknown keys col, dir");
+    expect(() => parseFieldValue("selection", { n: 10, orderBy: { direction: "desc" } })).toThrow("orderBy.column is required");
   });
 });
 

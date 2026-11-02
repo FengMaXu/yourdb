@@ -94,6 +94,8 @@ describe("Answering architecture boundaries", () => {
         ...scalarSpec,
         metric: "count",
         reason: "the earlier value was a guess",
+        "population.time.rationale": "the request names 2017",
+        ref: "revenue",
         measures: { formula: { op: "count", of: "orders" } },
         output: { rowMode: "rows", rowCount: 4 },
         "measure.formula": { op: "average", of: "amount" },
@@ -102,7 +104,9 @@ describe("Answering architecture boundaries", () => {
     }, context("begin-paths"));
     const outcome = (path: string) => view.outcomes?.find((item) => item.path === path);
     expect(outcome("metric")).toMatchObject({ status: "rejected", message: expect.stringContaining("unknown field path metric") });
-    expect(outcome("reason")).toMatchObject({ status: "rejected", message: expect.stringContaining("reason is not a field path: it goes inside the field") });
+    expect(outcome("reason")).toMatchObject({ status: "rejected", message: expect.stringContaining('"reason" goes inside the field it belongs to') });
+    expect(outcome("population.time.rationale")).toMatchObject({ status: "rejected", message: expect.stringContaining('{"population.time": {"value": …, "rationale": …}}') });
+    expect(outcome("ref")).toMatchObject({ status: "rejected", message: expect.stringContaining('{"measure.formula": {"ref": …}} (only on a chart query)') });
     expect(outcome("measures")).toMatchObject({ status: "rejected", message: expect.stringContaining('"measures.<name>"') });
     expect(outcome("output")).toMatchObject({ status: "rejected", message: 'output.rowMode "rows": use one of scalar, top_n, grouped, full, detail' });
     expect(outcome("measure.formula")).toMatchObject({ status: "rejected", message: expect.stringContaining("use one of count, count_distinct, sum") });

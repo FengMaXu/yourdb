@@ -280,12 +280,14 @@ function orderByText(value: unknown): string | undefined {
   const written = text(value);
   if (written) return written;
   const body = record(value);
-  const column = text(body?.column);
-  if (!body || !column) return undefined;
+  if (!body) return undefined;
   onlyKeys(body, ["column", "direction"], "selection.orderBy");
-  const direction = body.direction === undefined ? undefined : text(body.direction)?.toLowerCase();
-  if (direction !== undefined && direction !== "asc" && direction !== "desc") fail('selection.orderBy.direction must be "asc" or "desc"');
-  return direction ? `${column} ${direction}` : column;
+  const column = text(body.column) ?? fail('selection.orderBy.column is required, e.g. {"column": "revenue", "direction": "desc"}');
+  if (body.direction === undefined) return column;
+  // A direction that is there but unusable must not quietly become ascending.
+  const direction = typeof body.direction === "string" ? body.direction.trim().toLowerCase() : "";
+  if (direction !== "asc" && direction !== "desc") fail('selection.orderBy.direction must be "asc" or "desc"');
+  return `${column} ${direction}`;
 }
 
 function parseTies(value: unknown): TiesValue {
