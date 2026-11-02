@@ -16,6 +16,7 @@ import { usePreview } from '../context/PreviewContext';
 import {
     isInternalApiPath,
     isWorkspaceRelativePath,
+    workspaceLinkPath,
     resolveWorkspaceAssetUrl,
     resolveWorkspaceDownloadUrl,
     resolveWorkspacePreviewUrl,
@@ -165,8 +166,8 @@ export const createMarkdownComponents = (
         );
     },
     a: ({ href, children, ...props }) => {
-        const isWorkspaceLink = isInternalApiPath(href) || isWorkspaceRelativePath(href);
-        if (!isWorkspaceLink) {
+        const isWorkspaceLink = isInternalApiPath(href) || workspaceLinkPath(href) !== undefined;
+        if (!href || !isWorkspaceLink) {
             return (
                 <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
                     {children}

@@ -51,7 +51,7 @@ allowed-tools:
 
 ### 第五步：撰写报告
 
-用 `write_file` 生成 Markdown 报告，结构为：摘要 → 数据概览 → 关键发现 → 图表 → 建议。
+用 `write_file` 把 Markdown 报告写到 `reports/<名字>.md`（不要写在工作区根目录），结构为：摘要 → 数据概览 → 关键发现 → 图表 → 建议。报告里引用图表写 `charts/<fileName>.svg`；回复里给报告链接写 `[报告标题](reports/<名字>.md)`，不要加前导 `/`。
 
 ## ChartSpec 速查
 

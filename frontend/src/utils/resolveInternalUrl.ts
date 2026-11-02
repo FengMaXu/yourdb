@@ -9,7 +9,8 @@
 import { API_BASE_URL, getAuthToken } from '../api/client';
 
 const INTERNAL_PREFIXES = ['/workspace/', '/api/'];
-const SESSION_RELATIVE_WORKSPACE_ROOTS = ['data', 'output', 'dashboards', 'reports'];
+/** Folders the runtime writes into at the session root (charts: render_chart's SVGs). */
+const SESSION_RELATIVE_WORKSPACE_ROOTS = ['data', 'output', 'dashboards', 'reports', 'charts'];
 const WORKSPACE_FILE_ENDPOINT = '/workspace/files/';
 const PUBLICATION_ENDPOINT = '/api/runtime/publications/';
 
@@ -24,6 +25,26 @@ export function isWorkspaceRelativePath(href: string | undefined): href is strin
     if (!value || /^(?:[a-z][a-z0-9+.-]*:|\/|#|\?|\/\/)/i.test(value)) return false;
     const firstSegment = value.replace(/^(?:\.\/)+/, '').split(/[/?#]/)[0] || '';
     return SESSION_RELATIVE_WORKSPACE_ROOTS.includes(firstSegment);
+}
+
+/**
+ * The workspace path a link in an agent's answer points to, relative to the
+ * session, or undefined when it is no workspace file. Agents link files in
+ * three ways: under a known folder (`reports/x.md`), at the session root
+ * (`olist_report.md`, any relative path with a file extension), or with a
+ * leading slash (`/dashboards/x.html`). Opened as plain links, the last two
+ * resolved against the app's URL and landed on its home page.
+ */
+export function workspaceLinkPath(href: string | undefined): string | undefined {
+    const value = href?.trim();
+    if (!value || /^(?:[a-z][a-z0-9+.-]*:|#|\?|\/\/)/i.test(value)) return undefined;
+    if (value.startsWith('/')) {
+        const rooted = value.slice(1);
+        return isWorkspaceRelativePath(rooted) ? rooted : undefined;
+    }
+    const fileName = value.split(/[?#]/)[0].split('/').pop() || '';
+    if (isWorkspaceRelativePath(value)) return value;
+    return /\.[a-z0-9]{1,8}$/i.test(fileName) ? value : undefined;
 }
 
 function appendAuthToken(url: string): string {
@@ -144,8 +165,9 @@ export function resolveInternalUrl(href: string | undefined, currentSessionId?: 
 export function resolveWorkspaceDownloadUrl(href: string | undefined, currentSessionId?: string): string {
     if (!href) return '';
     const value = href.trim();
-    if (isWorkspaceRelativePath(value)) {
-        const path = resolveRelativeWorkspacePath(value, undefined, currentSessionId);
+    const linked = workspaceLinkPath(value);
+    if (linked) {
+        const path = resolveRelativeWorkspacePath(linked, undefined, currentSessionId);
         return path ? buildWorkspaceFileUrl('download', path) : value;
     }
 
@@ -168,8 +190,9 @@ export function resolveWorkspaceDownloadUrl(href: string | undefined, currentSes
 export function resolveWorkspacePreviewUrl(href: string | undefined, currentSessionId?: string): string {
     if (!href) return '';
     const value = href.trim();
-    if (isWorkspaceRelativePath(value)) {
-        const path = resolveRelativeWorkspacePath(value, undefined, currentSessionId);
+    const linked = workspaceLinkPath(value);
+    if (linked) {
+        const path = resolveRelativeWorkspacePath(linked, undefined, currentSessionId);
         return path ? buildWorkspaceFileUrl('preview', path) : value;
     }
 

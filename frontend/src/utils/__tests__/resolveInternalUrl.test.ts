@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     isWorkspaceRelativePath,
+    workspaceLinkPath,
     resolveInternalUrl,
     resolveWorkspaceAssetUrl,
     resolveWorkspaceDownloadUrl,
@@ -14,6 +15,32 @@ describe('workspace markdown link resolution', () => {
         expect(isWorkspaceRelativePath('reports/summary.html')).toBe(true);
         expect(isWorkspaceRelativePath('https://example.com/result.csv')).toBe(false);
         expect(isWorkspaceRelativePath('/data/result.csv')).toBe(false);
+    });
+
+    it('takes every way an agent links a workspace file as a workspace link', () => {
+        expect(workspaceLinkPath('reports/summary.md')).toBe('reports/summary.md');
+        expect(workspaceLinkPath('charts/trend.svg')).toBe('charts/trend.svg');
+        // A report written at the session root, and a link with a leading slash.
+        expect(workspaceLinkPath('olist_2018H1_business_report.md')).toBe('olist_2018H1_business_report.md');
+        expect(workspaceLinkPath('/dashboards/sales.html')).toBe('dashboards/sales.html');
+        // Not workspace files: web links, anchors, app routes, API paths, a bare word.
+        for (const href of ['https://example.com/a.csv', '#top', '//cdn.example.com/x.js', '/app/settings', '/api/runtime/publications/p1', 'mailto:a@b.c', 'notes']) {
+            expect(workspaceLinkPath(href)).toBeUndefined();
+        }
+    });
+
+    it('resolves a report linked at the session root and a dashboard linked with a leading slash', () => {
+        const report = new URL(resolveWorkspacePreviewUrl('olist_2018H1_business_report.md', 'session-123'));
+        expect(report.pathname).toBe('/api/workspace/download');
+        expect(report.searchParams.get('path')).toBe('session-123/olist_2018H1_business_report.md');
+        const dashboard = new URL(resolveWorkspaceDownloadUrl('/dashboards/sales.html', 'session-123'));
+        expect(dashboard.searchParams.get('path')).toBe('session-123/dashboards/sales.html');
+    });
+
+    it('resolves a chart linked from a report in reports/ at the session root, where render_chart writes it', () => {
+        const source = '/workspace/files/preview?path=session-123%2Freports%2Folist.md';
+        const url = new URL(resolveWorkspaceAssetUrl('charts/trend.svg', source, 'session-123'));
+        expect(url.searchParams.get('path')).toBe('session-123/charts/trend.svg');
     });
 
     it('converts a relative CSV link to the authenticated download endpoint', () => {
