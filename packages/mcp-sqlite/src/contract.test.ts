@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createReferenceSqliteServer } from "./reference-sqlite-mcp.js";
+import { createSqliteServer } from "./index.js";
 import { DatabaseSync } from "node:sqlite";
 
-describe("Reference SQLite MCP Server", () => {
+describe("SQLite MCP server", () => {
   it("negotiates the contract, enforces limits, and blocks dangerous SQL", async () => {
     const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
     const dbPath = join(root, "ref.sqlite3");
@@ -17,7 +18,7 @@ describe("Reference SQLite MCP Server", () => {
     seed.prepare("INSERT INTO sales (region, amount) VALUES (?, ?)").run("south", 20);
     seed.close();
 
-    const { server, close } = createReferenceSqliteServer({ databasePath: dbPath });
+    const { server, close } = createSqliteServer({ databasePath: dbPath });
     const client = new Client({ name: "data-agent-test", version: "1.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -46,6 +47,11 @@ describe("Reference SQLite MCP Server", () => {
     const pragma = await client.callTool({ name: "execute_query_preview", arguments: { sql: "PRAGMA user_version" } });
     expect(JSON.parse((pragma.content as any)[0].text).error.code).toBe("FORBIDDEN_SQL");
 
+    // The byte limit truncates exactly where serializing the whole preview would.
+    const sized = JSON.parse(((await client.callTool({ name: "execute_query_preview", arguments: { sql: "SELECT * FROM sales ORDER BY id", limit: 10, maxBytes: 1_536 } })).content as any)[0].text);
+    expect(sized.rows).toHaveLength(2);
+    expect(sized.truncated).toBe(false);
+
     const union = await client.callTool({ name: "execute_query_preview", arguments: { sql: "SELECT region FROM sales UNION ALL SELECT region FROM sales" } });
     expect(JSON.parse((union.content as any)[0].text).rows).toHaveLength(4);
 
@@ -64,6 +70,50 @@ describe("Reference SQLite MCP Server", () => {
 
     await client.close();
     await close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("describes tables whose names are not bare identifiers, and only SQLite's own tables are hidden", async () => {
+    const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
+    const dbPath = join(root, "ref.sqlite3");
+    const seed = new DatabaseSync(dbPath);
+    seed.exec(`CREATE TABLE "Db-IMDB__Movie" (id INTEGER PRIMARY KEY, title TEXT UNIQUE);
+      CREATE TABLE "it's" (movie_id INTEGER REFERENCES "Db-IMDB__Movie"(id));
+      CREATE TABLE "sqlite-sakila__actor" (actor_id INTEGER);
+      CREATE VIEW titles AS SELECT title FROM "Db-IMDB__Movie";
+      ANALYZE;`);
+    seed.close();
+
+    const { server, close } = createSqliteServer({ databasePath: dbPath });
+    const client = new Client({ name: "data-agent-test", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const schema = JSON.parse(((await client.callTool({ name: "get_schema", arguments: {} })).content as any)[0].text).schema;
+    expect(schema).toEqual([
+      { table: "Db-IMDB__Movie", columns: expect.any(Array), primaryKey: ["id"], uniqueKeys: [["title"]] },
+      { table: "it's", columns: expect.any(Array), foreignKeys: [{ columns: ["movie_id"], references: { table: "Db-IMDB__Movie", columns: ["id"] } }] },
+      { table: "sqlite-sakila__actor", columns: expect.any(Array) },
+      { table: "titles", columns: [expect.objectContaining({ name: "title" })] },
+    ]);
+    await client.close();
+    close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("opens the file read-only and never creates a missing one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
+    const dbPath = join(root, "ref.sqlite3");
+    const seed = new DatabaseSync(dbPath);
+    seed.exec("CREATE TABLE sales (id INTEGER PRIMARY KEY)");
+    seed.close();
+
+    const { db, close } = createSqliteServer({ databasePath: dbPath });
+    expect(() => db.exec("INSERT INTO sales (id) VALUES (1)")).toThrow(/readonly/);
+    close();
+
+    const missing = join(root, "missing.sqlite");
+    expect(() => createSqliteServer({ databasePath: missing })).toThrow();
+    expect(existsSync(missing)).toBe(false);
     await rm(root, { recursive: true, force: true });
   });
 });
