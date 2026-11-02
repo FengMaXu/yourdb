@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 type Listener = (raw: unknown) => void;
 const runtime = vi.hoisted(() => ({
     listener: undefined as Listener | undefined,
-    options: undefined as { afterSequence?: number; onConnected?: () => void } | undefined,
+    options: undefined as { afterSequence?: number; onConnected?: () => void; onConnectionChange?: (state: string) => void } | undefined,
     state: undefined as unknown,
     subscribeCalls: 0,
     transcriptReloads: 0,
@@ -130,6 +130,20 @@ describe('ChatArea restoring a session', () => {
         await act(async () => { (runtime.options as { onResync?: (reason: string) => void } | undefined)?.onResync?.('evicted'); });
         await waitFor(() => expect(screen.getByText(/已完成的回答/)).toBeTruthy());
         expect(screen.queryByText(/服务中断，本轮没有完成/)).toBeNull();
+        expect(runtime.listener).toBeUndefined();
+    });
+
+    it('ends a followed run, saying why, when the server refuses its event stream', async () => {
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }],
+            inProgressRun: { runId: 'run-1', startedAt: 1 },
+            pendingClarification: null,
+            eventSequence: 41,
+        };
+        renderChat();
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+        await act(async () => { runtime.options?.onConnectionChange?.('rejected'); });
+        await waitFor(() => expect(screen.getAllByText(/服务拒绝了本会话的事件订阅/).length).toBeGreaterThan(0));
         expect(runtime.listener).toBeUndefined();
     });
 

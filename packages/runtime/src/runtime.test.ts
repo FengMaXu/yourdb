@@ -16,7 +16,7 @@ describe("protocol application host", () => {
     expect(result.response.type).toBe("runtime.probe.result");
     expect(events).toHaveLength(1);
     expect(runtime.replayAfter(0, { userId: "local" })).toMatchObject({ events: [expect.anything()], complete: true });
-    expect(runtime.replayAfter(1, { userId: "local" })).toEqual({ events: [], complete: true, latestSequence: 1 });
+    expect(runtime.replayAfter(1, { userId: "local" })).toEqual({ events: [], complete: true });
   });
 
   it("reports an incomplete replay once events after the cursor were evicted", async () => {
@@ -28,7 +28,7 @@ describe("protocol application host", () => {
     expect(stale.complete).toBe(false);
     expect(stale.events).toHaveLength(256);
     expect(runtime.replayAfter(44, { userId: "local" }).complete).toBe(true);
-    expect(runtime.replayAfter(300, { userId: "local" })).toEqual({ events: [], complete: true, latestSequence: 300 });
+    expect(runtime.replayAfter(300, { userId: "local" })).toEqual({ events: [], complete: true });
   });
 
   it("names its event stream by instance, so a cursor from another process is recognizable", async () => {

@@ -261,7 +261,8 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     const [uploadError, setUploadError] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
     // interrupted: the run ended with a server that went away; nothing reported how.
-    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | 'interrupted' | null>(null);
+    // rejected: the server refused to stream the session's events (signed out, no access).
+    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | 'interrupted' | 'rejected' | null>(null);
     const [pendingClarification, setPendingClarification] = useState<ClarificationRequest | null>(null);
     const [clarificationInput, setClarificationInput] = useState('');
     const [isSubmittingClarification, setIsSubmittingClarification] = useState(false);
@@ -894,17 +895,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 setIsStreaming(false);
             },
             () => {
-                if (flushTimer) {
-                    clearTimeout(flushTimer);
-                    flushTimer = null;
-                }
-                flushAllBuffers();
-                setIsStreaming(false);
-                setIsSubmittingClarification(false);
-                activeAgentMessageIdRef.current = null;
-                pendingAgentMessageIdRef.current = null;
-                streamHandleRef.current = null;
-                setStreamConnection('connected');
+                endRun();
                 if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             runSessionId,
@@ -912,11 +903,35 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 // Callbacks run after start() returned (the stream connects asynchronously), so `handle` is set.
                 onResync: (reason) => {
                     streamLostEvents = true;
-                    void resyncRun(runSessionId, handle, reason);
+                    void resyncRun(runSessionId, handle, reason, endRun);
                 },
-                onConnectionChange: setStreamConnection,
+                onConnectionChange: (state) => {
+                    if (state !== 'rejected') {
+                        setStreamConnection(state);
+                        return;
+                    }
+                    // Retrying cannot help: stop following, and say why.
+                    if (streamHandleRef.current !== handle) return;
+                    handle.detach();
+                    endRun();
+                    setRunReason('rejected');
+                },
             },
         );
+        /** Every way a followed run ends locally: flush what was buffered and stop following. */
+        function endRun() {
+            if (flushTimer) {
+                clearTimeout(flushTimer);
+                flushTimer = null;
+            }
+            flushAllBuffers();
+            setIsStreaming(false);
+            setIsSubmittingClarification(false);
+            activeAgentMessageIdRef.current = null;
+            pendingAgentMessageIdRef.current = null;
+            streamHandleRef.current = null;
+            setStreamConnection('connected');
+        }
         streamHandleRef.current = handle;
     };
 
@@ -930,7 +945,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
      * is not known yet (its prompt is still being dispatched) is left to the
      * dispatch.
      */
-    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle, reason: RuntimeResyncReason) => {
+    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle, reason: RuntimeResyncReason, endRun: () => void) => {
         const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === sessionId;
         let state: RuntimeSessionState | undefined;
         for (let attempt = 0; attempt < RESYNC_ATTEMPTS && current(); attempt += 1) {
@@ -939,7 +954,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 break;
             } catch (error) {
                 console.error('Failed to read the session state for a resync', error);
-                await new Promise((resolve) => setTimeout(resolve, RESYNC_RETRY_MS * 2 ** attempt));
+                if (attempt < RESYNC_ATTEMPTS - 1) await new Promise((resolve) => setTimeout(resolve, RESYNC_RETRY_MS * 2 ** attempt));
             }
         }
         if (!current()) return;
@@ -955,16 +970,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             return;
         }
         handle.detach();
-        flushAllBuffers();
-        streamHandleRef.current = null;
-        activeAgentMessageIdRef.current = null;
-        pendingAgentMessageIdRef.current = null;
-        if (state) replaceWithSnapshot(state.messages);
-        setIsStreaming(false);
-        setIsSubmittingClarification(false);
+        endRun();
         setPendingClarification(null);
-        setStreamConnection('connected');
-        setRunReason(reason === 'restarted' ? 'interrupted' : 'completed');
+        if (state) replaceWithSnapshot(state.messages);
+        // After a restart the run was cut off. Otherwise it ended unseen: the server's
+        // transcript tells a failure; how else it ended is not known, so no status is claimed.
+        const lastAgent = state?.messages.filter((message) => message.role === 'agent').at(-1);
+        setRunReason(reason === 'restarted' ? 'interrupted' : lastAgent?.terminalReason === 'error' ? 'error' : null);
     };
 
     const handlePrimaryAction = async () => {
@@ -1018,7 +1030,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const items = groupIntoTurns<UserMessage, AgentMessage>(messages);
         // A run that has not produced a step yet still shows that it is working.
         const last = items[items.length - 1];
-        if ((isStreaming || runReason === 'interrupted') && last?.kind === 'user') {
+        if ((isStreaming || runReason === 'interrupted' || runReason === 'rejected') && last?.kind === 'user') {
             items.push({ kind: 'turn', key: `turn-${last.message.id}`, ...(last.message.timestamp !== undefined ? { startedAt: last.message.timestamp } : {}), agents: [] });
         }
         return items;
@@ -1026,9 +1038,11 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     // One notice for the latest turn: the run was interrupted, or its event stream is down.
     const turnNotice = runReason === 'interrupted'
         ? t('chat.runInterrupted')
-        : !isStreaming || streamConnection === 'connected'
-            ? ''
-            : t(streamConnection === 'rejected' ? 'chat.streamRejected' : streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
+        : runReason === 'rejected'
+            ? t('chat.streamRejected')
+            : !isStreaming || streamConnection === 'connected'
+                ? ''
+                : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
         : turnNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
@@ -1227,7 +1241,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     {uploadError
                         ? <span className="text-[var(--status-error)]" role="alert">{t('chat.uploadFailed')}</span>
                         : <span>{isStreaming ? t('chat.steerHint') : null}</span>}
-                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : runReason === 'interrupted' ? t('chat.interrupted') : t('tools.statusError')}</span>}
+                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : runReason === 'interrupted' || runReason === 'rejected' ? t('chat.interrupted') : t('tools.statusError')}</span>}
                 </div>
                 <div className="relative flex min-h-14 items-end gap-2 rounded-[20px] border border-[var(--hairline)] bg-[var(--surface-bg)] px-3 py-2 shadow-none transition-[border-color,box-shadow,transform] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                     <input

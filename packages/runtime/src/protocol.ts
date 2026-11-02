@@ -156,7 +156,6 @@ export class DataAgentRuntime implements ApplicationCommandHost {
     return {
       events: this.eventBuffer.filter((event) => event.sequence > sequence && this.eventVisible(event, filter)),
       complete: sequence >= first - 1,
-      latestSequence: this.nextSequence - 1,
     };
   }
 

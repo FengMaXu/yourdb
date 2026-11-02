@@ -82,6 +82,29 @@ describe("runtime event stream subscription", () => {
     unsubscribe();
   });
 
+  it("keeps the old instance with its cursor when the connection drops between hello and resync", async () => {
+    apiFetch.mockResolvedValueOnce(streamOf([hello("new", 3)]));
+    apiFetch.mockImplementation(() => new Promise(() => undefined));
+    const onResync = vi.fn();
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { afterSequence: 5000, afterInstance: "old", onResync });
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    // The cursor still belongs to "old", so the server will still see the restart.
+    expect(urlOf(1).searchParams.get("after_sequence")).toBe("5000");
+    expect(urlOf(1).searchParams.get("instance")).toBe("old");
+    expect(onResync).not.toHaveBeenCalled();
+    unsubscribe();
+  });
+
+  it("retries a 404, which a proxy may answer while the server restarts", async () => {
+    apiFetch.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    apiFetch.mockImplementation(() => new Promise(() => undefined));
+    const states: string[] = [];
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { onConnectionChange: (state) => states.push(state) });
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    expect(states).toEqual(["reconnecting"]);
+    unsubscribe();
+  });
+
   it("stops and reports rejected when the server refuses the subscription", async () => {
     apiFetch.mockResolvedValue(new Response(null, { status: 403 }));
     const states: string[] = [];
