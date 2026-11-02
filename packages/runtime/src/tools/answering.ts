@@ -1,4 +1,5 @@
 import { Type, type Static } from "typebox";
+import { rebindCall } from "../answering/report.js";
 import { Value } from "typebox/value";
 import type { JsonValue } from "@earendil-works/chord";
 import type {
@@ -242,6 +243,9 @@ export function fieldStateTable(view: AnswerRevisionView): string {
   const lines: string[] = [];
   const report = view.role === "report";
   if (report) lines.push("- 报告任务：只设共享字段（population.* 与 measures.<名字>），本身不出结果；每张图用 parentTaskId 建一个图表查询");
+  if (view.staleChartQueries && view.staleChartQueries.length > 0) {
+    lines.push(`- 这些图表查询仍绑定修改前的报告任务，查询前先逐个 rebind：${view.staleChartQueries.map((taskId) => rebindCall(taskId)).join("；")}`);
+  }
   if (view.parent) {
     lines.push(`- 报告任务 ${view.parent.taskId}：继承自 ${view.parent.revisionId}${view.parent.current ? "" : "；报告任务已修改，先用 rebind: true 重新绑定"}`);
     if (view.measureRef) lines.push(`- 度量取自报告任务的 measures.${view.measureRef}`);

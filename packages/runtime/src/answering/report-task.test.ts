@@ -95,7 +95,9 @@ describe("Report Task", () => {
     const parent = await report(answering);
     const child = await chart(answering, parent.taskId);
     const changed = await revise(answering, parent.taskId, "parent-2", { "population.time": { value: { expression: "2017", boundary: "inclusive" }, reason: "the report covers 2017" } });
-    await expect(result(answering, child.taskId, child.revisionId, "stale")).rejects.toMatchObject({ code: "PARENT_REVISION_STALE" });
+    // The change itself names the chart query that must rebind, and the refused query says how.
+    expect(changed.staleChartQueries).toEqual([child.taskId]);
+    await expect(result(answering, child.taskId, child.revisionId, "stale")).rejects.toMatchObject({ code: "PARENT_REVISION_STALE", message: expect.stringContaining(`"taskId": "${child.taskId}", "rebind": true`) });
     await expect(answering.execute({ kind: "exploration", taskId: child.taskId, sql: "SELECT 1" }, context("explore"))).resolves.toMatchObject({ kind: "exploration" });
 
     const rebound = await revise(answering, child.taskId, "rebind", {}, { rebind: true });

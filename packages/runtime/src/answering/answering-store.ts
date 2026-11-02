@@ -21,6 +21,8 @@ import { equivalentPaths } from "./probes.js";
 export interface AnsweringTransaction {
   getTask(taskId: TaskId): QueryTaskRecord | undefined;
   findTaskByRequest(sessionId: string, requestId: string): QueryTaskRecord | undefined;
+  /** The chart queries created under a Report Task (read-only records, not copies). */
+  listChartQueries(parentTaskId: TaskId): readonly QueryTaskRecord[];
   putTask(task: QueryTaskRecord): void;
   getRevision(revisionId: RevisionId): AnswerRevisionRecord | undefined;
   getCurrentRevision(taskId: TaskId): AnswerRevisionRecord | undefined;
@@ -112,6 +114,7 @@ function createTransaction(state: StoreState): AnsweringTransaction {
   return {
     getTask: (taskId) => state.tasks.get(taskId),
     findTaskByRequest: (sessionId, requestId) => [...state.tasks.values()].find((task) => task.sessionId === sessionId && task.requestId === requestId),
+    listChartQueries: (parentTaskId) => [...state.tasks.values()].filter((task) => task.parent?.taskId === parentTaskId),
     putTask: (task) => { state.tasks.set(task.taskId, clone(task)); },
     getRevision: (revisionId) => state.revisions.get(revisionId),
     getCurrentRevision: (taskId) => {
