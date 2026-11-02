@@ -104,10 +104,27 @@ export class PiAgentController implements AgentController {
     return { operationId: admission.value.operationId, status: "accepted" };
   }
 
+  /**
+   * Continues an operation restored from the Session (recovery after a stop of
+   * the host): binds it as an accepted one, then drives it until it settles,
+   * like a prompt's operation. An operation that is no prompted run (e.g. a
+   * compaction) has no request message to bind and is driven as it is.
+   */
+  async recover(operationId: string, context: AgentControllerContext, stop?: AbortSignal): Promise<DriveOutcome | undefined> {
+    const admission = { operationId } as OperationAdmission;
+    try {
+      await this.onAccepted?.(admission, context);
+    } catch {
+      // Nothing to bind: the operation keeps the request it already had.
+    }
+    return this.drive(admission, context, stop);
+  }
+
   /** Drives the operation to a terminal result (see driveUntilSettled). */
-  private async drive(admission: OperationAdmission, context: AgentControllerContext): Promise<DriveOutcome | undefined> {
+  private async drive(admission: OperationAdmission, context: AgentControllerContext, stop?: AbortSignal): Promise<DriveOutcome | undefined> {
     const lane = await this.lane();
-    const driven = await driveUntilSettled(lane, admission.operationId, context.pi);
+    const driven = await driveUntilSettled(lane, admission.operationId, context.pi, stop ? { stop } : {});
+    if (stop?.aborted) return undefined;
     if (!driven.ok) {
       const error = new AgentControllerError("DRIVE_REJECTED", resultError(driven));
       this.onDriveError?.(error);
