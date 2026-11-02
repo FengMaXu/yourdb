@@ -49,42 +49,36 @@ describe('splitTurn', () => {
         expect(view.steps.map((step) => step.kind)).toEqual(['thought', 'note', 'tool', 'thought']);
     });
 
-    it('keeps text followed by a tool call in the process, with no result yet', () => {
+    it('keeps tool calls made after the last text inside the process', () => {
         const view = splitTurn([
             agent('a1', { content: 'Working on it.' }),
             agent('a2', { toolCallsById: { c1: { toolCallId: 'c1' } } }),
         ]);
-        expect(view.result).toBeUndefined();
-        expect(view.resultText).toBe('');
-        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool']);
+        expect(view.resultText).toBe('Working on it.');
+        expect(view.steps.map((step) => step.kind)).toEqual(['tool']);
     });
 
-    it('keeps text written alongside a tool call in the process', () => {
+    it('keeps a failure notice written on a step with tool calls as the result once the turn is over', () => {
         const view = splitTurn([
+            agent('a1', { content: '**Request failed** Retry', toolCallsById: { c1: { toolCallId: 'c1' } }, terminalReason: 'error' }),
+        ]);
+        expect(view.resultText).toBe('**Request failed** Retry');
+        expect(view.steps.map((step) => step.kind)).toEqual(['tool']);
+    });
+
+    it('has no result while the turn runs: every text is a step of the process', () => {
+        const agents = [
             agent('a1', { toolCallsById: { c1: { toolCallId: 'c1' } } }),
             agent('a2', { content: 'Two things to confirm first:', toolCallsById: { c2: { toolCallId: 'c2' } } }),
-        ]);
-        expect(view.result).toBeUndefined();
-        expect(view.steps.map((step) => step.kind)).toEqual(['tool', 'note', 'tool']);
-    });
+        ];
+        const running = splitTurn(agents, true);
+        expect(running.result).toBeUndefined();
+        expect(running.resultText).toBe('');
+        expect(running.steps.map((step) => step.kind)).toEqual(['tool', 'note', 'tool']);
 
-    it('keeps text followed by a skill activation in the process', () => {
-        const view = splitTurn([
-            agent('a1', { content: 'Loading the chart guide.' }),
-            agent('a2', { skillActivations: [{ name: 'chart' }] as TurnAgentLike['skillActivations'] }),
-        ]);
-        expect(view.result).toBeUndefined();
-        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'skill']);
-    });
-
-    it('takes the final text after the last tool call as the result', () => {
-        const view = splitTurn([
-            agent('a1', { content: 'Checking.', toolCallsById: { c1: { toolCallId: 'c1' } } }),
-            agent('a2', { reasoningContent: 'done' }),
-            agent('a3', { content: 'Answer.' }),
-        ]);
-        expect(view.result?.id).toBe('a3');
-        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool', 'thought']);
+        const done = splitTurn(agents);
+        expect(done.result?.id).toBe('a2');
+        expect(done.steps.map((step) => step.kind)).toEqual(['tool', 'tool']);
     });
 
     it('has no result when the agent wrote no text', () => {

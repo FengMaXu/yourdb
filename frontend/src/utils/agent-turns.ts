@@ -3,7 +3,7 @@ import { isAgentMessageEmpty, visibleAgentContent, type AgentMessageLike } from 
 /**
  * A conversation shows one agent *turn* per user message: every model step the
  * agent took to answer it. The steps (thoughts, tool calls, remarks along the
- * way) are the process; the text of the step that ended it is the result.
+ * way) are the process; once the turn is over, the last text it wrote is the result.
  */
 
 interface UserLike {
@@ -62,18 +62,15 @@ export interface TurnView<A extends TurnAgentLike> {
     resultText: string;
 }
 
-const actsOnTools = (agent: TurnAgentLike): boolean => Object.keys(agent.toolCallsById).length > 0 || agent.skillActivations.length > 0;
-
 /**
- * Split a turn into its process steps and its result. The result is the last
- * text, but only when nothing was done after it: text written alongside a tool
- * call, or before one, is a remark along the way (e.g. the lead-in to a
- * clarification question), so it stays in the process.
+ * Split a turn into its process steps and its result. While the turn runs,
+ * no text is known to be the answer: any of it may be a remark along the way
+ * (e.g. the lead-in to a clarification question), so it all stays in the
+ * process. Once the turn is over, its last text is the result.
  */
-export function splitTurn<A extends TurnAgentLike>(agents: readonly A[]): TurnView<A> {
+export function splitTurn<A extends TurnAgentLike>(agents: readonly A[], running = false): TurnView<A> {
     let resultIndex = -1;
-    for (let index = agents.length - 1; index >= 0; index -= 1) {
-        if (actsOnTools(agents[index])) break;
+    for (let index = agents.length - 1; index >= 0 && !running; index -= 1) {
         if (visibleAgentContent(agents[index]).trim()) {
             resultIndex = index;
             break;
