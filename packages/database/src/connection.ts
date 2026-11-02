@@ -1,9 +1,10 @@
 import { createMcpQueryExecutor, type McpQueryExecutorOptions } from "./mcp-query-executor.js";
 
 /** Databases the product connects to; each has a contract MCP server. */
-export const DATABASE_DRIVERS = ["mysql", "postgres"] as const;
+export const DATABASE_DRIVERS = ["mysql", "postgres", "sqlite"] as const;
 export type DatabaseDriver = (typeof DATABASE_DRIVERS)[number];
 
+/** For SQLite, `database` is the file path and the network fields are unused. */
 export interface DatabaseConnection {
   readonly driver: DatabaseDriver;
   readonly host?: string;
@@ -22,9 +23,10 @@ export interface McpServerLaunch {
 
 export type DatabaseServers = Readonly<Record<DatabaseDriver, McpServerLaunch>>;
 
-const DRIVER_FACTS: Readonly<Record<DatabaseDriver, { readonly label: string; readonly envPrefix: string; readonly defaultPort: number }>> = {
+const DRIVER_FACTS: Readonly<Record<DatabaseDriver, { readonly label: string; readonly envPrefix: string; readonly defaultPort?: number }>> = {
   mysql: { label: "MySQL", envPrefix: "DATA_AGENT_MYSQL", defaultPort: 3306 },
   postgres: { label: "PostgreSQL", envPrefix: "DATA_AGENT_PG", defaultPort: 5432 },
+  sqlite: { label: "SQLite", envPrefix: "DATA_AGENT_SQLITE" },
 };
 
 export function isDatabaseDriver(value: unknown): value is DatabaseDriver {
@@ -42,6 +44,12 @@ export function databaseConnectionFrom(settings: unknown): DatabaseConnection {
   const driver = record.driver ?? "mysql";
   if (!isDatabaseDriver(driver)) throw new Error(`UNSUPPORTED_DATABASE_DRIVER: ${String(driver)}`);
   const text = (value: unknown) => value === undefined || value === null || value === "" ? undefined : String(value);
+  if (driver === "sqlite") {
+    // A file, not a server: a SQLite connection without one would open nothing.
+    const file = text(record.database)?.trim();
+    if (!file) throw new Error("SQLITE_DATABASE_FILE_REQUIRED: 请填写 SQLite 数据库文件路径");
+    return { driver, database: file };
+  }
   const port = text(record.port) === undefined ? undefined : Number(record.port);
   if (port !== undefined && !(Number.isSafeInteger(port) && port >= 1 && port <= 65_535)) throw new Error(`INVALID_DATABASE_PORT: ${String(record.port)}`);
   return {
@@ -59,6 +67,7 @@ export function databaseConnectionFrom(settings: unknown): DatabaseConnection {
 export function databaseExecutorOptions(connection: DatabaseConnection, servers: DatabaseServers): McpQueryExecutorOptions {
   const launch = servers[connection.driver];
   const { envPrefix } = DRIVER_FACTS[connection.driver];
+  // A SQLite connection holds only its file, which reaches the server as DATA_AGENT_SQLITE_DATABASE.
   const env: Record<string, string> = { ...(launch.env ?? {}) };
   for (const field of ["host", "port", "user", "password", "database"] as const) {
     const value = connection[field];
@@ -129,7 +138,9 @@ export async function testDatabaseConnection(settings: unknown, servers: Databas
     return { success: false, message: error instanceof Error ? error.message : String(error) };
   }
   const { label, defaultPort } = DRIVER_FACTS[connection.driver];
-  const target = `${connection.host ?? "127.0.0.1"}:${connection.port ?? defaultPort}${connection.database ? `/ ${connection.database}` : ""}`;
+  const target = connection.driver === "sqlite"
+    ? connection.database!
+    : `${connection.host ?? "127.0.0.1"}:${connection.port ?? defaultPort}${connection.database ? `/ ${connection.database}` : ""}`;
   // A test must not wait out the reconnect backoff meant for a running session.
   const executor = createMcpQueryExecutor({ ...databaseExecutorOptions(connection, servers), reconnectDelaysMs: [] });
   try {

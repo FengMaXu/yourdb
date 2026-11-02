@@ -455,7 +455,7 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
     ].find((candidate, index, candidates) => existsSync(candidate) || index === candidates.length - 1)!],
     env: { ELECTRON_RUN_AS_NODE: "1" },
   });
-  const databaseServers: DatabaseServers = { mysql: mcpServer("mcp-mysql.cjs"), postgres: mcpServer("mcp-pg.cjs") };
+  const databaseServers: DatabaseServers = { mysql: mcpServer("mcp-mysql.cjs"), postgres: mcpServer("mcp-pg.cjs"), sqlite: mcpServer("mcp-sqlite.cjs") };
   application.setHostTesters(createElectronHostTesters(databaseServers));
   const queryExecutor = createConfiguredQueryExecutor({ readSettings: () => application.getConfig("ui.settings"), servers: databaseServers });
   application.setQueryExecutor(() => queryExecutor.resolve());

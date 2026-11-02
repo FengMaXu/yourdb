@@ -105,7 +105,7 @@ export function databaseHostServer(check: () => Promise<void>): McpHostServer {
   return {
     name: "database",
     title: "数据库",
-    description: "连接业务数据库（MySQL、PostgreSQL），供数据查询使用。",
+    description: "连接业务数据库（MySQL、PostgreSQL、SQLite），供数据查询使用。",
     settingsHint: "在「设置 → 数据库」中配置",
     toolCount: 4,
     check,

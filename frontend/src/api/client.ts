@@ -120,7 +120,7 @@ export async function logout(): Promise<void> {
 }
 
 /** Databases the product connects to; each runs through its own contract MCP server. */
-export type DatabaseDriver = 'mysql' | 'postgres';
+export type DatabaseDriver = 'mysql' | 'postgres' | 'sqlite';
 
 export interface AIConfig {
     provider?: 'openai' | 'anthropic';

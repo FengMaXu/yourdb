@@ -1,5 +1,8 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { PGlite } from "@electric-sql/pglite";
 import { PGLiteSocketServer } from "@electric-sql/pglite-socket";
@@ -8,6 +11,7 @@ import { createConfiguredQueryExecutor, databaseConnectionFrom, databaseExecutor
 const servers: DatabaseServers = {
   mysql: { command: "node", args: ["mysql-server.js"], env: { BASE: "1" } },
   postgres: { command: "node", args: ["pg-server.js"] },
+  sqlite: { command: "node", args: ["sqlite-server.js"] },
 };
 
 describe("databaseConnectionFrom", () => {
@@ -23,6 +27,12 @@ describe("databaseConnectionFrom", () => {
   it("refuses a port it cannot use instead of falling back to the default", () => {
     for (const port of ["abc", 0, 70000, "3306.5"]) expect(() => databaseConnectionFrom({ port })).toThrow("INVALID_DATABASE_PORT");
     expect(databaseConnectionFrom({ port: "" })).toEqual({ driver: "mysql" });
+  });
+
+  it("reads a SQLite connection as its file alone and refuses one without a file", () => {
+    expect(databaseConnectionFrom({ driver: "sqlite", host: "db", port: "3306", user: "u", password: "p", database: " C:/data/sales.sqlite " }))
+      .toEqual({ driver: "sqlite", database: "C:/data/sales.sqlite" });
+    for (const database of [undefined, "", "   "]) expect(() => databaseConnectionFrom({ driver: "sqlite", database })).toThrow("SQLITE_DATABASE_FILE_REQUIRED");
   });
 
   it("keeps an empty password the user saved", () => {
@@ -43,6 +53,13 @@ describe("databaseExecutorOptions", () => {
       args: ["mysql-server.js"],
       env: { BASE: "1", DATA_AGENT_MYSQL_DATABASE: "sales" },
       dialect: "mysql",
+    });
+    expect(databaseExecutorOptions({ driver: "sqlite", database: "C:/data/sales.sqlite" }, servers)).toEqual({
+      command: "node",
+      args: ["sqlite-server.js"],
+      env: { DATA_AGENT_SQLITE_DATABASE: "C:/data/sales.sqlite" },
+      dialect: "sqlite",
+      connectionId: "sqlite:C:/data/sales.sqlite",
     });
   });
 });
@@ -125,5 +142,36 @@ describe("PostgreSQL through its contract MCP server", () => {
     } finally {
       await configured.close();
     }
+  }, 60_000);
+});
+
+describe("SQLite through its contract MCP server", () => {
+  const sqliteCli = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../mcp-sqlite/dist/cli.js");
+  const sqliteServers: DatabaseServers = { ...servers, sqlite: { command: process.execPath, args: [sqliteCli] } };
+
+  it("tests, queries and describes a SQLite file chosen in settings", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "data-agent-sqlite-"));
+    const file = path.join(root, "sales.sqlite");
+    const seed = new DatabaseSync(file);
+    seed.exec("CREATE TABLE orders (id INTEGER PRIMARY KEY, amount REAL); INSERT INTO orders VALUES (1, 10), (2, 20);");
+    seed.close();
+    const settings = { driver: "sqlite", database: file };
+    const configured = createConfiguredQueryExecutor({ readSettings: async () => settings, servers: sqliteServers });
+    try {
+      expect(await testDatabaseConnection(settings, sqliteServers)).toEqual({ success: true, message: `SQLite 连接成功（${file}）` });
+      const executor = await configured.resolve();
+      expect(await executor.run("SELECT id, amount FROM orders ORDER BY id", 10, { kind: "result" })).toEqual({ columns: ["id", "amount"], rows: [[1, 10], [2, 20]], truncated: false });
+      expect(await executor.getSchema()).toMatchObject({ connectionId: `sqlite:${file}`, dialect: "sqlite", tables: [{ name: "orders", columns: ["id", "amount"], primaryKey: ["id"] }] });
+    } finally {
+      await configured.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("reports a missing file instead of creating an empty database", async () => {
+    const file = path.join(tmpdir(), `data-agent-missing-${process.pid}.sqlite`);
+    const result = await testDatabaseConnection({ driver: "sqlite", database: file }, sqliteServers);
+    expect(result.success).toBe(false);
+    expect(result.message).toContain("SQLite 连接失败");
   }, 60_000);
 });

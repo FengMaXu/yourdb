@@ -27,6 +27,7 @@ const { createMcpPluginSupervisor, databaseHostServer } = await import(toUrl(pat
 const databaseServers = {
   mysql: { command: process.execPath, args: [path.join(root, "packages", "mcp-mysql", "dist", "cli.js")] },
   postgres: { command: process.execPath, args: [path.join(root, "packages", "mcp-pg", "dist", "cli.js")] },
+  sqlite: { command: process.execPath, args: [path.join(root, "packages", "mcp-sqlite", "dist", "cli.js")] },
 };
 
 let application;

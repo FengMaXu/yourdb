@@ -978,7 +978,8 @@ async function currentBaselineSurface(config) {
     runtimeBuildProvenanceSha256: await sha256File(path.join(projectRoot, "packages", "runtime", "dist", "build-provenance.json")),
     skillsSha256: await sha256Tree(path.join(projectRoot, ".agents", "skills")),
     evaluationSkillsSha256: await sha256Tree(path.join(here, "skills")),
-    sqliteMcpSha256: await sha256File(path.join(projectRoot, "apps", "server", "dist", "reference-sqlite-mcp.js")),
+    // The launcher at apps/server/dist/reference-sqlite-mcp.js only imports this server.
+    sqliteMcpSha256: await sha256File(path.join(projectRoot, "packages", "mcp-sqlite", "dist", "index.js")),
     queryExecutorSha256: await sha256File(path.join(projectRoot, "packages", "database", "dist", "mcp-query-executor.js")),
     serverSourceSha256: await sha256Tree(path.join(projectRoot, "apps", "server", "src")),
     serverBuildProvenanceSha256: await sha256File(path.join(projectRoot, "apps", "server", "dist", "build-provenance.json")),

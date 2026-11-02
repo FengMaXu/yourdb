@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { createReferenceSqliteServer } from "./reference-sqlite-mcp.js";
+import { createSqliteServer } from "./index.js";
 import { DatabaseSync } from "node:sqlite";
 
-describe("Reference SQLite MCP Server", () => {
+describe("SQLite MCP server", () => {
   it("negotiates the contract, enforces limits, and blocks dangerous SQL", async () => {
     const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
     const dbPath = join(root, "ref.sqlite3");
@@ -17,7 +18,7 @@ describe("Reference SQLite MCP Server", () => {
     seed.prepare("INSERT INTO sales (region, amount) VALUES (?, ?)").run("south", 20);
     seed.close();
 
-    const { server, close } = createReferenceSqliteServer({ databasePath: dbPath });
+    const { server, close } = createSqliteServer({ databasePath: dbPath });
     const client = new Client({ name: "data-agent-test", version: "1.0.0" });
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
     await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
@@ -64,6 +65,23 @@ describe("Reference SQLite MCP Server", () => {
 
     await client.close();
     await close();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("opens the file read-only and never creates a missing one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
+    const dbPath = join(root, "ref.sqlite3");
+    const seed = new DatabaseSync(dbPath);
+    seed.exec("CREATE TABLE sales (id INTEGER PRIMARY KEY)");
+    seed.close();
+
+    const { db, close } = createSqliteServer({ databasePath: dbPath });
+    expect(() => db.exec("INSERT INTO sales (id) VALUES (1)")).toThrow(/readonly/);
+    close();
+
+    const missing = join(root, "missing.sqlite");
+    expect(() => createSqliteServer({ databasePath: missing })).toThrow();
+    expect(existsSync(missing)).toBe(false);
     await rm(root, { recursive: true, force: true });
   });
 });

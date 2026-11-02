@@ -18,6 +18,7 @@ const sourceRoots = [
   "packages/mcp-plugins/src",
   "packages/mcp-mysql/src",
   "packages/mcp-pg/src",
+  "packages/mcp-sqlite/src",
   "apps/server/src",
   "frontend/src",
 ].map((relative) => path.join(root, relative));
