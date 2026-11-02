@@ -49,13 +49,56 @@ describe('splitTurn', () => {
         expect(view.steps.map((step) => step.kind)).toEqual(['thought', 'note', 'tool', 'thought']);
     });
 
-    it('keeps tool calls made after the last text inside the process', () => {
+    it('keeps text followed by a tool call in the process, with no result yet', () => {
         const view = splitTurn([
             agent('a1', { content: 'Working on it.' }),
             agent('a2', { toolCallsById: { c1: { toolCallId: 'c1' } } }),
         ]);
-        expect(view.resultText).toBe('Working on it.');
+        expect(view.result).toBeUndefined();
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool']);
+    });
+
+    it('keeps text written alongside a tool call in the process, live or restored', () => {
+        const view = splitTurn([
+            agent('a1', { toolCallsById: { c1: { toolCallId: 'c1' } } }),
+            agent('a2', { content: 'Two things to confirm first:', toolCallsById: { c2: { toolCallId: 'c2' } }, terminalReason: 'completed' }),
+        ]);
+        expect(view.result).toBeUndefined();
+        expect(view.steps.map((step) => step.kind)).toEqual(['tool', 'note', 'tool']);
+    });
+
+    it('keeps the lead-in in the process when the user stopped the run at its tool call', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Two things to confirm first:', toolCallsById: { c1: { toolCallId: 'c1' } }, terminalReason: 'stopped' }),
+        ]);
+        expect(view.result).toBeUndefined();
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool']);
+    });
+
+    it('does not count a skill activation as a tool call', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Answer.', skillActivations: [{ name: 'chart' }] as TurnAgentLike['skillActivations'] }),
+        ]);
+        expect(view.result?.id).toBe('a1');
+        expect(view.steps.map((step) => step.kind)).toEqual(['skill']);
+    });
+
+    it('takes the failure notice of a step that ended on an error as the result, tool call or not', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Querying.\n\n**Request failed**', toolCallsById: { c1: { toolCallId: 'c1' } }, terminalReason: 'error' }),
+        ]);
+        expect(view.result?.id).toBe('a1');
         expect(view.steps.map((step) => step.kind)).toEqual(['tool']);
+    });
+
+    it('takes the final text after the last tool call as the result', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Checking.', toolCallsById: { c1: { toolCallId: 'c1' } } }),
+            agent('a2', { reasoningContent: 'done' }),
+            agent('a3', { content: 'Answer.' }),
+        ]);
+        expect(view.result?.id).toBe('a3');
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool', 'thought']);
     });
 
     it('has no result when the agent wrote no text', () => {

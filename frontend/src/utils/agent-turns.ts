@@ -3,7 +3,7 @@ import { isAgentMessageEmpty, visibleAgentContent, type AgentMessageLike } from 
 /**
  * A conversation shows one agent *turn* per user message: every model step the
  * agent took to answer it. The steps (thoughts, tool calls, remarks along the
- * way) are the process; the last text it wrote is the result.
+ * way) are the process; the text of the step that ended the turn is the result.
  */
 
 interface UserLike {
@@ -62,14 +62,29 @@ export interface TurnView<A extends TurnAgentLike> {
     resultText: string;
 }
 
-/** Split a turn into its process steps and its result: the last text the agent wrote. */
+/** A step that calls a tool ended on toolUse: the agent went on working after it. */
+const callsTools = (agent: TurnAgentLike): boolean => Object.keys(agent.toolCallsById).length > 0;
+
+/**
+ * Split a turn into its process steps and its result. The result is the text
+ * of the step that ended the turn: the last step with text, provided it and
+ * every step after it call no tool. Text written with or before a tool call
+ * (e.g. the lead-in to a clarification question) is a remark along the way and
+ * stays in the process, also when the user stopped the run there. A step that
+ * failed did end the turn, so its text (live, the failure notice) is the
+ * result even when it also called a tool. The rule reads the steps alone, so a
+ * live turn and the same turn restored from history split the same way.
+ */
 export function splitTurn<A extends TurnAgentLike>(agents: readonly A[]): TurnView<A> {
     let resultIndex = -1;
     for (let index = agents.length - 1; index >= 0; index -= 1) {
-        if (visibleAgentContent(agents[index]).trim()) {
+        const agent = agents[index];
+        const tools = callsTools(agent);
+        if (visibleAgentContent(agent).trim() && (agent.terminalReason === 'error' || !tools)) {
             resultIndex = index;
             break;
         }
+        if (tools) break;
     }
     const steps: TraceStep<A>[] = [];
     agents.forEach((agent, index) => {
