@@ -24,6 +24,7 @@ import { isSkillAvailable, renderSkillCatalog, type SkillCatalogEntry } from "./
 import { LENGTH_CONTINUATION_PROMPT, LengthContinuationGuard } from "./length-continuation.js";
 import { RUNTIME_INJECTED_LABEL } from "../runtime-injected.js";
 import { infrastructureFailureOf } from "./infrastructure-failure.js";
+import { driveUntilSettled } from "./drive-until-settled.js";
 import type { DataAgentToolDefinition } from "../tools/tool-definition.js";
 
 /** The only Pi/provider configuration owned by the Session Runtime. */
@@ -349,6 +350,14 @@ export async function createPiSessionHost(options: DataAgentSessionHostOptions):
       // Session Host must not silently strand a native accepted operation.
       const driven = await lane.drive({ operationId: open.operationId }, TODO_CONTEXT);
       if (!driven.ok) throw driven.error;
+      // Recovery typically ends in a retry wait (the interrupted request is retried). Drive on in the
+      // background until it settles, as the prompt path does; opening the session must not wait for the run.
+      // Without this the operation stayed "running" forever, and Stop could not settle it either.
+      if (driven.value.kind === "waiting") {
+        void driveUntilSettled(lane, open.operationId, TODO_CONTEXT, driven).then((settled) => {
+          if (!settled.ok) console.error("[harness] recovered operation failed to settle", open.operationId, settled.error);
+        }, (error: unknown) => console.error("[harness] recovered operation failed to settle", open.operationId, error));
+      }
     }
   };
   return {
