@@ -107,7 +107,23 @@ describe('ChatArea restoring a session', () => {
         runtime.state = { messages: [], inProgressRun: null, pendingClarification: null, eventSequence: 0 };
         await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
         await waitFor(() => expect(screen.getAllByText(/服务中断，本轮没有完成/).length).toBeGreaterThan(0));
-        expect(runtime.transcriptReloads).toBe(1);
+        // What was already shown stays; the stream is let go.
+        expect(screen.getByText(/先确认两个口径/)).toBeTruthy();
+        expect(runtime.listener).toBeUndefined();
+    });
+
+    it('ends a followed run as interrupted when the session now runs a different one', async () => {
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }],
+            inProgressRun: { runId: 'run-1', startedAt: 1 },
+            pendingClarification: null,
+            eventSequence: 41,
+        };
+        renderChat();
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+        runtime.state = { messages: [], inProgressRun: { runId: 'run-2', startedAt: 2 }, pendingClarification: null, eventSequence: 0 };
+        await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
+        await waitFor(() => expect(screen.getAllByText(/服务中断，本轮没有完成/).length).toBeGreaterThan(0));
         expect(runtime.listener).toBeUndefined();
     });
 
@@ -120,8 +136,14 @@ describe('ChatArea restoring a session', () => {
         };
         renderChat();
         await waitFor(() => expect(runtime.listener).toBeDefined());
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }, { id: 'a0', role: 'agent', content: '重载后的进度', messageId: 'a0', toolCallsById: {}, widgetsById: {}, skillActivations: [], currentStage: 'generating_answer', visitedStages: ['sent'], terminalReason: null }],
+            inProgressRun: { runId: 'run-1', startedAt: 1 },
+            pendingClarification: null,
+            eventSequence: 60,
+        };
         await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
-        await waitFor(() => expect(runtime.transcriptReloads).toBe(1));
+        await waitFor(() => expect(screen.getByText(/重载后的进度/)).toBeTruthy());
         expect(runtime.listener).toBeDefined();
         expect(screen.queryByText(/服务中断，本轮没有完成/)).toBeNull();
     });

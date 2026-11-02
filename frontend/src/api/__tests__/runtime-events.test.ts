@@ -17,12 +17,14 @@ function streamOf(chunks: string[]): Response {
 }
 
 const envelope = (sequence: number) => JSON.stringify({ protocolVersion: 1, sequence, requestId: "r", timestamp: 1, event: { type: "agent.completed" } });
+const hello = (instanceId: string, latestSequence: number) => `event: hello\ndata: ${JSON.stringify({ instanceId, latestSequence })}\n\n`;
+const urlOf = (call: number) => apiFetch.mock.calls[call]![0] as URL;
 
 describe("runtime event stream subscription", () => {
   afterEach(() => { apiFetch.mockReset(); });
 
   it("reports the connection, forwards data and turns a resync event into a snapshot request", async () => {
-    apiFetch.mockResolvedValueOnce(streamOf([": connected\n\n", "event: resync\ndata: {\"afterSequence\":3}\n\n", `id: 9\ndata: ${envelope(9)}\n\n`]));
+    apiFetch.mockResolvedValueOnce(streamOf([": connected\n\n", hello("i-1", 9), "event: resync\ndata: {\"afterSequence\":3}\n\n", `id: 9\ndata: ${envelope(9)}\n\n`]));
     apiFetch.mockImplementation(() => new Promise(() => undefined));
     const received: unknown[] = [];
     const onConnected = vi.fn();
@@ -46,21 +48,48 @@ describe("runtime event stream subscription", () => {
     await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
     const reconnectUrl = apiFetch.mock.calls[1]![0] as URL;
     expect(reconnectUrl.searchParams.get("after_sequence")).toBe("4");
-    expect(states.slice(0, 2)).toEqual(["connected", "reconnecting"]);
+    expect(states[0]).toBe("reconnecting");
     expect(errors).toHaveBeenCalledWith("[runtime-events] event listener failed", expect.any(Error));
     errors.mockRestore();
     unsubscribe();
   });
 
-  it("resumes after the server's latest event once told to resync, e.g. after a server restart", async () => {
-    apiFetch.mockResolvedValueOnce(streamOf(["event: resync\ndata: {\"afterSequence\":5000,\"latestSequence\":3}\n\n"]));
+  it("resumes after the server's latest event once told to resync for evicted events", async () => {
+    apiFetch.mockResolvedValueOnce(streamOf([hello("i-1", 300), "event: resync\ndata: {\"afterSequence\":3,\"latestSequence\":300}\n\n"]));
     apiFetch.mockImplementation(() => new Promise(() => undefined));
     const onResync = vi.fn();
-    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { afterSequence: 5000, onResync });
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { afterSequence: 3, onResync });
     await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
-    expect((apiFetch.mock.calls[0]![0] as URL).searchParams.get("after_sequence")).toBe("5000");
-    expect((apiFetch.mock.calls[1]![0] as URL).searchParams.get("after_sequence")).toBe("3");
+    expect(urlOf(0).searchParams.get("after_sequence")).toBe("3");
+    expect(urlOf(1).searchParams.get("after_sequence")).toBe("300");
+    expect(urlOf(1).searchParams.get("instance")).toBe("i-1");
     expect(onResync).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("resyncs when the server is another instance (it restarted), whatever its sequence numbers", async () => {
+    // Before the restart the cursor was 120; the new process has already gone past it.
+    apiFetch.mockResolvedValueOnce(streamOf([hello("old", 119), `id: 120\ndata: ${envelope(120)}\n\n`]));
+    apiFetch.mockResolvedValueOnce(streamOf([hello("new", 200)]));
+    apiFetch.mockImplementation(() => new Promise(() => undefined));
+    const onResync = vi.fn();
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { onResync });
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3), { timeout: 4_000 });
+    expect(urlOf(1).searchParams.get("after_sequence")).toBe("120");
+    expect(urlOf(1).searchParams.get("instance")).toBe("old");
+    expect(onResync).toHaveBeenCalledTimes(1);
+    expect(urlOf(2).searchParams.get("after_sequence")).toBe("200");
+    expect(urlOf(2).searchParams.get("instance")).toBe("new");
+    unsubscribe();
+  });
+
+  it("starts a fresh subscription from the server's latest event, with a cursor of 0 kept explicit", async () => {
+    apiFetch.mockResolvedValueOnce(streamOf([hello("i-1", 0)]));
+    apiFetch.mockImplementation(() => new Promise(() => undefined));
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1");
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    expect(urlOf(0).searchParams.has("after_sequence")).toBe(false);
+    expect(urlOf(1).searchParams.get("after_sequence")).toBe("0");
     unsubscribe();
   });
 
@@ -82,11 +111,20 @@ describe("runtime event stream subscription", () => {
       await vi.advanceTimersByTimeAsync(20_000);
       expect(states.at(-1)).toBe("disconnected");
 
-      // The server is back: the stream reports connected and the delay starts over.
+      // A server that answers and drops at once, without its first event, is still down.
       apiFetch.mockReset();
       apiFetch.mockImplementation(() => Promise.resolve(streamOf([": connected\n\n"])));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(states).not.toContain("connected");
+      expect(states.at(-1)).toBe("disconnected");
+
+      // The server is back: its first event reports connected and the delay starts over.
+      apiFetch.mockImplementation(() => Promise.resolve(streamOf([": connected\n\n", hello("i-2", 0)])));
       await vi.advanceTimersByTimeAsync(5_000);
-      expect(states).toContain("connected");
+      expect(states.at(-2)).toBe("connected");
+      const calls = apiFetch.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(500);
+      expect(apiFetch.mock.calls.length).toBe(calls + 1);
       unsubscribe();
     } finally {
       vi.useRealTimers();

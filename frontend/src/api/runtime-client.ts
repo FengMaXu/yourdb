@@ -204,7 +204,7 @@ export async function answerClarificationViaRuntime(clarificationId: string, ans
 export interface RuntimeEventStreamOptions {
   /** The server subscription exists; events emitted from now on will arrive. */
   readonly onConnected?: () => void;
-  /** Events after the cursor were lost; the subscriber must reload a snapshot. */
+  /** Events after the cursor were lost, or the server restarted; the subscriber must reload a snapshot. */
   readonly onResync?: () => void;
   /**
    * The stream (re)connected, dropped and is about to reconnect, or has been
@@ -243,22 +243,42 @@ export function subscribeRuntimeEvents(
   let disposed = false;
   let controller: AbortController | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+  // The cursor is a sequence of one server instance: sequences restart with the process.
   let lastSequence = options.afterSequence ?? 0;
+  let hasCursor = options.afterSequence !== undefined;
+  let instanceId: string | undefined;
   let reconnectDelay = RECONNECT_FIRST_DELAY_MS;
   let lostSince: number | undefined;
+  /** The server's first event: which instance it is and where its events stand. */
+  const greet = (data: string): void => {
+    let hello: { instanceId?: unknown; latestSequence?: unknown };
+    try { hello = JSON.parse(data) as typeof hello; } catch { return; }
+    if (typeof hello.instanceId !== "string" || typeof hello.latestSequence !== "number") return;
+    // A stream that delivered a server's first event is up; only now does the backoff start over.
+    reconnectDelay = RECONNECT_FIRST_DELAY_MS;
+    lostSince = undefined;
+    options.onConnectionChange?.("connected");
+    const restarted = instanceId !== undefined && instanceId !== hello.instanceId;
+    instanceId = hello.instanceId;
+    if (!hasCursor || restarted) {
+      // A fresh subscription follows from now; after a restart the old cursor means nothing
+      // here, and what happened meanwhile is only in a snapshot.
+      lastSequence = hello.latestSequence;
+      hasCursor = true;
+    }
+    if (restarted) options.onResync?.();
+  };
   const connect = async (): Promise<void> => {
     if (disposed) return;
     const endpoint = new URL(`${base}/api/runtime/events`, window.location.href);
     if (sessionId) endpoint.searchParams.set("session_id", sessionId);
-    if (lastSequence > 0) endpoint.searchParams.set("after_sequence", String(lastSequence));
+    if (hasCursor) endpoint.searchParams.set("after_sequence", String(lastSequence));
+    if (instanceId) endpoint.searchParams.set("instance", instanceId);
     controller = new AbortController();
     try {
       const response = await apiFetch(endpoint, { headers: { Accept: "text/event-stream" }, signal: controller.signal });
       if (!response.ok || !response.body) throw new Error(`Runtime event stream failed: ${response.status}`);
-      reconnectDelay = RECONNECT_FIRST_DELAY_MS;
-      lostSince = undefined;
       options.onConnected?.();
-      options.onConnectionChange?.("connected");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -273,9 +293,11 @@ export function subscribeRuntimeEvents(
           const lines = block.split("\n");
           const eventName = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
           const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
-          if (eventName === "resync") {
-            // The server says where its events stand now (after a restart, below our cursor):
-            // the snapshot the subscriber reloads covers everything up to there.
+          if (eventName === "hello") {
+            greet(data);
+          } else if (eventName === "resync") {
+            // Events after the cursor were evicted: the snapshot the subscriber reloads covers
+            // everything up to the server's latest event, so the stream resumes after it.
             const latest = (() => { try { return (JSON.parse(data) as { latestSequence?: unknown }).latestSequence; } catch { return undefined; } })();
             if (typeof latest === "number" && Number.isSafeInteger(latest) && latest >= 0) lastSequence = latest;
             options.onResync?.();
@@ -313,6 +335,7 @@ export function subscribeRuntimeEvents(
     }
     if (payload && typeof payload === "object" && typeof (payload as { sequence?: unknown }).sequence === "number") {
       lastSequence = Math.max(lastSequence, (payload as { sequence: number }).sequence);
+      hasCursor = true;
     }
   };
   void connect();

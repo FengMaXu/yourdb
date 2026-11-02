@@ -27,8 +27,8 @@ export interface ApplicationEventFilter {
 
 /**
  * Buffered events after a cursor; `complete` is false when some were already
- * evicted, or the cursor predates a restart. `latestSequence` is the last
- * event emitted so far: a client that resynchronizes resumes after it.
+ * evicted. `latestSequence` is the last event emitted so far: a client that
+ * resynchronizes resumes after it.
  */
 export interface EventReplay {
   readonly events: readonly DataAgentEventEnvelope[];
@@ -40,6 +40,12 @@ export interface ApplicationCommandHost {
   dispatch(command: DataAgentCommandEnvelope, context: RequestContext): Promise<DataAgentResponseEnvelope>;
   subscribe(listener: (event: DataAgentEventEnvelope) => void, filter?: ApplicationEventFilter): () => void;
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay;
+  /**
+   * Which process issues the event sequences, and the last one so far.
+   * Sequences restart with the process, so a cursor is only meaningful for
+   * the instance that issued it.
+   */
+  eventStreamPosition(): { readonly instanceId: string; readonly latestSequence: number };
   readonly authService: ApplicationAuthService;
   queryExecutor?: {
     run(sql: string, rowLimit: number, options?: { readonly idempotencyKey?: string }): Promise<{ readonly columns: string[]; readonly rows: unknown[][]; readonly truncated: boolean }>;

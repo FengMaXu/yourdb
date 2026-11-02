@@ -585,7 +585,9 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         let streamLostEvents = lostEvents;
-        streamHandleRef.current = start(
+        // Captured before any callback can run, so a resync always checks the run this stream follows.
+        let handle: RuntimeChatHandle | null = null;
+        handle = start(
             (event: SSEEvent) => {
                 if (event.session_id && event.session_id !== currentSessionIdRef.current) {
                     return;
@@ -907,25 +909,32 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             {
                 onResync: () => {
                     streamLostEvents = true;
-                    void resyncFromServer(runSessionId).then(() => endRunIfGone(runSessionId, handle));
+                    void resyncRun(runSessionId, handle);
                 },
                 onConnectionChange: setStreamConnection,
             },
         );
-        const handle = streamHandleRef.current;
+        streamHandleRef.current = handle;
     };
 
     /**
-     * After a resync (events lost, or the server restarted) the run being
-     * followed may no longer exist: a restarted server reports no run in
-     * progress, and no completion event will ever come. End the turn then,
-     * marked interrupted, instead of waiting on it forever.
+     * After a resync (events lost, or the server restarted) one session state
+     * read tells whether the run being followed is still in progress. If it is,
+     * the conversation is reloaded from that state and followed on. If not (a
+     * restarted server has no such run, and no completion event will ever
+     * come), the turn ends as interrupted, keeping what was already shown.
      */
-    const endRunIfGone = async (sessionId: string, handle: RuntimeChatHandle | null) => {
+    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle | null) => {
         try {
             const state = await getSessionStateViaRuntime(sessionId);
-            if (state.inProgressRun || !handle || streamHandleRef.current !== handle || currentSessionIdRef.current !== sessionId) return;
+            if (!handle || streamHandleRef.current !== handle || currentSessionIdRef.current !== sessionId) return;
+            const followed = handle.runId();
+            if (state.inProgressRun && (followed === undefined || state.inProgressRun.runId === followed)) {
+                replaceWithSnapshot(state.messages);
+                return;
+            }
             handle.detach();
+            flushAllBuffers();
             streamHandleRef.current = null;
             activeAgentMessageIdRef.current = null;
             pendingAgentMessageIdRef.current = null;
@@ -935,7 +944,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             setStreamConnection('connected');
             setRunReason('interrupted');
         } catch (error) {
-            console.error('Failed to check whether the run is still in progress', error);
+            console.error('Failed to resynchronize the run', error);
         }
     };
 
@@ -990,19 +999,20 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const items = groupIntoTurns<UserMessage, AgentMessage>(messages);
         // A run that has not produced a step yet still shows that it is working.
         const last = items[items.length - 1];
-        if (isStreaming && last?.kind === 'user') {
+        if ((isStreaming || runReason === 'interrupted') && last?.kind === 'user') {
             items.push({ kind: 'turn', key: `turn-${last.message.id}`, ...(last.message.timestamp !== undefined ? { startedAt: last.message.timestamp } : {}), agents: [] });
         }
         return items;
     })();
-    const connectionNotice = !isStreaming || streamConnection === 'connected'
-        ? ''
-        : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
+    // One notice for the latest turn: the run was interrupted, or its event stream is down.
+    const turnNotice = runReason === 'interrupted'
+        ? t('chat.runInterrupted')
+        : !isStreaming || streamConnection === 'connected'
+            ? ''
+            : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
-        : runReason === 'interrupted'
-            ? t('chat.runInterrupted')
-            : connectionNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
+        : turnNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
 
     return (
         <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
@@ -1103,7 +1113,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                             running={isStreaming && index === chatItems.length - 1}
                             startedAt={item.startedAt}
                             currentSessionId={currentSession.id}
-                            connectionNotice={index === chatItems.length - 1 ? connectionNotice || (runReason === 'interrupted' ? t('chat.runInterrupted') : '') : ''}
+                            connectionNotice={index === chatItems.length - 1 ? turnNotice : ''}
                             toolLabel={(tool) => getToolHintLabel(tool, t)}
                             skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
                             onOpenToolPanel={onOpenToolPanel}

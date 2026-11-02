@@ -31,13 +31,14 @@ describe("protocol application host", () => {
     expect(runtime.replayAfter(300, { userId: "local" })).toEqual({ events: [], complete: true, latestSequence: 300 });
   });
 
-  it("reports an incomplete replay for a cursor issued before a restart", async () => {
+  it("names its event stream by instance, so a cursor from another process is recognizable", async () => {
     const runtime = new DataAgentRuntime();
     await runtime.dispatch({ protocolVersion: 1, requestId: "req-1", command: { type: "runtime.probe" } }, context);
-    // The previous process had reached sequence 5000; this one has emitted only event 1.
-    expect(runtime.replayAfter(5000, { userId: "local" })).toEqual({ events: [], complete: false, latestSequence: 1 });
-    expect(runtime.replayAfter(1, { userId: "local" }).complete).toBe(true);
-    expect(new DataAgentRuntime().replayAfter(7, { userId: "local" }).complete).toBe(false);
+    const position = runtime.eventStreamPosition();
+    expect(position.latestSequence).toBe(1);
+    expect(position.instanceId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(runtime.eventStreamPosition().instanceId).toBe(position.instanceId);
+    expect(new DataAgentRuntime().eventStreamPosition().instanceId).not.toBe(position.instanceId);
   });
 
   it("requires a native Application Agent adapter to return an operation identity", async () => {

@@ -7,6 +7,8 @@ export interface RuntimeChatHandle {
   cancel: () => void;
   /** Stop following the stream only; the run continues on the server. */
   detach: () => void;
+  /** The run being followed, once the server has accepted it. */
+  runId: () => string | undefined;
   finished: Promise<void>;
 }
 
@@ -318,6 +320,7 @@ function streamRuntimeChat(
       isDone = true;
       unsubscribe();
     },
+    runId: () => operationId,
     finished,
   };
 }

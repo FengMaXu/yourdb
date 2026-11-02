@@ -142,7 +142,7 @@ export async function createRuntimeServer(
   app.get("/api/runtime/events", async (request, reply) => {
     const context = await resolveContext(request, reply);
     if (!context) return;
-    const query = request.query as { session_id?: string; after_sequence?: string };
+    const query = request.query as { session_id?: string; after_sequence?: string; instance?: string };
     if (query.session_id && options.authorizeSession && !(await options.authorizeSession(context.userId, query.session_id))) {
       return reply.code(403).send({ error: { code: "SESSION_ACCESS_DENIED" } });
     }
@@ -153,6 +153,11 @@ export async function createRuntimeServer(
     reply.raw.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
     // Flush headers now: once the client sees the response, its subscription exists.
     reply.raw.write(": connected\n\n");
+    // Which process this is, and where its events stand: a client whose cursor came from
+    // another instance (the server restarted) resynchronizes from a snapshot instead of replaying.
+    const position = runtime.eventStreamPosition();
+    reply.raw.write(`event: hello\ndata: ${JSON.stringify(position)}\n\n`);
+    const sameInstance = query.instance === undefined || query.instance === position.instanceId;
     let replaying = true;
     let closed = false;
     const pending: DataAgentEventEnvelope[] = [];
@@ -170,7 +175,7 @@ export async function createRuntimeServer(
       if (replaying) pending.push(envelope);
       else send(envelope);
     }, { userId: context.userId, ...(query.session_id ? { sessionId: query.session_id } : {}) });
-    if (hasCursor) {
+    if (hasCursor && sameInstance) {
       const replay = runtime.replayAfter(afterSequence, { userId: context.userId, ...(query.session_id ? { sessionId: query.session_id } : {}) });
       // A partial replay would splice a hole into the client's state; it reloads a snapshot instead.
       if (replay.complete) for (const envelope of replay.events) send(envelope);

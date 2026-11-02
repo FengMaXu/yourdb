@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   DataAgentEventEnvelopeSchema,
   DataAgentResponseEnvelopeSchema,
@@ -112,6 +113,8 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   get clarificationManager(): ClarificationManager { return this.clarifications; }
   /** Correlation only: Pi owns the operation lifecycle and durable state. */
   private nextSequence = 1;
+  /** Event sequences restart with the process; this tells one process's cursors from another's. */
+  private readonly instanceId = randomUUID();
   private agent: RuntimeAgent | undefined;
 
   constructor(options: { metadata?: MetadataStore; sessions?: RuntimeSessionStore; workspace?: WorkspaceStore; pythonExecutable?: string; bundledPythonExecutable?: string; knowledge?: KnowledgeIndex; knowledgeRoot?: string; skillRoots?: string[]; projectRoot?: string; packagedRoot?: string; clarifications?: ClarificationManager; agent?: RuntimeAgent } = {}) {
@@ -146,17 +149,19 @@ export class DataAgentRuntime implements ApplicationCommandHost {
    * Replays buffered events after a cursor. The buffer is bounded, so a cursor
    * older than its first retained event means events were lost; `complete`
    * then tells the transport to have the client resynchronize from a snapshot.
-   * Sequences restart at 1 with the process, so a cursor beyond the last event
-   * was issued before a restart: the client's state may be stale (a run it
-   * follows may have ended with the old process), so it resynchronizes too.
+   * A cursor from another process is the transport's to detect, by instance.
    */
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay {
     const first = this.eventBuffer[0]?.sequence ?? this.nextSequence;
     return {
       events: this.eventBuffer.filter((event) => event.sequence > sequence && this.eventVisible(event, filter)),
-      complete: sequence >= first - 1 && sequence < this.nextSequence,
+      complete: sequence >= first - 1,
       latestSequence: this.nextSequence - 1,
     };
+  }
+
+  eventStreamPosition(): { readonly instanceId: string; readonly latestSequence: number } {
+    return { instanceId: this.instanceId, latestSequence: this.nextSequence - 1 };
   }
 
   subscribe(listener: DataAgentEventListener, filter?: ApplicationEventFilter): () => void {
