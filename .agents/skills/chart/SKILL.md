@@ -113,9 +113,10 @@ allowed-tools:
 ```
 
 - `x` 只有 `field`。
-- 每层：`type`（`bar` / `line` / `area` / `scatter`）、`y: { field, axis? }`；可选 `series: { field }`（按字段拆系列）、`stack`（`none` / `stacked` / `percent`）、`name`、`label`、`size`、`id`。
+- 每层：`type`（`bar` / `line` / `area` / `scatter`）、`y: { field, axis? }`；可选 `series`、`label`、`size`、`id`（都是字段引用 `{ "field": "<列名>" }`，不是文字）、`stack`（`none` / `stacked` / `percent`）、`name`（图例名，文字）。`size`、`id` 只用于 scatter。
 - 右轴写在 `y` 里：`"y": { "field": "...", "axis": "right" }`，不是写在层上。
-- 横向条形图：`orientation: "horizontal"` 写在 `chart` 上（与 `mark` 同级），`x` 仍然是类目字段、`y` 仍然是度量，只是画成横向。
+- 横向条形图：`orientation: "horizontal"` 写在 `chart` 上（与 `mark` 同级），`x` 仍然是类目字段、`y` 仍然是度量，只是画成横向。横向图只支持 bar 与 line，且不能有右轴。
+- `x` 声明为 `quantitative`（数值 x 轴）时，只能用 line、area、scatter，不能用 bar，也不能堆叠。
 - 可选 `highlight`、`references`（参考线，取自查询里每行同值的列）、`bands`。
 
 ### `chart.mark: "pie"`：构成
@@ -134,8 +135,15 @@ allowed-tools:
 
 ### 其他
 
-- 类目过多：`"selection": { "kind": "top_n", "by": "<度量字段>", "n": 10, "order": "desc" }`，或 `render_chart` 传更大的 `height`；编译器不会自行删减数据。
-- 其他 mark：`heatmap`（`x`、`y`、`color`）、`histogram`（`start`、`end`、`value`）、`boxplot`、`waterfall`、`sankey`，数据都要在查询里算好。
+- 类目过多：`"selection": { "kind": "top_n", "by": "<度量字段>", "n": 10, "order": "desc" }`，或给 `render_chart` 更大的画布（竖向图加 `width`，横向图加 `height`）；编译器不会自行删减数据。
+- 其他 mark（括号内为必填键，除注明外都是 `{ "field": ... }`；数据都要在查询里算好）：
+  - `heatmap`（`x`、`y`、`color: { field, scale?, midpoint? }`）
+  - `histogram`（`start`、`end`、`value`，每行一个分箱）
+  - `boxplot`（`category`、`min`、`q1`、`median`、`q3`、`max`、`whisker`：`"min_max"` 或 `"iqr_1_5"`）
+  - `waterfall`（`step`、`start`、`end`，可选 `total`）
+  - `sankey`（`source`、`target`、`value`，每行一条流）
+  - `treemap`、`sunburst`（`path`：1–4 个字段引用的数组、`value`，每行一个叶子）
+  - `funnel`（`stage`、`value`，按行序）
 
 ### 常见报错
 
@@ -144,9 +152,10 @@ allowed-tools:
 | `must not have additional properties (/chart/x)` | `x` 里写了 `label` 等多余键；只留 `field`，标题写在 `fields.<列>.label` |
 | `must not have additional properties (/chart/layers/N)` | 层上写了 `axis` 或 `orientation`；`axis` 移到 `y` 里，`orientation` 移到 `chart` 上 |
 | `must be equal to constant (/fields/<列>/type)` | type 写错（如 `categorical`）；用上表四种之一 |
-| `INVALID_ENCODING ... bar 需要类目 x 轴` | 横向条形图把度量放到了 `x`；`x` 放类目，加 `"orientation": "horizontal"` |
+| `INVALID_ENCODING ... bar 需要类目 x 轴` | `x` 列被声明为 `quantitative`：画柱形就把 `x` 声明为 `nominal`/`ordinal`（或不声明）；要横向条形图则 `x` 放类目、加 `"orientation": "horizontal"`，度量放在 `y` |
+| `INVALID_ENCODING ... 横向图只支持 ... bar 与 line` / `横向图不支持右侧数值轴` | 横向图只能用 bar、line，去掉右轴；需要双轴就改回竖向 |
 | `NON_ADDITIVE_PART_OF_WHOLE` | 饼图或堆叠用了占比、均值；改用可加的原始量 |
-| `CAPACITY_EXCEEDED` | 类目放不下；加 `selection` 取前 N，或加大 `height` |
+| `CAPACITY_EXCEEDED` | 类目放不下；加 `selection` 取前 N，或加大画布（竖向图 `width`，横向图 `height`），或改成横向图 |
 
 ## 图表规范
 

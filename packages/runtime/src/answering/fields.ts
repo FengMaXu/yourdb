@@ -357,9 +357,9 @@ export function layersOf(expression: MeasureExpression): readonly MeasureExpress
  * the output grouping, so its "per" may be left out.
  */
 function parseFormula(value: unknown, label: string): MeasureExpression {
-  // {ref} is a form of the field, like {value} or {open}: inside "value" it reads as a formula with an unknown key.
+  // {ref} is a form of the field, like {value} or {open}: as a formula it would read as one with an unknown key.
   if (record(value)?.ref !== undefined) {
-    fail(`${label}: ref is not part of a formula; write it as the field itself, "measure.formula": {"ref": "<measure name>"}, not inside "value"`);
+    fail(`${label}: a formula cannot be a ref. Only a chart query (parentTaskId) references a Report Task measure, and it writes the ref as the field itself, "measure.formula": {"ref": "<measure name>"}, never inside "value" or "open"; a measure definition states its own formula`);
   }
   const expression = parseExpression(value, label);
   const inner = layersOf(expression).slice(1);

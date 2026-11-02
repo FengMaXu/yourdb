@@ -185,6 +185,7 @@ describe("Report Task", () => {
     const wrapped = await chart(answering, parent.taskId, "chart-wrapped", { ...rest, "measure.formula": { value: { ref: "negative_rate" } } });
     const message = wrapped.outcomes?.find((item) => item.path === "measure.formula")?.message ?? "";
     expect(message).toContain('"measure.formula": {"ref": "<measure name>"}');
+    expect(message).toContain("never inside \"value\"");
     expect(message).not.toContain("unknown keys");
   });
 
