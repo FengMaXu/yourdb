@@ -3,7 +3,7 @@ import { isAgentMessageEmpty, visibleAgentContent, type AgentMessageLike } from 
 /**
  * A conversation shows one agent *turn* per user message: every model step the
  * agent took to answer it. The steps (thoughts, tool calls, remarks along the
- * way) are the process; once the turn is over, the last text it wrote is the result.
+ * way) are the process; the text of the step that ended the turn is the result.
  */
 
 interface UserLike {
@@ -62,19 +62,30 @@ export interface TurnView<A extends TurnAgentLike> {
     resultText: string;
 }
 
+/** A step that calls a tool ended on toolUse: the agent went on working after it. */
+const callsTools = (agent: TurnAgentLike): boolean => Object.keys(agent.toolCallsById).length > 0 || agent.skillActivations.length > 0;
+
 /**
- * Split a turn into its process steps and its result. While the turn runs,
- * no text is known to be the answer: any of it may be a remark along the way
- * (e.g. the lead-in to a clarification question), so it all stays in the
- * process. Once the turn is over, its last text is the result.
+ * Split a turn into its process steps and its result. The result is the text
+ * of the step that ended the turn: the last step with text, provided it and
+ * every step after it call no tool. Text written with or before a tool call
+ * (e.g. the lead-in to a clarification question) is a remark along the way and
+ * stays in the process. A step that ended on an error or a stop did end the
+ * turn, so its text (such as the failure notice) is the result even when it
+ * also called a tool. The rule reads the steps alone, so a live turn and the
+ * same turn restored from history split the same way.
  */
-export function splitTurn<A extends TurnAgentLike>(agents: readonly A[], running = false): TurnView<A> {
+export function splitTurn<A extends TurnAgentLike>(agents: readonly A[]): TurnView<A> {
     let resultIndex = -1;
-    for (let index = agents.length - 1; index >= 0 && !running; index -= 1) {
-        if (visibleAgentContent(agents[index]).trim()) {
+    for (let index = agents.length - 1; index >= 0; index -= 1) {
+        const agent = agents[index];
+        const hasText = Boolean(visibleAgentContent(agent).trim());
+        const ended = agent.terminalReason === 'error' || agent.terminalReason === 'stopped';
+        if (hasText && (ended || !callsTools(agent))) {
             resultIndex = index;
             break;
         }
+        if (callsTools(agent)) break;
     }
     const steps: TraceStep<A>[] = [];
     agents.forEach((agent, index) => {
