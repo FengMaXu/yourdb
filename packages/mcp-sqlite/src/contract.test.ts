@@ -68,6 +68,28 @@ describe("SQLite MCP server", () => {
     await rm(root, { recursive: true, force: true });
   });
 
+  it("describes tables whose names are not bare identifiers", async () => {
+    const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
+    const dbPath = join(root, "ref.sqlite3");
+    const seed = new DatabaseSync(dbPath);
+    seed.exec(`CREATE TABLE "Db-IMDB__Movie" (id INTEGER PRIMARY KEY, title TEXT UNIQUE);
+      CREATE TABLE "it's" (movie_id INTEGER REFERENCES "Db-IMDB__Movie"(id));`);
+    seed.close();
+
+    const { server, close } = createSqliteServer({ databasePath: dbPath });
+    const client = new Client({ name: "data-agent-test", version: "1.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    const schema = JSON.parse(((await client.callTool({ name: "get_schema", arguments: {} })).content as any)[0].text).schema;
+    expect(schema).toEqual([
+      { table: "Db-IMDB__Movie", columns: expect.any(Array), primaryKey: ["id"], uniqueKeys: [["title"]] },
+      { table: "it's", columns: expect.any(Array), foreignKeys: [{ columns: ["movie_id"], references: { table: "Db-IMDB__Movie", columns: ["id"] } }] },
+    ]);
+    await client.close();
+    close();
+    await rm(root, { recursive: true, force: true });
+  });
+
   it("opens the file read-only and never creates a missing one", async () => {
     const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
     const dbPath = join(root, "ref.sqlite3");

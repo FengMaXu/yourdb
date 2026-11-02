@@ -134,15 +134,15 @@ export function createSqliteServer(options: SqliteServerOptions) {
     async () => {
       const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
       const schema = tables.map((t: any) => {
-        const quoted = JSON.stringify(t.name).slice(1, -1);
-        const columns = db.prepare(`PRAGMA table_info(${quoted})`).all() as Array<{ name: string; type?: string; pk?: number }>;
+        // Names are bound, not spliced: a table such as Db-IMDB__Movie is no bare identifier.
+        const columns = db.prepare("SELECT * FROM pragma_table_info(?)").all(t.name) as Array<{ name: string; type?: string; pk?: number }>;
         const primaryKey = columns.filter((column) => Number(column.pk) > 0).sort((left, right) => Number(left.pk) - Number(right.pk)).map((column) => column.name);
-        const indexes = db.prepare(`PRAGMA index_list(${quoted})`).all() as Array<{ name: string; unique?: number }>;
+        const indexes = db.prepare("SELECT * FROM pragma_index_list(?)").all(t.name) as Array<{ name: string; unique?: number }>;
         const uniqueKeys = indexes.filter((index) => Number(index.unique) === 1).flatMap((index) => {
-          const entries = db.prepare(`PRAGMA index_info(${JSON.stringify(index.name).slice(1, -1)})`).all() as Array<{ name?: string; seqno?: number }>;
+          const entries = db.prepare("SELECT * FROM pragma_index_info(?)").all(index.name) as Array<{ name?: string; seqno?: number }>;
           return [entries.sort((left, right) => Number(left.seqno) - Number(right.seqno)).flatMap((entry) => entry.name ? [entry.name] : [])];
         }).filter((key) => key.length > 0);
-        const foreignRows = db.prepare(`PRAGMA foreign_key_list(${quoted})`).all() as Array<{ id?: number; seq?: number; from?: string; table?: string; to?: string }>;
+        const foreignRows = db.prepare("SELECT * FROM pragma_foreign_key_list(?)").all(t.name) as Array<{ id?: number; seq?: number; from?: string; table?: string; to?: string }>;
         const foreignKeys = [...new Set(foreignRows.map((row) => row.id).filter((id): id is number => id !== undefined))].flatMap((id) => {
           const rows = foreignRows.filter((row) => row.id === id).sort((left, right) => Number(left.seq) - Number(right.seq));
           const first = rows[0];
