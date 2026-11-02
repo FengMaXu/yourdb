@@ -89,7 +89,8 @@ allowed-tools:
 
 要点：
 
-- `chart.mark` 为 `cartesian` 或 `pie`。`cartesian` 的每层 `type` 为 `bar`、`line` 或 `scatter`；`y.axis: "right"` 放到右轴；`series: { "field": ... }` 按字段拆系列；`orientation: "horizontal"` 画横向条形图（只用于 bar、line）。
+- `chart.mark` 为 `cartesian` 或 `pie`。`cartesian` 的每层 `type` 为 `bar`、`line`、`area` 或 `scatter`；右轴写在 `y` 里（`"y": { "field": ..., "axis": "right" }`），不是写在层上；`series: { "field": ... }` 按字段拆系列；横向条形图在 `chart` 上加 `"orientation": "horizontal"`（与 `mark` 同级），`x` 仍是类目字段，只支持 bar 与 line、不能有右轴。`x`、`y` 只接受 `field`（及 `y.axis`），轴标题写在 `fields.<列>.label`。
+- 类目字段的 type 是 `nominal`（或有固定顺序时 `ordinal` + `order`），没有 `categorical`。完整字段表与常见报错见 chart Skill 的“ChartSpec 速查”。
 - 度量字段必须声明 `type: "quantitative"`、`storage`（`raw` / `ratio` / `percent`）与 `additivity`（`additive` / `non_additive`）。`storage: "ratio"` 的 0.12 显示为 12%；`magnitude` 把元换算为万元或亿元。
 - 堆叠（`stack`）与饼图要求可加、完整、非负的度量。
 - 类目过多时，用 `"selection": { "kind": "top_n", "by": "<度量字段>", "n": 10, "order": "desc" }` 只显示前 N 项，或在查询中缩小范围；编译器不会自行删减数据。
