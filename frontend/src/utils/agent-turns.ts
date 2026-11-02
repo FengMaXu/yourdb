@@ -63,29 +63,28 @@ export interface TurnView<A extends TurnAgentLike> {
 }
 
 /** A step that calls a tool ended on toolUse: the agent went on working after it. */
-const callsTools = (agent: TurnAgentLike): boolean => Object.keys(agent.toolCallsById).length > 0 || agent.skillActivations.length > 0;
+const callsTools = (agent: TurnAgentLike): boolean => Object.keys(agent.toolCallsById).length > 0;
 
 /**
  * Split a turn into its process steps and its result. The result is the text
  * of the step that ended the turn: the last step with text, provided it and
  * every step after it call no tool. Text written with or before a tool call
  * (e.g. the lead-in to a clarification question) is a remark along the way and
- * stays in the process. A step that ended on an error or a stop did end the
- * turn, so its text (such as the failure notice) is the result even when it
- * also called a tool. The rule reads the steps alone, so a live turn and the
- * same turn restored from history split the same way.
+ * stays in the process, also when the user stopped the run there. A step that
+ * failed did end the turn, so its text (live, the failure notice) is the
+ * result even when it also called a tool. The rule reads the steps alone, so a
+ * live turn and the same turn restored from history split the same way.
  */
 export function splitTurn<A extends TurnAgentLike>(agents: readonly A[]): TurnView<A> {
     let resultIndex = -1;
     for (let index = agents.length - 1; index >= 0; index -= 1) {
         const agent = agents[index];
-        const hasText = Boolean(visibleAgentContent(agent).trim());
-        const ended = agent.terminalReason === 'error' || agent.terminalReason === 'stopped';
-        if (hasText && (ended || !callsTools(agent))) {
+        const tools = callsTools(agent);
+        if (visibleAgentContent(agent).trim() && (agent.terminalReason === 'error' || !tools)) {
             resultIndex = index;
             break;
         }
-        if (callsTools(agent)) break;
+        if (tools) break;
     }
     const steps: TraceStep<A>[] = [];
     agents.forEach((agent, index) => {

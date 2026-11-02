@@ -67,11 +67,9 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
     const widgets = agents.flatMap((agent) => Object.values(agent.widgetsById));
     const lastAgent = agents[agents.length - 1];
 
-    // Open while running, folded once done unless the turn ended without a result
-    // (interrupted, or its last words came with a tool call): then the process is
-    // all there is to read. A click by the user wins from then on.
+    // Open while running, folded once done; a click by the user wins from then on.
     const [userOpen, setUserOpen] = useState<boolean | null>(null);
-    const open = userOpen ?? (running || !resultText);
+    const open = userOpen ?? running;
 
     // Time the turn: a clock while running, the moment it finished afterwards.
     const [now, setNow] = useState(() => Date.now());
@@ -204,7 +202,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 {reconnecting && (
                     <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{t('chat.streamReconnecting')}</span></div>
                 )}
-                {result === undefined && !running && lastAgent?.statusNotice && (
+                {result === undefined && !running && !hasProcess && lastAgent?.statusNotice && (
                     <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{lastAgent.statusNotice}</span></div>
                 )}
             </div>

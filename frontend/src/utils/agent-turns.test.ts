@@ -67,13 +67,20 @@ describe('splitTurn', () => {
         expect(view.steps.map((step) => step.kind)).toEqual(['tool', 'note', 'tool']);
     });
 
-    it('keeps text followed by a skill activation in the process', () => {
+    it('keeps the lead-in in the process when the user stopped the run at its tool call', () => {
         const view = splitTurn([
-            agent('a1', { content: 'Loading the chart guide.' }),
-            agent('a2', { skillActivations: [{ name: 'chart' }] as TurnAgentLike['skillActivations'] }),
+            agent('a1', { content: 'Two things to confirm first:', toolCallsById: { c1: { toolCallId: 'c1' } }, terminalReason: 'stopped' }),
         ]);
         expect(view.result).toBeUndefined();
-        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'skill']);
+        expect(view.steps.map((step) => step.kind)).toEqual(['note', 'tool']);
+    });
+
+    it('does not count a skill activation as a tool call', () => {
+        const view = splitTurn([
+            agent('a1', { content: 'Answer.', skillActivations: [{ name: 'chart' }] as TurnAgentLike['skillActivations'] }),
+        ]);
+        expect(view.result?.id).toBe('a1');
+        expect(view.steps.map((step) => step.kind)).toEqual(['skill']);
     });
 
     it('takes the failure notice of a step that ended on an error as the result, tool call or not', () => {
