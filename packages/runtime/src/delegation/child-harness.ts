@@ -8,11 +8,11 @@ import {
   type Session,
 } from "@earendil-works/pi-agent-core";
 import type { Model, Models } from "@earendil-works/pi-ai";
-import { AssistantMessageEventStream } from "@earendil-works/pi-ai/utils/event-stream";
 import type { ChildExecutionRequest, ChildExecutor, ChildRecovery, ChildUsage, DelegationLedgerRecord, RawChildExecution } from "./index.js";
 import { ToolPromptCatalog } from "../agent/tool-prompt-catalog.js";
 import { withToolPromptCatalog } from "../agent/tool-prompt-models.js";
 import { withCoalescedDeltas } from "../agent/coalesced-stream-models.js";
+import { failedStream, overrideModels } from "../agent/models-overrides.js";
 import { infrastructureFailureOf } from "../agent/infrastructure-failure.js";
 
 /** Explorers answer bounded fact questions; fewer turns keep the parent waiting less. */
@@ -84,26 +84,6 @@ async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Pro
   });
 }
 
-function modelBudgetError(model: Model<any>): AssistantMessageEventStream {
-  const stream = new AssistantMessageEventStream();
-  stream.push({
-    type: "error",
-    reason: "error",
-    error: {
-      role: "assistant",
-      content: [],
-      api: model.api,
-      provider: model.provider,
-      model: model.id,
-      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
-      stopReason: "error",
-      errorMessage: "SUBAGENT_MODEL_REQUEST_BUDGET_EXHAUSTED",
-      timestamp: Date.now(),
-    },
-  });
-  return stream;
-}
-
 /**
  * The child model must declare the same output limit that boundedModels
  * enforces. Otherwise Pi sees a length stop below the declared limit and
@@ -118,7 +98,7 @@ function boundedModels(source: Models, budget: ChildBudget = { wrapUp: false }):
   let requests = 0;
   const streamSimple: Models["streamSimple"] = (model, context, options) => {
     requests += 1;
-    if (requests > MAX_MODEL_REQUESTS) return modelBudgetError(model);
+    if (requests > MAX_MODEL_REQUESTS) return failedStream(model, "SUBAGENT_MODEL_REQUEST_BUDGET_EXHAUSTED");
     const requested = options?.maxTokens ?? model.maxTokens;
     const maxTokens = requested > 0 ? Math.min(requested, MAX_OUTPUT_TOKENS) : MAX_OUTPUT_TOKENS;
     // The last allowed request, or the first after wrap-up, has no tools, so gathered information always becomes a report.
@@ -133,14 +113,7 @@ function boundedModels(source: Models, budget: ChildBudget = { wrapUp: false }):
     const model = source.getModel(provider, modelId);
     return model ? childModel(model) : model;
   };
-  return new Proxy(source, {
-    get(target, property) {
-      if (property === "streamSimple") return streamSimple;
-      if (property === "getModel") return getModel;
-      const member = Reflect.get(target, property);
-      return typeof member === "function" ? member.bind(target) : member;
-    },
-  });
+  return overrideModels(source, { streamSimple, getModel });
 }
 
 function nullUsage(): ChildUsage {
