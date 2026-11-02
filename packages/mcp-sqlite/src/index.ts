@@ -132,7 +132,8 @@ export function createSqliteServer(options: SqliteServerOptions) {
     "List tables and columns of the SQLite database",
     {},
     async () => {
-      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all();
+      // SQLite's own tables start with "sqlite_"; the escape keeps "_" literal, so sqlite-sakila__actor stays listed.
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'").all();
       const schema = tables.map((t: any) => {
         // Names are bound, not spliced: a table such as Db-IMDB__Movie is no bare identifier.
         const columns = db.prepare("SELECT * FROM pragma_table_info(?)").all(t.name) as Array<{ name: string; type?: string; pk?: number }>;

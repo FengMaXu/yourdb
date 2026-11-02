@@ -68,12 +68,14 @@ describe("SQLite MCP server", () => {
     await rm(root, { recursive: true, force: true });
   });
 
-  it("describes tables whose names are not bare identifiers", async () => {
+  it("describes tables whose names are not bare identifiers, and only SQLite's own tables are hidden", async () => {
     const root = await mkdtemp(join(tmpdir(), "data-agent-mcp-sqlite-"));
     const dbPath = join(root, "ref.sqlite3");
     const seed = new DatabaseSync(dbPath);
     seed.exec(`CREATE TABLE "Db-IMDB__Movie" (id INTEGER PRIMARY KEY, title TEXT UNIQUE);
-      CREATE TABLE "it's" (movie_id INTEGER REFERENCES "Db-IMDB__Movie"(id));`);
+      CREATE TABLE "it's" (movie_id INTEGER REFERENCES "Db-IMDB__Movie"(id));
+      CREATE TABLE "sqlite-sakila__actor" (actor_id INTEGER);
+      ANALYZE;`);
     seed.close();
 
     const { server, close } = createSqliteServer({ databasePath: dbPath });
@@ -84,6 +86,7 @@ describe("SQLite MCP server", () => {
     expect(schema).toEqual([
       { table: "Db-IMDB__Movie", columns: expect.any(Array), primaryKey: ["id"], uniqueKeys: [["title"]] },
       { table: "it's", columns: expect.any(Array), foreignKeys: [{ columns: ["movie_id"], references: { table: "Db-IMDB__Movie", columns: ["id"] } }] },
+      { table: "sqlite-sakila__actor", columns: expect.any(Array) },
     ]);
     await client.close();
     close();
