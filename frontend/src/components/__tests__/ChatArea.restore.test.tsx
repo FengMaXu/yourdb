@@ -104,11 +104,32 @@ describe('ChatArea restoring a session', () => {
         await waitFor(() => expect(screen.getByText(/先确认两个口径/)).toBeTruthy());
 
         // The restarted server has no run in progress, and no completion event will come.
-        runtime.state = { messages: [], inProgressRun: null, pendingClarification: null, eventSequence: 0 };
-        await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
+        runtime.state = { messages: [{ id: 'u1', role: 'user', content: '三行业指标' }], inProgressRun: null, pendingClarification: null, eventSequence: 0 };
+        await act(async () => { (runtime.options as { onResync?: (reason: string) => void } | undefined)?.onResync?.('restarted'); });
         await waitFor(() => expect(screen.getAllByText(/服务中断，本轮没有完成/).length).toBeGreaterThan(0));
-        // What was already shown stays; the stream is let go.
-        expect(screen.getByText(/先确认两个口径/)).toBeTruthy();
+        // The conversation is what the server kept; the stream is let go.
+        expect(screen.queryByText(/先确认两个口径/)).toBeNull();
+        expect(runtime.listener).toBeUndefined();
+    });
+
+    it('closes a followed run normally when evicted events hid its completion', async () => {
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }],
+            inProgressRun: { runId: 'run-1', startedAt: 1 },
+            pendingClarification: null,
+            eventSequence: 41,
+        };
+        renderChat();
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }, { id: 'a1', role: 'agent', content: '已完成的回答', messageId: 'a1', toolCallsById: {}, widgetsById: {}, skillActivations: [], currentStage: 'generating_answer', visitedStages: ['sent'], terminalReason: 'completed' }],
+            inProgressRun: null,
+            pendingClarification: null,
+            eventSequence: 400,
+        };
+        await act(async () => { (runtime.options as { onResync?: (reason: string) => void } | undefined)?.onResync?.('evicted'); });
+        await waitFor(() => expect(screen.getByText(/已完成的回答/)).toBeTruthy());
+        expect(screen.queryByText(/服务中断，本轮没有完成/)).toBeNull();
         expect(runtime.listener).toBeUndefined();
     });
 
@@ -121,8 +142,8 @@ describe('ChatArea restoring a session', () => {
         };
         renderChat();
         await waitFor(() => expect(runtime.listener).toBeDefined());
-        runtime.state = { messages: [], inProgressRun: { runId: 'run-2', startedAt: 2 }, pendingClarification: null, eventSequence: 0 };
-        await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
+        runtime.state = { messages: [{ id: 'u1', role: 'user', content: '三行业指标' }], inProgressRun: { runId: 'run-2', startedAt: 2 }, pendingClarification: null, eventSequence: 0 };
+        await act(async () => { (runtime.options as { onResync?: (reason: string) => void } | undefined)?.onResync?.('restarted'); });
         await waitFor(() => expect(screen.getAllByText(/服务中断，本轮没有完成/).length).toBeGreaterThan(0));
         expect(runtime.listener).toBeUndefined();
     });
@@ -142,7 +163,7 @@ describe('ChatArea restoring a session', () => {
             pendingClarification: null,
             eventSequence: 60,
         };
-        await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
+        await act(async () => { (runtime.options as { onResync?: (reason: string) => void } | undefined)?.onResync?.('evicted'); });
         await waitFor(() => expect(screen.getByText(/重载后的进度/)).toBeTruthy());
         expect(runtime.listener).toBeDefined();
         expect(screen.queryByText(/服务中断，本轮没有完成/)).toBeNull();

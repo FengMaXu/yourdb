@@ -55,7 +55,7 @@ describe("runtime event stream subscription", () => {
   });
 
   it("resumes after the server's latest event once told to resync for evicted events", async () => {
-    apiFetch.mockResolvedValueOnce(streamOf([hello("i-1", 300), "event: resync\ndata: {\"afterSequence\":3,\"latestSequence\":300}\n\n"]));
+    apiFetch.mockResolvedValueOnce(streamOf([hello("i-1", 300), "event: resync\ndata: {\"afterSequence\":3,\"latestSequence\":300,\"reason\":\"evicted\"}\n\n"]));
     apiFetch.mockImplementation(() => new Promise(() => undefined));
     const onResync = vi.fn();
     const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { afterSequence: 3, onResync });
@@ -63,23 +63,32 @@ describe("runtime event stream subscription", () => {
     expect(urlOf(0).searchParams.get("after_sequence")).toBe("3");
     expect(urlOf(1).searchParams.get("after_sequence")).toBe("300");
     expect(urlOf(1).searchParams.get("instance")).toBe("i-1");
-    expect(onResync).toHaveBeenCalledTimes(1);
+    expect(onResync).toHaveBeenCalledWith("evicted");
     unsubscribe();
   });
 
-  it("resyncs when the server is another instance (it restarted), whatever its sequence numbers", async () => {
-    // Before the restart the cursor was 120; the new process has already gone past it.
-    apiFetch.mockResolvedValueOnce(streamOf([hello("old", 119), `id: 120\ndata: ${envelope(120)}\n\n`]));
-    apiFetch.mockResolvedValueOnce(streamOf([hello("new", 200)]));
+  it("sends its cursor with the instance that issued it, and resyncs when the server reports a restart", async () => {
+    // The snapshot's cursor 120 came from instance "old"; the server is now "new", already past 120.
+    apiFetch.mockResolvedValueOnce(streamOf([hello("new", 200), "event: resync\ndata: {\"afterSequence\":120,\"latestSequence\":200,\"reason\":\"restarted\"}\n\n"]));
     apiFetch.mockImplementation(() => new Promise(() => undefined));
     const onResync = vi.fn();
-    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { onResync });
-    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(3), { timeout: 4_000 });
-    expect(urlOf(1).searchParams.get("after_sequence")).toBe("120");
-    expect(urlOf(1).searchParams.get("instance")).toBe("old");
-    expect(onResync).toHaveBeenCalledTimes(1);
-    expect(urlOf(2).searchParams.get("after_sequence")).toBe("200");
-    expect(urlOf(2).searchParams.get("instance")).toBe("new");
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { afterSequence: 120, afterInstance: "old", onResync });
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    expect(urlOf(0).searchParams.get("after_sequence")).toBe("120");
+    expect(urlOf(0).searchParams.get("instance")).toBe("old");
+    expect(onResync).toHaveBeenCalledWith("restarted");
+    expect(urlOf(1).searchParams.get("after_sequence")).toBe("200");
+    expect(urlOf(1).searchParams.get("instance")).toBe("new");
+    unsubscribe();
+  });
+
+  it("stops and reports rejected when the server refuses the subscription", async () => {
+    apiFetch.mockResolvedValue(new Response(null, { status: 403 }));
+    const states: string[] = [];
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { onConnectionChange: (state) => states.push(state) });
+    await vi.waitFor(() => expect(states).toEqual(["rejected"]));
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(apiFetch).toHaveBeenCalledTimes(1);
     unsubscribe();
   });
 

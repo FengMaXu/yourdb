@@ -204,8 +204,11 @@ export async function answerClarificationViaRuntime(clarificationId: string, ans
 export interface RuntimeEventStreamOptions {
   /** The server subscription exists; events emitted from now on will arrive. */
   readonly onConnected?: () => void;
-  /** Events after the cursor were lost, or the server restarted; the subscriber must reload a snapshot. */
-  readonly onResync?: () => void;
+  /**
+   * The subscriber must reload a snapshot: events after the cursor were
+   * evicted, or the cursor came from a server process that has since restarted.
+   */
+  readonly onResync?: (reason: RuntimeResyncReason) => void;
   /**
    * The stream (re)connected, dropped and is about to reconnect, or has been
    * down long enough that the server is likely gone ("disconnected"; it keeps
@@ -214,9 +217,29 @@ export interface RuntimeEventStreamOptions {
   readonly onConnectionChange?: (state: RuntimeConnectionState) => void;
   /** Resume after this event sequence, e.g. the cursor of a session snapshot. */
   readonly afterSequence?: number;
+  /** The server instance that issued afterSequence, so a restart since is recognized. */
+  readonly afterInstance?: string;
 }
 
-export type RuntimeConnectionState = "connected" | "reconnecting" | "disconnected";
+/**
+ * "rejected": the server refused the subscription (signed out, or no access to
+ * the session); retrying cannot help, so the stream stops.
+ */
+export type RuntimeConnectionState = "connected" | "reconnecting" | "disconnected" | "rejected";
+export type RuntimeResyncReason = "evicted" | "restarted";
+
+/** Statuses retrying cannot change. */
+const REJECTED_STATUSES = new Set([401, 403, 404]);
+
+/** `latestSequence` of a hello or resync event, if it is a usable cursor. */
+function latestSequenceOf(data: string): number | undefined {
+  try {
+    const latest = (JSON.parse(data) as { latestSequence?: unknown }).latestSequence;
+    return typeof latest === "number" && Number.isSafeInteger(latest) && latest >= 0 ? latest : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** Reconnect delays back off from half a second to five. */
 const RECONNECT_FIRST_DELAY_MS = 500;
@@ -246,27 +269,28 @@ export function subscribeRuntimeEvents(
   // The cursor is a sequence of one server instance: sequences restart with the process.
   let lastSequence = options.afterSequence ?? 0;
   let hasCursor = options.afterSequence !== undefined;
-  let instanceId: string | undefined;
+  let instanceId = options.afterInstance;
   let reconnectDelay = RECONNECT_FIRST_DELAY_MS;
   let lostSince: number | undefined;
-  /** The server's first event: which instance it is and where its events stand. */
+  /**
+   * The server's first event: which instance it is and where its events stand.
+   * A restart since the cursor is the server's to report, with a resync.
+   */
   const greet = (data: string): void => {
-    let hello: { instanceId?: unknown; latestSequence?: unknown };
-    try { hello = JSON.parse(data) as typeof hello; } catch { return; }
-    if (typeof hello.instanceId !== "string" || typeof hello.latestSequence !== "number") return;
+    let instance: unknown;
+    try { instance = (JSON.parse(data) as { instanceId?: unknown }).instanceId; } catch { return; }
+    const latest = latestSequenceOf(data);
+    if (typeof instance !== "string" || latest === undefined) return;
     // A stream that delivered a server's first event is up; only now does the backoff start over.
     reconnectDelay = RECONNECT_FIRST_DELAY_MS;
     lostSince = undefined;
     options.onConnectionChange?.("connected");
-    const restarted = instanceId !== undefined && instanceId !== hello.instanceId;
-    instanceId = hello.instanceId;
-    if (!hasCursor || restarted) {
-      // A fresh subscription follows from now; after a restart the old cursor means nothing
-      // here, and what happened meanwhile is only in a snapshot.
-      lastSequence = hello.latestSequence;
+    instanceId = instance;
+    if (!hasCursor) {
+      // A fresh subscription follows from now on.
+      lastSequence = latest;
       hasCursor = true;
     }
-    if (restarted) options.onResync?.();
   };
   const connect = async (): Promise<void> => {
     if (disposed) return;
@@ -277,6 +301,10 @@ export function subscribeRuntimeEvents(
     controller = new AbortController();
     try {
       const response = await apiFetch(endpoint, { headers: { Accept: "text/event-stream" }, signal: controller.signal });
+      if (REJECTED_STATUSES.has(response.status)) {
+        options.onConnectionChange?.("rejected");
+        return;
+      }
       if (!response.ok || !response.body) throw new Error(`Runtime event stream failed: ${response.status}`);
       options.onConnected?.();
       const reader = response.body.getReader();
@@ -296,11 +324,13 @@ export function subscribeRuntimeEvents(
           if (eventName === "hello") {
             greet(data);
           } else if (eventName === "resync") {
-            // Events after the cursor were evicted: the snapshot the subscriber reloads covers
-            // everything up to the server's latest event, so the stream resumes after it.
-            const latest = (() => { try { return (JSON.parse(data) as { latestSequence?: unknown }).latestSequence; } catch { return undefined; } })();
-            if (typeof latest === "number" && Number.isSafeInteger(latest) && latest >= 0) lastSequence = latest;
-            options.onResync?.();
+            // The snapshot the subscriber reloads covers everything up to the server's
+            // latest event, so the stream resumes after it.
+            const latest = latestSequenceOf(data);
+            if (latest !== undefined) { lastSequence = latest; hasCursor = true; }
+            let reason: unknown;
+            try { reason = (JSON.parse(data) as { reason?: unknown }).reason; } catch { reason = undefined; }
+            options.onResync?.(reason === "restarted" ? "restarted" : "evicted");
           } else if (data) {
             deliver(data);
           }
@@ -426,6 +456,8 @@ export interface RuntimeSessionState {
   readonly inProgressRun: { readonly runId: string; readonly startedAt: number } | null;
   readonly pendingClarification: { readonly clarificationId: string; readonly question: string; readonly options: string[] } | null;
   readonly eventSequence: number;
+  /** The server instance that issued eventSequence. */
+  readonly eventInstance?: string;
 }
 
 /** The transcript plus what is still in progress: a running run and the clarification it waits on. */
@@ -438,6 +470,7 @@ export async function getSessionStateViaRuntime(sessionId: string): Promise<Runt
     inProgressRun: response.inProgressRun ?? null,
     pendingClarification: response.pendingClarification ?? null,
     eventSequence: response.eventSequence ?? 0,
+    ...(response.eventInstance ? { eventInstance: response.eventInstance } : {}),
   };
 }
 

@@ -62,7 +62,7 @@ describe("runtime event stream", () => {
       const response = await fetch(`${address}/api/runtime/events?after_sequence=3`);
       const reader = response.body!.getReader();
       const text = await readUntil(reader, (value) => value.includes("event: resync"));
-      expect(text).toContain('event: resync\ndata: {"afterSequence":3,"latestSequence":300}');
+      expect(text).toContain('event: resync\ndata: {"afterSequence":3,"latestSequence":300,"reason":"evicted"}');
       expect(text.slice(text.indexOf("event: resync"))).not.toContain("id: ");
       await reader.cancel();
     } finally {
@@ -88,7 +88,8 @@ describe("runtime event stream", () => {
 
       const other = await fetch(`${address}/api/runtime/events?after_sequence=1&instance=previous-process`);
       const otherReader = other.body!.getReader();
-      const otherText = await readUntil(otherReader, (value) => value.includes("event: hello"));
+      const otherText = await readUntil(otherReader, (value) => value.includes("event: resync"));
+      expect(otherText).toContain('event: resync\ndata: {"afterSequence":1,"latestSequence":3,"reason":"restarted"}');
       await runtime.dispatch({ protocolVersion: 1, requestId: "after-restart", command: { type: "runtime.probe" } }, { userId: "web-dev", host: "web" });
       const live = otherText + await readUntil(otherReader, (value) => value.includes("after-restart"));
       expect(live).not.toContain("id: 2");

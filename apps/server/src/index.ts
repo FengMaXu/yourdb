@@ -175,12 +175,18 @@ export async function createRuntimeServer(
       if (replaying) pending.push(envelope);
       else send(envelope);
     }, { userId: context.userId, ...(query.session_id ? { sessionId: query.session_id } : {}) });
-    if (hasCursor && sameInstance) {
+    // The client reloads a snapshot and resumes after the latest event, so it does not resync again on every reconnect.
+    const resync = (reason: "evicted" | "restarted"): void => {
+      if (!closed) reply.raw.write(`event: resync\ndata: ${JSON.stringify({ afterSequence, latestSequence: position.latestSequence, reason })}\n\n`);
+    };
+    if (hasCursor && !sameInstance) {
+      // The cursor is another process's: what it followed (a run, say) may have ended with that process.
+      resync("restarted");
+    } else if (hasCursor) {
       const replay = runtime.replayAfter(afterSequence, { userId: context.userId, ...(query.session_id ? { sessionId: query.session_id } : {}) });
       // A partial replay would splice a hole into the client's state; it reloads a snapshot instead.
       if (replay.complete) for (const envelope of replay.events) send(envelope);
-      // The client reloads a snapshot and resumes after the latest event, so it does not resync again on every reconnect.
-      else if (!closed) reply.raw.write(`event: resync\ndata: ${JSON.stringify({ afterSequence, latestSequence: replay.latestSequence })}\n\n`);
+      else resync("evicted");
     }
     replaying = false;
     for (const envelope of pending) send(envelope);

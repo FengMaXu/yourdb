@@ -361,6 +361,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
         inProgressRun: current ? { runId: current.id, startedAt: current.startedAt } : null,
         pendingClarification: pending ? { clarificationId: pending.clarificationId, question: pending.question, options: [...pending.options] } : null,
         eventSequence,
+        eventInstance: this.instanceId,
       } };
     }
     if (command.command.type === "session.prepare") {

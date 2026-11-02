@@ -19,7 +19,7 @@ import {
     type AgentProgressStage,
     type AgentTerminalReason,
 } from '../api/client';
-import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeConnectionState } from '../api/runtime-client';
+import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeConnectionState, type RuntimeResyncReason, type RuntimeSessionState } from '../api/runtime-client';
 import { attachRunViaRuntime, sendChatViaRuntime, type ChatStreamOptions, type RuntimeChatHandle } from '../api/chat-events';
 import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData } from './ToolPanel';
@@ -108,6 +108,10 @@ const advanceStage = (message: AgentMessage, stage: AgentProgressStage): AgentMe
         visitedStages,
     };
 };
+
+/** A resync reads the session state up to this many times, waiting 1, 2, 4… s between tries. */
+const RESYNC_ATTEMPTS = 4;
+const RESYNC_RETRY_MS = 1_000;
 
 const setTerminalReason = (message: AgentMessage, reason: AgentTerminalReason): AgentMessage => ({
     ...message,
@@ -345,7 +349,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             replaceWithSnapshot(state.messages);
             setIsStreaming(true);
             followRun(sessionId, (onEvent, onError, onFinish, streamSessionId, stream) => (
-                attachRunViaRuntime(runId, state.eventSequence, onEvent, onError, onFinish, streamSessionId, stream)
+                attachRunViaRuntime(runId, { sequence: state.eventSequence, ...(state.eventInstance ? { instance: state.eventInstance } : {}) }, onEvent, onError, onFinish, streamSessionId, stream)
             ), true);
         }).catch((error) => console.error('Failed to read the session state', error));
         return () => { superseded = true; };
@@ -585,9 +589,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         let streamLostEvents = lostEvents;
-        // Captured before any callback can run, so a resync always checks the run this stream follows.
-        let handle: RuntimeChatHandle | null = null;
-        handle = start(
+        const handle: RuntimeChatHandle = start(
             (event: SSEEvent) => {
                 if (event.session_id && event.session_id !== currentSessionIdRef.current) {
                     return;
@@ -907,9 +909,10 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             },
             runSessionId,
             {
-                onResync: () => {
+                // Callbacks run after start() returned (the stream connects asynchronously), so `handle` is set.
+                onResync: (reason) => {
                     streamLostEvents = true;
-                    void resyncRun(runSessionId, handle);
+                    void resyncRun(runSessionId, handle, reason);
                 },
                 onConnectionChange: setStreamConnection,
             },
@@ -918,34 +921,50 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     };
 
     /**
-     * After a resync (events lost, or the server restarted) one session state
-     * read tells whether the run being followed is still in progress. If it is,
-     * the conversation is reloaded from that state and followed on. If not (a
-     * restarted server has no such run, and no completion event will ever
-     * come), the turn ends as interrupted, keeping what was already shown.
+     * After a resync, one session state read tells what became of the run
+     * being followed. Still in progress: reload the conversation from that
+     * state and follow on. Over (no run, or another one): the run ended while
+     * its events were not followed, so the conversation is reloaded from the
+     * server and the turn closes. Only a server restart makes that ending an
+     * interruption; evicted events mean it finished normally. A run whose id
+     * is not known yet (its prompt is still being dispatched) is left to the
+     * dispatch.
      */
-    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle | null) => {
-        try {
-            const state = await getSessionStateViaRuntime(sessionId);
-            if (!handle || streamHandleRef.current !== handle || currentSessionIdRef.current !== sessionId) return;
-            const followed = handle.runId();
-            if (state.inProgressRun && (followed === undefined || state.inProgressRun.runId === followed)) {
+    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle, reason: RuntimeResyncReason) => {
+        const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === sessionId;
+        let state: RuntimeSessionState | undefined;
+        for (let attempt = 0; attempt < RESYNC_ATTEMPTS && current(); attempt += 1) {
+            try {
+                state = await getSessionStateViaRuntime(sessionId);
+                break;
+            } catch (error) {
+                console.error('Failed to read the session state for a resync', error);
+                await new Promise((resolve) => setTimeout(resolve, RESYNC_RETRY_MS * 2 ** attempt));
+            }
+        }
+        if (!current()) return;
+        const followed = handle.runId();
+        if (state) {
+            if (followed === undefined) return;
+            if (state.inProgressRun?.runId === followed) {
                 replaceWithSnapshot(state.messages);
                 return;
             }
-            handle.detach();
-            flushAllBuffers();
-            streamHandleRef.current = null;
-            activeAgentMessageIdRef.current = null;
-            pendingAgentMessageIdRef.current = null;
-            setIsStreaming(false);
-            setIsSubmittingClarification(false);
-            setPendingClarification(null);
-            setStreamConnection('connected');
-            setRunReason('interrupted');
-        } catch (error) {
-            console.error('Failed to resynchronize the run', error);
+        } else if (reason !== 'restarted') {
+            // Unreadable after every attempt: only a restart is reason enough to stop following.
+            return;
         }
+        handle.detach();
+        flushAllBuffers();
+        streamHandleRef.current = null;
+        activeAgentMessageIdRef.current = null;
+        pendingAgentMessageIdRef.current = null;
+        if (state) replaceWithSnapshot(state.messages);
+        setIsStreaming(false);
+        setIsSubmittingClarification(false);
+        setPendingClarification(null);
+        setStreamConnection('connected');
+        setRunReason(reason === 'restarted' ? 'interrupted' : 'completed');
     };
 
     const handlePrimaryAction = async () => {
@@ -1009,7 +1028,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         ? t('chat.runInterrupted')
         : !isStreaming || streamConnection === 'connected'
             ? ''
-            : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
+            : t(streamConnection === 'rejected' ? 'chat.streamRejected' : streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
         : turnNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
