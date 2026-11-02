@@ -5,7 +5,7 @@ import type { FieldMeta } from '@data-agent/contracts';
 import ChartSpecWidget from './ChartSpecWidget';
 import { useLanguage } from '../../context/LanguageContext';
 import { usePreview } from '../../context/PreviewContext';
-import { resolveInternalUrl, resolveWorkspacePreviewUrl } from '../../utils/resolveInternalUrl';
+import { resolveWorkspaceDownloadUrl, resolveWorkspacePreviewUrl } from '../../utils/resolveInternalUrl';
 import { Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from 'lucide-react';
 
 export type WidgetKind = 'kpi' | 'metric_cards' | 'table' | 'chart' | 'steps' | 'rich_text' | 'echarts' | 'file_link';
@@ -433,7 +433,8 @@ const FileLinkWidget: React.FC<FileLinkWidgetProps> = ({ widget, t, currentSessi
     const { file_path, download_url, file_type, title, subtitle } = widget;
     const { openPreview } = usePreview();
 
-    const fullUrl = resolveInternalUrl(download_url, currentSessionId);
+    // Download and preview resolve the same file, whichever way the link names it.
+    const fullUrl = resolveWorkspaceDownloadUrl(download_url, currentSessionId);
     const previewUrl = resolveWorkspacePreviewUrl(download_url, currentSessionId);
     const normalizedFileType = (file_type || file_path?.split('.').pop() || '').toLowerCase();
     const canPreview = PREVIEWABLE_FILE_TYPES.has(normalizedFileType);
