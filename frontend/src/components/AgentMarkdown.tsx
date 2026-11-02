@@ -181,6 +181,7 @@ export const createMarkdownComponents = (
         // Agents often name a produced file as inline code (`dashboards/x.html`) rather than a link;
         // give those the same preview and download actions.
         const text = typeof children === 'string' ? children.trim() : '';
+        // Only paths under a known folder: a bare file name in code (`result.csv`) is often just mentioned, not produced.
         const isInlinePath = !className && text && !text.includes('\n') && isWorkspaceRelativePath(text);
         if (isInlinePath && PREVIEWABLE_FILE_TYPES.has(getFileTypeFromPath(text))) {
             return renderFileActions(text, <code>{text}</code>, currentSessionId, openPreview, t);

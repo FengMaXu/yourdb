@@ -51,7 +51,7 @@ allowed-tools:
 
 ### 第五步：撰写报告
 
-用 `write_file` 把 Markdown 报告写到 `reports/<名字>.md`（不要写在工作区根目录），结构为：摘要 → 数据概览 → 关键发现 → 图表 → 建议。报告里引用图表写 `charts/<fileName>.svg`；回复里给报告链接写 `[报告标题](reports/<名字>.md)`，不要加前导 `/`。
+用 `write_file` 把 Markdown 报告写到 `reports/<名字>.md`（不要写在工作区根目录），结构为：摘要 → 数据概览 → 关键发现 → 图表 → 建议。报告在 `reports/` 下，`render_chart` 的图在工作区根目录的 `charts/` 下，所以报告里引用图表写 `../charts/<fileName>.svg`；回复里给报告链接写 `[报告标题](reports/<名字>.md)`，不要加前导 `/`。
 
 ## ChartSpec 速查
 
@@ -113,7 +113,7 @@ allowed-tools:
 
 ## 图表
 
-![图表标题](charts/<fileName>.svg)
+![图表标题](../charts/<fileName>.svg)
 
 *图注：数据口径与时间范围；render_chart 返回的提示、披露与字段语义来源。*
 
