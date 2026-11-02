@@ -357,6 +357,10 @@ export function layersOf(expression: MeasureExpression): readonly MeasureExpress
  * the output grouping, so its "per" may be left out.
  */
 function parseFormula(value: unknown, label: string): MeasureExpression {
+  // {ref} is a form of the field, like {value} or {open}: inside "value" it reads as a formula with an unknown key.
+  if (record(value)?.ref !== undefined) {
+    fail(`${label}: ref is not part of a formula; write it as the field itself, "measure.formula": {"ref": "<measure name>"}, not inside "value"`);
+  }
   const expression = parseExpression(value, label);
   const inner = layersOf(expression).slice(1);
   if (inner.some((layer) => !layer.per)) {

@@ -74,6 +74,80 @@ allowed-tools:
 - 返回 `[CHECK]` 时，先核对对应字段的 `storage`、`additivity` 声明：有误就改正 spec 重新渲染；确认无误才使用该图。
 - 不使用 Python 绘图。
 
+## ChartSpec 速查
+
+规格是严格的：每一层只接受下面列出的键，多写一个键就会报 `SCHEMA_INVALID ... must not have additional properties`。
+
+### `fields`：字段语义（按列名声明）
+
+| `type` | 必填 | 可选 | 用于 |
+|---|---|---|---|
+| `quantitative` | `storage`（`raw` / `ratio` / `percent`）、`additivity`（`additive` / `non_additive`） | `label`、`unit`、`display`、`magnitude` | 度量 |
+| `temporal` | `grain`（`year` / `quarter` / `month` / `week` / `day` / `hour` / `minute`）、`zone`（`"floating"` 或时区名） | `label` | 日期时间列 |
+| `ordinal` | `order`（类目的先后顺序数组） | `label` | 有固定顺序的类目，如配送天数分档 |
+| `nominal` | — | `label` | 普通类目，如支付方式、州 |
+
+- 没有 `categorical` 这种 type，普通类目用 `nominal`，也可以不声明类目字段。
+- 轴标题来自字段的 `label`；`x`、`y` 本身不接受 `label`。
+- 比率、均值、占比是 `non_additive`；金额、件数是 `additive`。
+
+### `chart.mark: "cartesian"`：柱、线、面积、散点
+
+```json chart-spec
+{
+  "version": 1,
+  "data": { "kind": "publication", "receiptId": "<receiptId>" },
+  "fields": {
+    "revenue": { "type": "quantitative", "label": "销售额", "storage": "raw", "unit": "BRL", "additivity": "additive" },
+    "orders": { "type": "quantitative", "label": "订单量", "storage": "raw", "unit": "单", "additivity": "additive" }
+  },
+  "chart": {
+    "mark": "cartesian",
+    "x": { "field": "month" },
+    "layers": [
+      { "type": "bar", "y": { "field": "revenue" } },
+      { "type": "line", "y": { "field": "orders", "axis": "right" } }
+    ]
+  }
+}
+```
+
+- `x` 只有 `field`。
+- 每层：`type`（`bar` / `line` / `area` / `scatter`）、`y: { field, axis? }`；可选 `series: { field }`（按字段拆系列）、`stack`（`none` / `stacked` / `percent`）、`name`、`label`、`size`、`id`。
+- 右轴写在 `y` 里：`"y": { "field": "...", "axis": "right" }`，不是写在层上。
+- 横向条形图：`orientation: "horizontal"` 写在 `chart` 上（与 `mark` 同级），`x` 仍然是类目字段、`y` 仍然是度量，只是画成横向。
+- 可选 `highlight`、`references`（参考线，取自查询里每行同值的列）、`bands`。
+
+### `chart.mark: "pie"`：构成
+
+```json chart-spec
+{
+  "version": 1,
+  "data": { "kind": "publication", "receiptId": "<receiptId>" },
+  "fields": { "amount": { "type": "quantitative", "label": "支付金额", "storage": "raw", "unit": "BRL", "additivity": "additive" } },
+  "chart": { "mark": "pie", "category": { "field": "payment_type" }, "value": { "field": "amount" } }
+}
+```
+
+- 只有 `category`、`value`、`donut`，没有 `x` 和 `layers`。
+- `value` 用可加的原始量（金额、件数），不要用占比列：占比是 `non_additive`，会被拒绝（`NON_ADDITIVE_PART_OF_WHOLE`）；饼图自己按原始量算占比。
+
+### 其他
+
+- 类目过多：`"selection": { "kind": "top_n", "by": "<度量字段>", "n": 10, "order": "desc" }`，或 `render_chart` 传更大的 `height`；编译器不会自行删减数据。
+- 其他 mark：`heatmap`（`x`、`y`、`color`）、`histogram`（`start`、`end`、`value`）、`boxplot`、`waterfall`、`sankey`，数据都要在查询里算好。
+
+### 常见报错
+
+| 报错 | 原因与改法 |
+|---|---|
+| `must not have additional properties (/chart/x)` | `x` 里写了 `label` 等多余键；只留 `field`，标题写在 `fields.<列>.label` |
+| `must not have additional properties (/chart/layers/N)` | 层上写了 `axis` 或 `orientation`；`axis` 移到 `y` 里，`orientation` 移到 `chart` 上 |
+| `must be equal to constant (/fields/<列>/type)` | type 写错（如 `categorical`）；用上表四种之一 |
+| `INVALID_ENCODING ... bar 需要类目 x 轴` | 横向条形图把度量放到了 `x`；`x` 放类目，加 `"orientation": "horizontal"` |
+| `NON_ADDITIVE_PART_OF_WHOLE` | 饼图或堆叠用了占比、均值；改用可加的原始量 |
+| `CAPACITY_EXCEEDED` | 类目放不下；加 `selection` 取前 N，或加大 `height` |
+
 ## 图表规范
 
 - 标注清晰、标题简洁；配色由工具统一提供，不要自行指定。
