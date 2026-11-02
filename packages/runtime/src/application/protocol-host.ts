@@ -25,10 +25,15 @@ export interface ApplicationEventFilter {
   readonly sessionId?: string;
 }
 
-/** Buffered events after a cursor; `complete` is false when some were already evicted. */
+/**
+ * Buffered events after a cursor; `complete` is false when some were already
+ * evicted, or the cursor predates a restart. `latestSequence` is the last
+ * event emitted so far: a client that resynchronizes resumes after it.
+ */
 export interface EventReplay {
   readonly events: readonly DataAgentEventEnvelope[];
   readonly complete: boolean;
+  readonly latestSequence: number;
 }
 
 export interface ApplicationCommandHost {

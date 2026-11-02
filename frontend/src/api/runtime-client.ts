@@ -206,11 +206,23 @@ export interface RuntimeEventStreamOptions {
   readonly onConnected?: () => void;
   /** Events after the cursor were lost; the subscriber must reload a snapshot. */
   readonly onResync?: () => void;
-  /** The stream (re)connected, or dropped and is about to reconnect. */
-  readonly onConnectionChange?: (state: "connected" | "reconnecting") => void;
+  /**
+   * The stream (re)connected, dropped and is about to reconnect, or has been
+   * down long enough that the server is likely gone ("disconnected"; it keeps
+   * retrying and reports "connected" when the server is back).
+   */
+  readonly onConnectionChange?: (state: RuntimeConnectionState) => void;
   /** Resume after this event sequence, e.g. the cursor of a session snapshot. */
   readonly afterSequence?: number;
 }
+
+export type RuntimeConnectionState = "connected" | "reconnecting" | "disconnected";
+
+/** Reconnect delays back off from half a second to five. */
+const RECONNECT_FIRST_DELAY_MS = 500;
+const RECONNECT_MAX_DELAY_MS = 5_000;
+/** Down this long, the stream reports "disconnected" instead of "reconnecting". */
+export const DISCONNECTED_AFTER_MS = 30_000;
 
 export function subscribeRuntimeEvents(
   listener: (envelope: unknown) => void,
@@ -232,6 +244,8 @@ export function subscribeRuntimeEvents(
   let controller: AbortController | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
   let lastSequence = options.afterSequence ?? 0;
+  let reconnectDelay = RECONNECT_FIRST_DELAY_MS;
+  let lostSince: number | undefined;
   const connect = async (): Promise<void> => {
     if (disposed) return;
     const endpoint = new URL(`${base}/api/runtime/events`, window.location.href);
@@ -241,6 +255,8 @@ export function subscribeRuntimeEvents(
     try {
       const response = await apiFetch(endpoint, { headers: { Accept: "text/event-stream" }, signal: controller.signal });
       if (!response.ok || !response.body) throw new Error(`Runtime event stream failed: ${response.status}`);
+      reconnectDelay = RECONNECT_FIRST_DELAY_MS;
+      lostSince = undefined;
       options.onConnected?.();
       options.onConnectionChange?.("connected");
       const reader = response.body.getReader();
@@ -258,6 +274,10 @@ export function subscribeRuntimeEvents(
           const eventName = lines.find((line) => line.startsWith("event:"))?.slice(6).trim();
           const data = lines.filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
           if (eventName === "resync") {
+            // The server says where its events stand now (after a restart, below our cursor):
+            // the snapshot the subscriber reloads covers everything up to there.
+            const latest = (() => { try { return (JSON.parse(data) as { latestSequence?: unknown }).latestSequence; } catch { return undefined; } })();
+            if (typeof latest === "number" && Number.isSafeInteger(latest) && latest >= 0) lastSequence = latest;
             options.onResync?.();
           } else if (data) {
             deliver(data);
@@ -272,8 +292,10 @@ export function subscribeRuntimeEvents(
     if (!disposed) scheduleReconnect();
   };
   const scheduleReconnect = (): void => {
-    options.onConnectionChange?.("reconnecting");
-    reconnectTimer = setTimeout(() => { void connect(); }, 500);
+    lostSince ??= Date.now();
+    options.onConnectionChange?.(Date.now() - lostSince >= DISCONNECTED_AFTER_MS ? "disconnected" : "reconnecting");
+    reconnectTimer = setTimeout(() => { void connect(); }, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, RECONNECT_MAX_DELAY_MS);
   };
   /** The cursor advances only past events the listener accepted, so a failed one is replayed on reconnect. */
   const deliver = (data: string): void => {

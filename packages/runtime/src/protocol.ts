@@ -146,12 +146,16 @@ export class DataAgentRuntime implements ApplicationCommandHost {
    * Replays buffered events after a cursor. The buffer is bounded, so a cursor
    * older than its first retained event means events were lost; `complete`
    * then tells the transport to have the client resynchronize from a snapshot.
+   * Sequences restart at 1 with the process, so a cursor beyond the last event
+   * was issued before a restart: the client's state may be stale (a run it
+   * follows may have ended with the old process), so it resynchronizes too.
    */
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay {
     const first = this.eventBuffer[0]?.sequence ?? this.nextSequence;
     return {
       events: this.eventBuffer.filter((event) => event.sequence > sequence && this.eventVisible(event, filter)),
-      complete: sequence >= first - 1,
+      complete: sequence >= first - 1 && sequence < this.nextSequence,
+      latestSequence: this.nextSequence - 1,
     };
   }
 

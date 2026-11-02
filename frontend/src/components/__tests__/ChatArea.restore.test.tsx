@@ -90,6 +90,42 @@ describe('ChatArea restoring a session', () => {
         await waitFor(() => expect(screen.getByText(/完整的最终回答/)).toBeTruthy());
     });
 
+    it('ends a followed run as interrupted when a resync finds it gone, e.g. after a server restart', async () => {
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }],
+            inProgressRun: { runId: 'run-1', startedAt: 1 },
+            pendingClarification: null,
+            eventSequence: 41,
+        };
+        renderChat();
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+        emit({ type: 'agent.message_started', messageId: 'm-live' });
+        emit({ type: 'agent.text_delta', delta: '先确认两个口径：' });
+        await waitFor(() => expect(screen.getByText(/先确认两个口径/)).toBeTruthy());
+
+        // The restarted server has no run in progress, and no completion event will come.
+        runtime.state = { messages: [], inProgressRun: null, pendingClarification: null, eventSequence: 0 };
+        await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
+        await waitFor(() => expect(screen.getAllByText(/服务中断，本轮没有完成/).length).toBeGreaterThan(0));
+        expect(runtime.transcriptReloads).toBe(1);
+        expect(runtime.listener).toBeUndefined();
+    });
+
+    it('keeps following a run that a resync finds still in progress', async () => {
+        runtime.state = {
+            messages: [{ id: 'u1', role: 'user', content: '三行业指标' }],
+            inProgressRun: { runId: 'run-1', startedAt: 1 },
+            pendingClarification: null,
+            eventSequence: 41,
+        };
+        renderChat();
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+        await act(async () => { (runtime.options as { onResync?: () => void } | undefined)?.onResync?.(); });
+        await waitFor(() => expect(runtime.transcriptReloads).toBe(1));
+        expect(runtime.listener).toBeDefined();
+        expect(screen.queryByText(/服务中断，本轮没有完成/)).toBeNull();
+    });
+
     it('shows the clarification the run is waiting on', async () => {
         runtime.state = {
             messages: [{ id: 'u1', role: 'user', content: '三行业指标' }],

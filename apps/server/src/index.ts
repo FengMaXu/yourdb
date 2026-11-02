@@ -174,7 +174,8 @@ export async function createRuntimeServer(
       const replay = runtime.replayAfter(afterSequence, { userId: context.userId, ...(query.session_id ? { sessionId: query.session_id } : {}) });
       // A partial replay would splice a hole into the client's state; it reloads a snapshot instead.
       if (replay.complete) for (const envelope of replay.events) send(envelope);
-      else if (!closed) reply.raw.write(`event: resync\ndata: ${JSON.stringify({ afterSequence })}\n\n`);
+      // The client reloads a snapshot and resumes after the latest event, so it does not resync again on every reconnect.
+      else if (!closed) reply.raw.write(`event: resync\ndata: ${JSON.stringify({ afterSequence, latestSequence: replay.latestSequence })}\n\n`);
     }
     replaying = false;
     for (const envelope of pending) send(envelope);

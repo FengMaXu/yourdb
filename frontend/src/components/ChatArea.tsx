@@ -19,7 +19,7 @@ import {
     type AgentProgressStage,
     type AgentTerminalReason,
 } from '../api/client';
-import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime } from '../api/runtime-client';
+import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeConnectionState } from '../api/runtime-client';
 import { attachRunViaRuntime, sendChatViaRuntime, type ChatStreamOptions, type RuntimeChatHandle } from '../api/chat-events';
 import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData } from './ToolPanel';
@@ -252,11 +252,12 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>(() => currentTranscript.map(fromSnapshotMessage));
     const [isStreaming, setIsStreaming] = useState(false);
-    const [isStreamReconnecting, setIsStreamReconnecting] = useState(false);
+    const [streamConnection, setStreamConnection] = useState<RuntimeConnectionState>('connected');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | null>(null);
+    // interrupted: the run ended with a server that went away; nothing reported how.
+    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | 'interrupted' | null>(null);
     const [pendingClarification, setPendingClarification] = useState<ClarificationRequest | null>(null);
     const [clarificationInput, setClarificationInput] = useState('');
     const [isSubmittingClarification, setIsSubmittingClarification] = useState(false);
@@ -320,7 +321,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         currentSessionIdRef.current = currentSession.id;
         replaceWithSnapshot(currentTranscript);
         setIsStreaming(false);
-        setIsStreamReconnecting(false);
+        setStreamConnection('connected');
         setRunReason(null);
         setPendingClarification(null);
         setClarificationInput('');
@@ -899,18 +900,43 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 activeAgentMessageIdRef.current = null;
                 pendingAgentMessageIdRef.current = null;
                 streamHandleRef.current = null;
-                setIsStreamReconnecting(false);
+                setStreamConnection('connected');
                 if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             runSessionId,
             {
                 onResync: () => {
                     streamLostEvents = true;
-                    void resyncFromServer(runSessionId);
+                    void resyncFromServer(runSessionId).then(() => endRunIfGone(runSessionId, handle));
                 },
-                onConnectionChange: (state) => setIsStreamReconnecting(state === 'reconnecting'),
+                onConnectionChange: setStreamConnection,
             },
         );
+        const handle = streamHandleRef.current;
+    };
+
+    /**
+     * After a resync (events lost, or the server restarted) the run being
+     * followed may no longer exist: a restarted server reports no run in
+     * progress, and no completion event will ever come. End the turn then,
+     * marked interrupted, instead of waiting on it forever.
+     */
+    const endRunIfGone = async (sessionId: string, handle: RuntimeChatHandle | null) => {
+        try {
+            const state = await getSessionStateViaRuntime(sessionId);
+            if (state.inProgressRun || !handle || streamHandleRef.current !== handle || currentSessionIdRef.current !== sessionId) return;
+            handle.detach();
+            streamHandleRef.current = null;
+            activeAgentMessageIdRef.current = null;
+            pendingAgentMessageIdRef.current = null;
+            setIsStreaming(false);
+            setIsSubmittingClarification(false);
+            setPendingClarification(null);
+            setStreamConnection('connected');
+            setRunReason('interrupted');
+        } catch (error) {
+            console.error('Failed to check whether the run is still in progress', error);
+        }
     };
 
     const handlePrimaryAction = async () => {
@@ -969,9 +995,14 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         }
         return items;
     })();
+    const connectionNotice = !isStreaming || streamConnection === 'connected'
+        ? ''
+        : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
-        : (isStreaming && isStreamReconnecting ? t('chat.streamReconnecting') : '') || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
+        : runReason === 'interrupted'
+            ? t('chat.runInterrupted')
+            : connectionNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
 
     return (
         <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
@@ -1072,7 +1103,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                             running={isStreaming && index === chatItems.length - 1}
                             startedAt={item.startedAt}
                             currentSessionId={currentSession.id}
-                            reconnecting={isStreaming && isStreamReconnecting && index === chatItems.length - 1}
+                            connectionNotice={index === chatItems.length - 1 ? connectionNotice || (runReason === 'interrupted' ? t('chat.runInterrupted') : '') : ''}
                             toolLabel={(tool) => getToolHintLabel(tool, t)}
                             skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
                             onOpenToolPanel={onOpenToolPanel}
@@ -1167,7 +1198,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     {uploadError
                         ? <span className="text-[var(--status-error)]" role="alert">{t('chat.uploadFailed')}</span>
                         : <span>{isStreaming ? t('chat.steerHint') : null}</span>}
-                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : t('tools.statusError')}</span>}
+                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : runReason === 'interrupted' ? t('chat.interrupted') : t('tools.statusError')}</span>}
                 </div>
                 <div className="relative flex min-h-14 items-end gap-2 rounded-[20px] border border-[var(--hairline)] bg-[var(--surface-bg)] px-3 py-2 shadow-none transition-[border-color,box-shadow,transform] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                     <input

@@ -51,4 +51,45 @@ describe("runtime event stream subscription", () => {
     errors.mockRestore();
     unsubscribe();
   });
+
+  it("resumes after the server's latest event once told to resync, e.g. after a server restart", async () => {
+    apiFetch.mockResolvedValueOnce(streamOf(["event: resync\ndata: {\"afterSequence\":5000,\"latestSequence\":3}\n\n"]));
+    apiFetch.mockImplementation(() => new Promise(() => undefined));
+    const onResync = vi.fn();
+    const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { afterSequence: 5000, onResync });
+    await vi.waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(2), { timeout: 2_000 });
+    expect((apiFetch.mock.calls[0]![0] as URL).searchParams.get("after_sequence")).toBe("5000");
+    expect((apiFetch.mock.calls[1]![0] as URL).searchParams.get("after_sequence")).toBe("3");
+    expect(onResync).toHaveBeenCalledTimes(1);
+    unsubscribe();
+  });
+
+  it("backs off between reconnects and reports a long outage as disconnected", async () => {
+    vi.useFakeTimers();
+    try {
+      apiFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+      const states: string[] = [];
+      const unsubscribe = subscribeRuntimeEvents(() => undefined, "session-1", { onConnectionChange: (state) => states.push(state) });
+      const callsAfter = async (ms: number) => { await vi.advanceTimersByTimeAsync(ms); return apiFetch.mock.calls.length; };
+      expect(await callsAfter(0)).toBe(1);
+      expect(await callsAfter(500)).toBe(2); // 0.5 s
+      expect(await callsAfter(999)).toBe(2); // then 1 s
+      expect(await callsAfter(1)).toBe(3);
+      expect(await callsAfter(2_000)).toBe(4); // 2 s
+      expect(await callsAfter(4_000)).toBe(5); // 4 s
+      expect(await callsAfter(5_000)).toBe(6); // capped at 5 s
+      expect(states.every((state) => state === "reconnecting")).toBe(true);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(states.at(-1)).toBe("disconnected");
+
+      // The server is back: the stream reports connected and the delay starts over.
+      apiFetch.mockReset();
+      apiFetch.mockImplementation(() => Promise.resolve(streamOf([": connected\n\n"])));
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(states).toContain("connected");
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

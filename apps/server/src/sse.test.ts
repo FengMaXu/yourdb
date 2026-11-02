@@ -62,8 +62,23 @@ describe("runtime event stream", () => {
       const response = await fetch(`${address}/api/runtime/events?after_sequence=3`);
       const reader = response.body!.getReader();
       const text = await readUntil(reader, (value) => value.includes("event: resync"));
-      expect(text).toContain('event: resync\ndata: {"afterSequence":3}');
+      expect(text).toContain('event: resync\ndata: {"afterSequence":3,"latestSequence":300}');
       expect(text).not.toContain("id: ");
+      await reader.cancel();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("asks a client whose cursor predates a server restart to resynchronize", async () => {
+    const runtime = new DataAgentRuntime();
+    const app = await createRuntimeServer(runtime, trustedWebContext);
+    const address = await app.listen({ port: 0, host: "127.0.0.1" });
+    try {
+      const response = await fetch(`${address}/api/runtime/events?after_sequence=5000`);
+      const reader = response.body!.getReader();
+      const text = await readUntil(reader, (value) => value.includes("event: resync"));
+      expect(text).toContain('event: resync\ndata: {"afterSequence":5000,"latestSequence":0}');
       await reader.cancel();
     } finally {
       await app.close();
