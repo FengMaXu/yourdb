@@ -47,6 +47,11 @@ describe("SQLite MCP server", () => {
     const pragma = await client.callTool({ name: "execute_query_preview", arguments: { sql: "PRAGMA user_version" } });
     expect(JSON.parse((pragma.content as any)[0].text).error.code).toBe("FORBIDDEN_SQL");
 
+    // The byte limit truncates exactly where serializing the whole preview would.
+    const sized = JSON.parse(((await client.callTool({ name: "execute_query_preview", arguments: { sql: "SELECT * FROM sales ORDER BY id", limit: 10, maxBytes: 1_536 } })).content as any)[0].text);
+    expect(sized.rows).toHaveLength(2);
+    expect(sized.truncated).toBe(false);
+
     const union = await client.callTool({ name: "execute_query_preview", arguments: { sql: "SELECT region FROM sales UNION ALL SELECT region FROM sales" } });
     expect(JSON.parse((union.content as any)[0].text).rows).toHaveLength(4);
 
@@ -75,6 +80,7 @@ describe("SQLite MCP server", () => {
     seed.exec(`CREATE TABLE "Db-IMDB__Movie" (id INTEGER PRIMARY KEY, title TEXT UNIQUE);
       CREATE TABLE "it's" (movie_id INTEGER REFERENCES "Db-IMDB__Movie"(id));
       CREATE TABLE "sqlite-sakila__actor" (actor_id INTEGER);
+      CREATE VIEW titles AS SELECT title FROM "Db-IMDB__Movie";
       ANALYZE;`);
     seed.close();
 
@@ -87,6 +93,7 @@ describe("SQLite MCP server", () => {
       { table: "Db-IMDB__Movie", columns: expect.any(Array), primaryKey: ["id"], uniqueKeys: [["title"]] },
       { table: "it's", columns: expect.any(Array), foreignKeys: [{ columns: ["movie_id"], references: { table: "Db-IMDB__Movie", columns: ["id"] } }] },
       { table: "sqlite-sakila__actor", columns: expect.any(Array) },
+      { table: "titles", columns: [expect.objectContaining({ name: "title" })] },
     ]);
     await client.close();
     close();

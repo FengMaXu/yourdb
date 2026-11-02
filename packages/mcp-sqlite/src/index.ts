@@ -77,14 +77,17 @@ export function createSqliteServer(options: SqliteServerOptions) {
       const rows: any[] = [];
       let truncated = false;
       const byteLimit = maxBytes === undefined ? undefined : Math.max(1_024, maxBytes - 512);
+      // The size of JSON.stringify({ columns, rows }), kept as rows are added: each row adds its own JSON and a comma.
+      let bytes = Buffer.byteLength(JSON.stringify({ columns, rows: [] }), "utf8");
       for (const row of rowsOf(statement.iterate(effectiveLimit + 1))) {
         if (extra.signal?.aborted) return { content: [{ type: "text" as const, text: JSON.stringify({ error: { code: "QUERY_CANCELLED" } }) }] };
-        const candidate = [...rows, row];
-        if (candidate.length > effectiveLimit || (byteLimit !== undefined && Buffer.byteLength(JSON.stringify({ columns, rows: candidate }), "utf8") > byteLimit)) {
+        const nextBytes = bytes + Buffer.byteLength(JSON.stringify(row), "utf8") + (rows.length > 0 ? 1 : 0);
+        if (rows.length + 1 > effectiveLimit || (byteLimit !== undefined && nextBytes > byteLimit)) {
           truncated = true;
           break;
         }
         rows.push(row);
+        bytes = nextBytes;
       }
       return { content: [{ type: "text", text: JSON.stringify({ columns, rows, totalRows: rows.length + (truncated ? 1 : 0), truncated, serverLimit: maxRows, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
     },
@@ -127,23 +130,30 @@ export function createSqliteServer(options: SqliteServerOptions) {
     },
   );
 
+  // Prepared once; names are bound, not spliced: a table such as Db-IMDB__Movie is no bare identifier.
+  // Views are listed with the tables, as the MySQL and PostgreSQL servers list theirs.
+  // SQLite's own tables start with "sqlite_"; the escape keeps "_" literal, so sqlite-sakila__actor stays listed.
+  const listTables = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY type, rowid");
+  const tableInfo = db.prepare("SELECT * FROM pragma_table_info(?)");
+  const indexList = db.prepare("SELECT * FROM pragma_index_list(?)");
+  const indexInfo = db.prepare("SELECT * FROM pragma_index_info(?)");
+  const foreignKeyList = db.prepare("SELECT * FROM pragma_foreign_key_list(?)");
+
   server.tool(
     "get_schema",
-    "List tables and columns of the SQLite database",
+    "List tables, views and columns of the SQLite database",
     {},
     async () => {
-      // SQLite's own tables start with "sqlite_"; the escape keeps "_" literal, so sqlite-sakila__actor stays listed.
-      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\'").all();
+      const tables = listTables.all();
       const schema = tables.map((t: any) => {
-        // Names are bound, not spliced: a table such as Db-IMDB__Movie is no bare identifier.
-        const columns = db.prepare("SELECT * FROM pragma_table_info(?)").all(t.name) as Array<{ name: string; type?: string; pk?: number }>;
+        const columns = tableInfo.all(t.name) as Array<{ name: string; type?: string; pk?: number }>;
         const primaryKey = columns.filter((column) => Number(column.pk) > 0).sort((left, right) => Number(left.pk) - Number(right.pk)).map((column) => column.name);
-        const indexes = db.prepare("SELECT * FROM pragma_index_list(?)").all(t.name) as Array<{ name: string; unique?: number }>;
+        const indexes = indexList.all(t.name) as Array<{ name: string; unique?: number }>;
         const uniqueKeys = indexes.filter((index) => Number(index.unique) === 1).flatMap((index) => {
-          const entries = db.prepare("SELECT * FROM pragma_index_info(?)").all(index.name) as Array<{ name?: string; seqno?: number }>;
+          const entries = indexInfo.all(index.name) as Array<{ name?: string; seqno?: number }>;
           return [entries.sort((left, right) => Number(left.seqno) - Number(right.seqno)).flatMap((entry) => entry.name ? [entry.name] : [])];
         }).filter((key) => key.length > 0);
-        const foreignRows = db.prepare("SELECT * FROM pragma_foreign_key_list(?)").all(t.name) as Array<{ id?: number; seq?: number; from?: string; table?: string; to?: string }>;
+        const foreignRows = foreignKeyList.all(t.name) as Array<{ id?: number; seq?: number; from?: string; table?: string; to?: string }>;
         const foreignKeys = [...new Set(foreignRows.map((row) => row.id).filter((id): id is number => id !== undefined))].flatMap((id) => {
           const rows = foreignRows.filter((row) => row.id === id).sort((left, right) => Number(left.seq) - Number(right.seq));
           const first = rows[0];

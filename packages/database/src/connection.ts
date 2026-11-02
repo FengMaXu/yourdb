@@ -1,3 +1,4 @@
+import path from "node:path";
 import { createMcpQueryExecutor, type McpQueryExecutorOptions } from "./mcp-query-executor.js";
 
 /** Databases the product connects to; each has a contract MCP server. */
@@ -48,6 +49,8 @@ export function databaseConnectionFrom(settings: unknown): DatabaseConnection {
     // A file, not a server: a SQLite connection without one would open nothing.
     const file = text(record.database)?.trim();
     if (!file) throw new Error("SQLITE_DATABASE_FILE_REQUIRED: 请填写 SQLite 数据库文件路径");
+    // The server process runs elsewhere than the user thinks; a relative path would open some other file.
+    if (!path.isAbsolute(file)) throw new Error(`SQLITE_DATABASE_PATH_NOT_ABSOLUTE: 请填写完整路径（${file}）`);
     return { driver, database: file };
   }
   const port = text(record.port) === undefined ? undefined : Number(record.port);

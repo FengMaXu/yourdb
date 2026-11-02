@@ -144,6 +144,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     const [dbUser, setDbUser] = useState(DB_DRIVER_DEFAULTS.mysql.user);
     const [dbPassword, setDbPassword] = useState('');
     const [dbName, setDbName] = useState('my_database');
+    // A SQLite file is not a database name: each keeps its own value while the other driver is chosen.
+    const [dbFile, setDbFile] = useState('');
     const [isTestingDB, setIsTestingDB] = useState(false);
     const [isSavingDB, setIsSavingDB] = useState(false);
     const [dbTestResult, setDbTestResult] = useState<{ success: boolean, message: string } | null>(null);
@@ -161,14 +163,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                 const initialConfig: AIConfig = await getConfigViaRuntime() as unknown as AIConfig;
                 setConfig(initialConfig);
                 const driver: DatabaseDriver = DB_DRIVERS.includes(initialConfig.driver as DatabaseDriver) ? initialConfig.driver as DatabaseDriver : 'mysql';
-                const server: ServerDatabaseDriver = driver === 'sqlite' ? 'mysql' : driver;
+                // Under SQLite the saved port tells which server driver the network fields were last filled for.
+                const server: ServerDatabaseDriver = driver !== 'sqlite' ? driver : initialConfig.port === DB_DRIVER_DEFAULTS.postgres.port ? 'postgres' : 'mysql';
                 setDbDriver(driver);
                 setServerDriver(server);
                 setDbHost(initialConfig.host || 'localhost');
                 setDbPort(initialConfig.port || DB_DRIVER_DEFAULTS[server].port);
                 setDbUser(initialConfig.user || DB_DRIVER_DEFAULTS[server].user);
                 setDbPassword(initialConfig.password || '');
-                setDbName(initialConfig.database || '');
+                if (driver === 'sqlite') setDbFile(initialConfig.database || '');
+                else setDbName(initialConfig.database || '');
                 const runtime = initialConfig.python_runtime || { mode: 'bundled' as const };
                 setPythonRuntime(runtime);
                 setPythonExecutable(runtime.executable || '');
@@ -329,7 +333,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                 port: dbPort,
                 user: dbUser,
                 password: dbPassword,
-                database: dbName
+                database: dbDriver === 'sqlite' ? dbFile : dbName
             });
             setDbTestResult(res);
         } catch (e: unknown) {
@@ -349,7 +353,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                 port: dbPort,
                 user: dbUser,
                 password: dbPassword,
-                database: dbName
+                database: dbDriver === 'sqlite' ? dbFile : dbName
             });
             setDbTestResult({ success: true, message: t('settings.dbSaveSuccess') });
         } catch (e: unknown) {
@@ -579,7 +583,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                     <span className={UI.cardIcon} aria-hidden="true"><Database size={18} /></span>
                                     <div className="grid min-w-0 gap-0.5">
                                         <div>{t('settings.database')}</div>
-                                        <div className={cn(UI.caption, 'truncate')}>-- {dbDriver === 'sqlite' ? `sqlite:///${dbName}` : `${dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://${dbHost || 'localhost'}:${dbPort}`}</div>
+                                        <div className={cn(UI.caption, 'truncate')}>-- {dbDriver === 'sqlite' ? `sqlite:///${dbFile}` : `${dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://${dbHost || 'localhost'}:${dbPort}`}</div>
                                     </div>
                                 </div>
                             </div>
@@ -645,8 +649,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                     spellCheck={false}
                                     placeholder={dbDriver === 'sqlite' ? 'C:\\data\\sales.sqlite' : 'my_database'}
                                     aria-describedby={dbDriver === 'sqlite' ? 'settings-db-file-help' : undefined}
-                                    value={dbName}
-                                    onChange={e => setDbName(e.target.value)}
+                                    value={dbDriver === 'sqlite' ? dbFile : dbName}
+                                    onChange={e => (dbDriver === 'sqlite' ? setDbFile : setDbName)(e.target.value)}
                                 />
                                 {dbDriver === 'sqlite' && <div id="settings-db-file-help" className={UI.caption}>{t('settings.dbFileHelp')}</div>}
                             </div>

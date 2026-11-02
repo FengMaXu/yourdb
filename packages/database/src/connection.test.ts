@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -33,6 +34,7 @@ describe("databaseConnectionFrom", () => {
     expect(databaseConnectionFrom({ driver: "sqlite", host: "db", port: "3306", user: "u", password: "p", database: " C:/data/sales.sqlite " }))
       .toEqual({ driver: "sqlite", database: "C:/data/sales.sqlite" });
     for (const database of [undefined, "", "   "]) expect(() => databaseConnectionFrom({ driver: "sqlite", database })).toThrow("SQLITE_DATABASE_FILE_REQUIRED");
+    for (const database of ["sales.sqlite", "data/sales.sqlite"]) expect(() => databaseConnectionFrom({ driver: "sqlite", database })).toThrow("SQLITE_DATABASE_PATH_NOT_ABSOLUTE");
   });
 
   it("keeps an empty password the user saved", () => {
@@ -173,5 +175,6 @@ describe("SQLite through its contract MCP server", () => {
     const result = await testDatabaseConnection({ driver: "sqlite", database: file }, sqliteServers);
     expect(result.success).toBe(false);
     expect(result.message).toContain("SQLite 连接失败");
+    expect(existsSync(file)).toBe(false);
   }, 60_000);
 });
