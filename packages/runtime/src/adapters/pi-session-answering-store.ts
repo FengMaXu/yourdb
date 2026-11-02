@@ -12,10 +12,14 @@ import type { AnswerTaskView, BusinessContext, TaskId, QueryTaskRecord } from ".
 
 /** Before per-record storage: the whole snapshot as one Value, rewritten on every change. Read once, then migrated. */
 const LEGACY_ANSWERING_STATE = value<JsonValue>("data-agent.answering", "state");
-/** One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`). */
+/**
+ * One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`),
+ * each id percent-encoded so an id containing "/" can neither collide nor regroup.
+ */
 const RECORDS_NAMESPACE = "data-agent.answering.records";
 const ALL_RECORDS = value<StoredRecord>(RECORDS_NAMESPACE, "");
 const recordValue = (key: string): Value<StoredRecord> => value<StoredRecord>(RECORDS_NAMESPACE, key);
+const recordKey = (kind: string, ...ids: string[]): string => [kind, ...ids.map(encodeURIComponent)].join("/");
 
 /**
  * A stored record and its place among the records of its kind. The in-memory
@@ -46,12 +50,12 @@ function isSnapshot(valueToCheck: unknown): valueToCheck is AnsweringStoreSnapsh
 /** The snapshot as records keyed by kind and id, in snapshot order. */
 function snapshotRecords(snapshot: AnsweringStoreSnapshot): Map<string, JsonValue> {
   const records = new Map<string, JsonValue>();
-  for (const task of snapshot.tasks) records.set(`task/${task.taskId}`, encodeJson(task));
-  for (const revision of snapshot.revisions) records.set(`revision/${revision.revisionId}`, encodeJson(revision));
-  for (const group of snapshot.evidence) for (const item of group.items) records.set(`evidence/${group.taskId}/${item.id}`, encodeJson(item));
-  for (const group of snapshot.attempts ?? []) for (const item of group.items) records.set(`attempt/${group.taskId}/${item.attemptId}`, encodeJson(item));
-  for (const candidate of snapshot.candidates) records.set(`candidate/${candidate.candidateId}`, encodeJson(candidate));
-  for (const receipt of snapshot.receipts) records.set(`receipt/${receipt.receiptId}`, encodeJson(receipt));
+  for (const task of snapshot.tasks) records.set(recordKey("task", task.taskId), encodeJson(task));
+  for (const revision of snapshot.revisions) records.set(recordKey("revision", revision.revisionId), encodeJson(revision));
+  for (const group of snapshot.evidence) for (const item of group.items) records.set(recordKey("evidence", group.taskId, item.id), encodeJson(item));
+  for (const group of snapshot.attempts ?? []) for (const item of group.items) records.set(recordKey("attempt", group.taskId, item.attemptId), encodeJson(item));
+  for (const candidate of snapshot.candidates) records.set(recordKey("candidate", candidate.candidateId), encodeJson(candidate));
+  for (const receipt of snapshot.receipts) records.set(recordKey("receipt", receipt.receiptId), encodeJson(receipt));
   return records;
 }
 
@@ -70,8 +74,10 @@ function recordsSnapshot(stored: ReadonlyMap<string, StoredRecord>): AnsweringSt
   const grouped = <T>(kind: string): { taskId: TaskId; items: T[] }[] => {
     const groups = new Map<string, T[]>();
     for (const { key, record } of records<T>(kind)) {
-      const taskId = key.split("/")[1]!;
-      groups.set(taskId, [...(groups.get(taskId) ?? []), record]);
+      const taskId = decodeURIComponent(key.split("/")[1]!);
+      const group = groups.get(taskId);
+      if (group) group.push(record);
+      else groups.set(taskId, [record]);
     }
     return [...groups].map(([taskId, items]) => ({ taskId: taskId as TaskId, items }));
   };
@@ -87,6 +93,27 @@ function recordsSnapshot(stored: ReadonlyMap<string, StoredRecord>): AnsweringSt
 }
 
 type Reader = Pick<Session<any>, "getValue" | "scanValues">;
+
+/**
+ * The transaction as the command sees it, recording every record it writes
+ * under its stored key. Transactions only put and append; nothing deletes.
+ */
+function recordingWrites(state: AnsweringTransaction, written: Map<string, JsonValue>): AnsweringTransaction {
+  return {
+    ...state,
+    putTask: (task) => { state.putTask(task); written.set(recordKey("task", task.taskId), encodeJson(task)); },
+    putRevision: (revision) => { state.putRevision(revision); written.set(recordKey("revision", revision.revisionId), encodeJson(revision)); },
+    appendEvidence: (taskId, evidence) => {
+      // Appending an id that exists keeps the first item.
+      if (state.getEvidence(taskId, evidence.id)) return;
+      state.appendEvidence(taskId, evidence);
+      written.set(recordKey("evidence", taskId, evidence.id), encodeJson(evidence));
+    },
+    putAttempt: (attempt) => { state.putAttempt(attempt); written.set(recordKey("attempt", attempt.taskId, attempt.attemptId), encodeJson(attempt)); },
+    putCandidate: (candidate) => { state.putCandidate(candidate); written.set(recordKey("candidate", candidate.candidateId), encodeJson(candidate)); },
+    putReceipt: (receipt) => { state.putReceipt(receipt); written.set(recordKey("receipt", receipt.receiptId), encodeJson(receipt)); },
+  };
+}
 
 /**
  * Pi Session adapter for Answering. The domain module only sees AnsweringStore;
@@ -115,11 +142,15 @@ export class PiSessionAnsweringStore implements AnsweringStore {
 
   /** The stored records, and whether they still sit in the legacy single Value. */
   private async readRecords(reader: Reader): Promise<{ readonly records: Map<string, StoredRecord>; readonly legacy: boolean }> {
-    const stored = await reader.scanValues(ALL_RECORDS, this.piContext);
-    if (stored.length > 0) return { records: new Map(stored.map((entry) => [entry.address.key, entry.value])), legacy: false };
+    const scan = async () => new Map((await reader.scanValues(ALL_RECORDS, this.piContext)).map((entry) => [entry.address.key, entry.value] as const));
+    const stored = await scan();
+    if (stored.size > 0) return { records: stored, legacy: false };
     const legacy = await reader.getValue(LEGACY_ANSWERING_STATE, this.piContext);
     const decoded = legacy ? decodeJson(legacy.value) : undefined;
-    if (!isSnapshot(decoded)) return { records: new Map(), legacy: false };
+    if (!isSnapshot(decoded)) {
+      // Outside a mutation, a migration may have committed between the two reads: look again.
+      return { records: legacy ? new Map() : await scan(), legacy: false };
+    }
     let order = 0;
     return { records: new Map([...snapshotRecords(decoded)].map(([key, record]) => [key, { order: order++, record }])), legacy: true };
   }
@@ -130,10 +161,7 @@ export class PiSessionAnsweringStore implements AnsweringStore {
   }
 
   private async load(): Promise<void> {
-    if (this.loaded) return;
-    const stored = await this.readSnapshot();
-    this.delegate = stored ? new InMemoryAnsweringStore(stored) : new InMemoryAnsweringStore();
-    this.loaded = true;
+    if (!this.loaded) await this.reload();
   }
 
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
@@ -151,17 +179,21 @@ export class PiSessionAnsweringStore implements AnsweringStore {
         // silently overwrite the Answering records between read and commit.
         const { records: before, legacy } = await this.readRecords(mutator);
         const nextDelegate = new InMemoryAnsweringStore(before.size > 0 ? recordsSnapshot(before) : this.delegate.snapshot());
-        answer = await nextDelegate.transact(command, context);
-        const after = snapshotRecords(nextDelegate.snapshot());
-        let nextOrder = Math.max(-1, ...[...before.values()].map((entry) => entry.order)) + 1;
+        const written = new Map<string, JsonValue>();
+        answer = await nextDelegate.transact((state) => command(recordingWrites(state, written)), context);
+        let nextOrder = 0;
+        for (const entry of before.values()) if (entry.order >= nextOrder) nextOrder = entry.order + 1;
         const writes: ValueWrite[] = [];
-        for (const [key, record] of after) {
+        if (legacy) {
+          // Migration: every record becomes its own Value, in the legacy snapshot's order.
+          for (const [key, entry] of before) if (!written.has(key)) writes.push(setValue(recordValue(key), entry));
+          writes.push(deleteValue(LEGACY_ANSWERING_STATE));
+        }
+        for (const [key, record] of written) {
           const previous = before.get(key);
           if (!legacy && previous && JSON.stringify(previous.record) === JSON.stringify(record)) continue;
           writes.push(setValue(recordValue(key), { order: previous?.order ?? nextOrder++, record }));
         }
-        for (const key of before.keys()) if (!after.has(key)) writes.push(deleteValue(recordValue(key)));
-        if (legacy) writes.push(deleteValue(LEGACY_ANSWERING_STATE));
         if (writes.length > 0) await mutator.commit(writes, this.piContext);
         this.delegate = nextDelegate;
         this.loaded = true;

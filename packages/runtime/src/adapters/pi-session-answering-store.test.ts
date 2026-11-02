@@ -74,6 +74,22 @@ describe("PiSessionAnsweringStore", () => {
     });
   });
 
+  it("keeps ids with a slash apart, and their records with their task", async () => {
+    await withSession(async (session) => {
+      const store = new PiSessionAnsweringStore(session);
+      const evidence = (id: string) => ({ id, kind: "note" }) as never;
+      await store.transact((state) => {
+        state.putTask(task("a/b", 1));
+        state.putTask(task("a", 1));
+        state.appendEvidence("a/b" as never, evidence("c"));
+        state.appendEvidence("a" as never, evidence("b/c"));
+      }, context);
+      const reloaded = new PiSessionAnsweringStore(session);
+      const items = await reloaded.transact((state) => [state.listEvidence("a/b" as never).map((item) => item.id), state.listEvidence("a" as never).map((item) => item.id)], context);
+      expect(items).toEqual([["c"], ["b/c"]]);
+    });
+  });
+
   it("reads a session stored as one Value and migrates it on the first write", async () => {
     await withSession(async (session, root) => {
       const legacyStore = new InMemoryAnsweringStore();
@@ -91,7 +107,7 @@ describe("PiSessionAnsweringStore", () => {
       expect(await session.getValue(legacy, TODO_CONTEXT)).toBeUndefined();
       const reloaded = new PiSessionAnsweringStore(session);
       expect((await reloaded.list(context)).map((record) => record.taskId)).toEqual(["old-b", "old-a", "new"]);
-      expect((await answeringWrites(root)).at(-1)).toBe("delete data-agent.answering/state");
+      expect(await answeringWrites(root)).toContain("delete data-agent.answering/state");
     });
   });
 });
