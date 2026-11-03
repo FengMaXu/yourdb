@@ -84,7 +84,8 @@ const larkSetup: FeishuSetupApi = {
     }));
     await step("PUBLISH", () => client.application.v7.applicationPublish.create({
       path: { app_id: app.appId },
-      data: { remark: "数据智能体接入", changelog: "使用长连接接收消息与卡片回调" },
+      // An app with the bot ability must name a default ability for each end, or Feishu answers 210304.
+      data: { mobile_default_ability: "bot", pc_default_ability: "bot", remark: "数据智能体接入", changelog: "使用长连接接收消息与卡片回调" },
     }));
   },
 };
