@@ -48,10 +48,14 @@ async function step<T extends { code?: number; msg?: string } | null | undefined
   checked(response, operation);
 }
 
-/** What Feishu said, short enough for the settings page. */
+const STEP_LABEL: Record<string, string> = { CONFIG: "设置订阅方式时", PUBLISH: "发布版本时" };
+
+/** Which step Feishu refused and what it said, short enough for the settings page. */
 function detail(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  return message.replace(/^FEISHU_[A-Z]+_FAILED:\s*/, "").slice(0, 200);
+  const match = /^FEISHU_([A-Z]+)_FAILED:\s*/.exec(message);
+  const label = match ? STEP_LABEL[match[1]!] : undefined;
+  return `${label ?? ""}${match ? message.slice(match[0].length) : message}`.slice(0, 200);
 }
 
 /** Waits, unless the flow is cancelled first. */

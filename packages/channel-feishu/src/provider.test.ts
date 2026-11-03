@@ -55,7 +55,7 @@ describe("Feishu scan-to-connect", () => {
     expect(config).toEqual({ appId: "cli_new", appSecret: "secret" });
     expect(calls.longConnectionAttempts).toBe(3);
     expect(warnings).toEqual([expect.stringContaining("https://open.feishu.cn/app/cli_new/event")]);
-    expect(warnings[0]).toContain("飞书返回：99991672 no permission");
+    expect(warnings[0]).toContain("飞书返回：设置订阅方式时99991672 no permission");
     expect(String(errors[0])).toContain("99991672");
   });
 
