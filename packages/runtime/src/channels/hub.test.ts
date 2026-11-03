@@ -7,7 +7,7 @@ import { MetadataStore } from "../metadata.js";
 import { ClarificationManager } from "../clarification.js";
 import { AgentControllerError } from "../facets/agent-controller.js";
 import type { ApplicationAgentEvent } from "../application/host.js";
-import { ChannelHub } from "./hub.js";
+import { ChannelHub, type ChannelOwner } from "./hub.js";
 import { MetadataChannelStore } from "./store.js";
 
 class MemoryChannel implements Channel {
@@ -67,7 +67,7 @@ afterEach(async () => {
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
 });
 
-async function setup(options: { allowGroupDelivery?: (address: ConversationAddress) => boolean; dbPath?: string; clarificationTimeoutMs?: number; publications?: { read(receiptId: string, context: { userId: string; sessionId: string }): Promise<{ content: string }> }; dashboards?: { read(path: string, context: { userId: string; sessionId: string }): Promise<Uint8Array> }; snapshot?: (html: Uint8Array) => Promise<Uint8Array>; idleSessionMs?: number; linked?: boolean } = {}) {
+async function setup(options: { allowGroupDelivery?: (address: ConversationAddress) => boolean; dbPath?: string; clarificationTimeoutMs?: number; publications?: { read(receiptId: string, context: { userId: string; sessionId: string }): Promise<{ content: string }> }; dashboards?: { read(path: string, context: { userId: string; sessionId: string }): Promise<Uint8Array> }; snapshot?: (html: Uint8Array) => Promise<Uint8Array>; idleSessionMs?: number; linked?: boolean; owner?: ChannelOwner } = {}) {
   let dbPath = options.dbPath;
   if (!dbPath) {
     const root = await mkdtemp(join(process.cwd(), ".tmp-channel-hub-"));
@@ -108,7 +108,7 @@ async function setup(options: { allowGroupDelivery?: (address: ConversationAddre
     await metadata.close();
   };
   closers.push(close);
-  await hub.register(channel);
+  await hub.register(channel, options.owner);
   return { hub, channel, fake, runtime, clarifications, clock, errors, dbPath, close, store };
 }
 
@@ -471,6 +471,32 @@ describe("ChannelHub access requests", () => {
   const carolChat: ConversationAddress = { channel: "im", tenant: "t1", chatId: "dm-carol", audience: "direct" };
   const decide = (requestId: string, decision: "allow" | "deny", eventId: string, actor = alice): Submission => ({ requestId: eventId, address: aliceChat, actor, body: { kind: "access_decision", requestId, decision } });
   const notice = (item: { deliverable: Deliverable }) => item.deliverable.kind === "notice" ? item.deliverable.text : item.deliverable.kind;
+
+  it("lets whoever scanned the bot use it straight away, as an account member who can let others in", async () => {
+    const { hub, fake, channel } = await setup({ linked: false, owner: { externalUserId: "alice", userId: "user-owner" } });
+    expect(await hub.submit("im", input("evt-1", direct))).toBe("dispatched");
+    await hub.flush();
+    expect(fake.calls).toHaveLength(1);
+    expect(channel.delivered.filter((item) => item.deliverable.kind === "access_request" || item.deliverable.kind === "notice")).toEqual([]);
+    expect((await hub.access()).members).toEqual([expect.objectContaining({ actor: alice, role: "account" })]);
+
+    // Someone else in a group still asks, and the request reaches the owner.
+    expect(await hub.submit("im", input("evt-2", group, carol, "上月销售额"))).toBe("denied");
+    await hub.flush();
+    expect(channel.delivered.find((item) => item.deliverable.kind === "access_request")).toBeDefined();
+  });
+
+  it("forgets a channel's members and waiting requests when its bot is replaced or removed", async () => {
+    const { hub, channel } = await setup();
+    await hub.submit("im", input("evt-1", group, carol, "上月销售额"));
+    await hub.flush();
+    expect((await hub.access()).requests).toHaveLength(1);
+    await hub.forgetAccess("im");
+    expect(await hub.access()).toEqual({ members: [], requests: [] });
+    // Without an owner or members, a message is simply refused.
+    expect(await hub.submit("im", input("evt-2", direct))).toBe("denied");
+    expect(channel.delivered.length).toBeGreaterThan(0);
+  });
 
   it("turns a stranger's first message into one private request to every linked account, and runs nothing", async () => {
     const { hub, fake, channel } = await setup();

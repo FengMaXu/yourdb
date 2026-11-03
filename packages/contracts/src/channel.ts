@@ -201,8 +201,11 @@ export type ChannelConfig = Readonly<Record<string, unknown>>;
 export interface ChannelProvisioning {
   /** Opened in the platform's app (shown as a QR code), it creates and authorizes the bot. */
   readonly ready: Promise<{ readonly url: string; readonly expiresAt: number }>;
-  /** The configuration to save, and anything the user still has to do by hand. */
-  readonly done: Promise<{ readonly config: ChannelConfig; readonly warnings: readonly string[] }>;
+  /**
+   * The configuration to save, anything the user still has to do by hand, and
+   * who scanned, as the new bot sees them: that person owns the bot.
+   */
+  readonly done: Promise<{ readonly config: ChannelConfig; readonly warnings: readonly string[]; readonly owner?: { readonly externalUserId: string } }>;
 }
 
 /** One platform, as the core manages it: build a Channel from saved configuration, and optionally obtain that configuration by scanning. */

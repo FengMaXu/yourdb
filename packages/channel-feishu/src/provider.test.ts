@@ -29,7 +29,8 @@ describe("Feishu scan-to-connect", () => {
     const link = await flow.ready;
     expect(link.url).toContain("accounts.feishu.cn");
     expect(link.expiresAt).toBeGreaterThan(Date.now());
-    await expect(flow.done).resolves.toEqual({ config: { appId: "cli_new", appSecret: "secret" }, warnings: [] });
+    // The scanner owns the bot, in the ids the new bot will see.
+    await expect(flow.done).resolves.toEqual({ config: { appId: "cli_new", appSecret: "secret" }, warnings: [], owner: { externalUserId: "ou_admin" } });
     expect(calls.registered).toMatchObject({
       createOnly: true,
       addons: { events: { items: { tenant: ["im.message.receive_v1"] } }, callbacks: { items: ["card.action.trigger"] } },
@@ -42,7 +43,7 @@ describe("Feishu scan-to-connect", () => {
     const errors: unknown[] = [];
     const { setup, calls } = fakeSetup({ refuseLongConnectionTimes: 2 });
     const { done } = feishuProvider({ setup, retryDelaysMs: [0, 0, 0], onError: (error) => errors.push(error) }).provision!(new AbortController().signal);
-    await expect(done).resolves.toEqual({ config: { appId: "cli_new", appSecret: "secret" }, warnings: [] });
+    await expect(done).resolves.toMatchObject({ config: { appId: "cli_new", appSecret: "secret" }, warnings: [] });
     expect(calls.longConnectionAttempts).toBe(3);
     expect(errors).toHaveLength(2);
   });

@@ -19,6 +19,12 @@ import {
 import type { ApplicationCommandHost } from "../application/protocol-host.js";
 import type { BoundSession, ChannelSessionBinding, ChannelStore, OutboxItem } from "./store.js";
 
+/** Who scanned a channel's bot: their id as that bot sees them, and the account they scanned from. */
+export interface ChannelOwner {
+  readonly externalUserId: string;
+  readonly userId: string;
+}
+
 export type SubmitOutcome = "dispatched" | "duplicate" | "rejected" | "denied";
 
 export interface ChannelHubOptions {
@@ -124,6 +130,8 @@ function addressTarget(address: ConversationAddress): DeliveryTarget {
  */
 export class ChannelHub {
   private readonly channels = new Map<string, Channel>();
+  /** Who scanned each channel's bot; they may use it without asking. */
+  private readonly owners = new Map<string, ChannelOwner>();
   private readonly boundSessions = new Map<string, Promise<BoundSession | undefined>>();
   private readonly sessionChoices = new Map<string, Promise<unknown>>();
   private readonly linkFailures = new Map<string, { count: number; since: number }>();
@@ -140,9 +148,11 @@ export class ChannelHub {
     this.unsubscribe = options.host.subscribe((envelope) => this.receive(envelope));
   }
 
-  async register(channel: Channel): Promise<void> {
+  async register(channel: Channel, owner?: ChannelOwner): Promise<void> {
     if (this.channels.has(channel.id)) throw new Error(`CHANNEL_ALREADY_REGISTERED: ${channel.id}`);
     this.channels.set(channel.id, channel);
+    if (owner) this.owners.set(channel.id, owner);
+    else this.owners.delete(channel.id);
     // Accepted by an earlier process but never dispatched: say so instead of replaying a non-idempotent run.
     for (const interrupted of await this.options.store.interruptedInbound(channel.id, this.startedAt)) {
       await this.options.store.enqueue(channel.id, `notice:interrupted:${interrupted.requestId}`, addressTarget(interrupted.address), { kind: "notice", code: "SUBMISSION_INTERRUPTED", text: NOTICE_TEXT.SUBMISSION_INTERRUPTED }, this.now());
@@ -182,8 +192,8 @@ export class ChannelHub {
         await this.options.store.settleInbound(channelId, submission.requestId, "dispatched");
         return "dispatched";
       }
-      // Default deny: only a linked account or an approved guest may run anything (ADR-0011).
-      const userId = (await this.options.store.linkedUser(actor))?.userId;
+      // Default deny: only the owner, a linked account or an approved guest may run anything (ADR-0011).
+      const userId = (await this.options.store.linkedUser(actor))?.userId ?? await this.claimOwner(actor);
       if (!userId) {
         await this.requestAccess(submission);
         await this.options.store.settleInbound(channelId, submission.requestId, "denied");
@@ -230,6 +240,17 @@ export class ChannelHub {
   async access(): Promise<ChannelAccess> {
     const [members, requests] = await Promise.all([this.options.store.members(), this.options.store.pendingRequests()]);
     return { members: members.map((member) => ({ ...member })), requests: requests.map(({ id, requester, audience, text, at }) => ({ id, requester, audience, text, at })) };
+  }
+
+  /**
+   * Forgets who may use a channel and who is waiting: a new or removed bot
+   * makes the old ids meaningless. The owner of the next bot comes with it.
+   */
+  async forgetAccess(channelId: string): Promise<void> {
+    this.owners.delete(channelId);
+    const [members, requests] = await Promise.all([this.options.store.members(), this.options.store.pendingRequests()]);
+    for (const member of members) if (member.actor.channel === channelId) await this.options.store.unlink(member.actor);
+    for (const request of requests) if (request.requester.channel === channelId) await this.options.store.decideRequest(request.id, "denied", "system", this.now());
   }
 
   /** Takes away an identity's access; its next message asks again. */
@@ -372,6 +393,14 @@ export class ChannelHub {
    * are only told where things stand. With nobody to ask, they get the link
    * instructions.
    */
+  /** The owner's first message links them to the account that scanned; the tenant is only known from a message. */
+  private async claimOwner(actor: ChannelActor): Promise<string | undefined> {
+    const owner = this.owners.get(actor.channel);
+    if (!owner || owner.externalUserId !== actor.externalUserId) return undefined;
+    await this.options.store.link(actor, owner.userId, this.now(), "account");
+    return owner.userId;
+  }
+
   private async requestAccess(submission: Submission): Promise<void> {
     const { address, actor, body } = submission;
     const here = addressTarget(address);

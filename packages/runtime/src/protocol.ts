@@ -107,7 +107,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   /** The host's MCP plugin supervisor; without one, plugin settings are only stored. */
   mcpSupervisor?: Pick<McpPluginPort, "view" | "save" | "status" | "test" | "restart">;
   /** Host-composed channel management (ADR-0011); absent where no channels are enabled. */
-  channelControl?: { list(): import("@data-agent/contracts").ChannelStatus[]; provision(channelId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; disconnect(channelId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; createLinkCode(userId: string): Promise<{ code: string; expiresAt: number }>; access(): Promise<import("@data-agent/contracts").ChannelAccess>; decideAccess(requestId: string, decision: "allow" | "deny", decidedBy: string): Promise<unknown>; revokeAccess(actor: import("@data-agent/contracts").ChannelActor): Promise<void> };
+  channelControl?: { list(): import("@data-agent/contracts").ChannelStatus[]; provision(channelId: string, userId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; disconnect(channelId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; createLinkCode(userId: string): Promise<{ code: string; expiresAt: number }>; access(): Promise<import("@data-agent/contracts").ChannelAccess>; decideAccess(requestId: string, decision: "allow" | "deny", decidedBy: string): Promise<unknown>; revokeAccess(actor: import("@data-agent/contracts").ChannelActor): Promise<void> };
   private readonly clarifications: ClarificationManager;
   /** Host composition seam for wiring native AgentHarness tools. */
   get clarificationManager(): ClarificationManager { return this.clarifications; }
@@ -325,7 +325,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
     if (command.command.type === "channel.list" || command.command.type === "channel.provision" || command.command.type === "channel.disconnect") {
       if (!this.channelControl) throw new DataAgentRuntimeError("INVALID_COMMAND", "CHANNELS_NOT_CONFIGURED");
       const c = command.command;
-      const channels = c.type === "channel.list" ? this.channelControl.list() : c.type === "channel.provision" ? await this.channelControl.provision(c.channelId) : await this.channelControl.disconnect(c.channelId);
+      const channels = c.type === "channel.list" ? this.channelControl.list() : c.type === "channel.provision" ? await this.channelControl.provision(c.channelId, context.userId) : await this.channelControl.disconnect(c.channelId);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "channel.list.result", channels } };
     }
 

@@ -137,7 +137,9 @@ export function feishuProvider(options: { readonly onError?: (error: unknown) =>
             break;
           }
         }
-        return { config: { ...app } as ChannelConfig, warnings };
+        // The scanner's open_id is the one this new bot will see in their messages.
+        const owner = result.user_info?.open_id;
+        return { config: { ...app } as ChannelConfig, warnings, ...(owner ? { owner: { externalUserId: owner } } : {}) };
       })();
       // A flow that fails before the link exists must not leave `ready` waiting forever.
       return { ready: Promise.race([ready, done.then(() => { throw new Error("FEISHU_PROVISION_NO_LINK"); })]), done };
