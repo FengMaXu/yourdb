@@ -4,8 +4,8 @@ import { feishuProvider } from "./provider.js";
 
 type RegisterOptions = Parameters<FeishuSetupApi["registerApp"]>[0];
 
-function fakeSetup(options: { brand?: "feishu" | "lark"; refuseLongConnection?: boolean; failBeforeLink?: boolean } = {}) {
-  const calls: { registered?: RegisterOptions; longConnection?: unknown } = {};
+function fakeSetup(options: { brand?: "feishu" | "lark"; refuseLongConnection?: boolean; refuseLongConnectionTimes?: number; failBeforeLink?: boolean } = {}) {
+  const calls: { registered?: RegisterOptions; longConnection?: unknown; longConnectionAttempts: number } = { longConnectionAttempts: 0 };
   const setup: FeishuSetupApi = {
     async registerApp(registerOptions) {
       calls.registered = registerOptions;
@@ -15,7 +15,8 @@ function fakeSetup(options: { brand?: "feishu" | "lark"; refuseLongConnection?: 
     },
     async useLongConnection(app) {
       calls.longConnection = app;
-      if (options.refuseLongConnection) throw new Error("FEISHU_CONFIG_FAILED: 99991672 no permission");
+      calls.longConnectionAttempts += 1;
+      if (options.refuseLongConnection || calls.longConnectionAttempts <= (options.refuseLongConnectionTimes ?? 0)) throw new Error("FEISHU_CONFIG_FAILED: 99991672 no permission");
     },
   };
   return { setup, calls };
@@ -37,14 +38,33 @@ describe("Feishu scan-to-connect", () => {
     expect(calls.longConnection).toEqual({ appId: "cli_new", appSecret: "secret" });
   });
 
-  it("keeps the bot and names the one step left when Feishu refuses the long connection", async () => {
+  it("tries the long connection again while the new app's permissions apply", async () => {
     const errors: unknown[] = [];
-    const { setup } = fakeSetup({ refuseLongConnection: true });
-    const { done } = feishuProvider({ setup, onError: (error) => errors.push(error) }).provision!(new AbortController().signal);
+    const { setup, calls } = fakeSetup({ refuseLongConnectionTimes: 2 });
+    const { done } = feishuProvider({ setup, retryDelaysMs: [0, 0, 0], onError: (error) => errors.push(error) }).provision!(new AbortController().signal);
+    await expect(done).resolves.toEqual({ config: { appId: "cli_new", appSecret: "secret" }, warnings: [] });
+    expect(calls.longConnectionAttempts).toBe(3);
+    expect(errors).toHaveLength(2);
+  });
+
+  it("keeps the bot and names the one step left, with Feishu's reason, when Feishu keeps refusing", async () => {
+    const errors: unknown[] = [];
+    const { setup, calls } = fakeSetup({ refuseLongConnection: true });
+    const { done } = feishuProvider({ setup, retryDelaysMs: [0, 0], onError: (error) => errors.push(error) }).provision!(new AbortController().signal);
     const { config, warnings } = await done;
     expect(config).toEqual({ appId: "cli_new", appSecret: "secret" });
+    expect(calls.longConnectionAttempts).toBe(3);
     expect(warnings).toEqual([expect.stringContaining("https://open.feishu.cn/app/cli_new/event")]);
+    expect(warnings[0]).toContain("飞书返回：99991672 no permission");
     expect(String(errors[0])).toContain("99991672");
+  });
+
+  it("stops retrying when the flow is cancelled", async () => {
+    const abort = new AbortController();
+    const { setup, calls } = fakeSetup({ refuseLongConnection: true });
+    const { done } = feishuProvider({ setup, retryDelaysMs: [60_000], onError: () => abort.abort(new Error("cancelled")) }).provision!(abort.signal);
+    await done;
+    expect(calls.longConnectionAttempts).toBe(1);
   });
 
   it("uses Lark's endpoints for a Lark tenant", async () => {

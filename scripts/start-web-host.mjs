@@ -117,7 +117,8 @@ const groupChats = new Set((process.env.FEISHU_GROUP_DELIVERY_CHATS ?? "").split
 const idleMinutes = Number(process.env.DATA_AGENT_CHANNEL_IDLE_MINUTES ?? 120);
 const feishuAppId = process.env.FEISHU_APP_ID?.trim();
 const feishuAppSecret = process.env.FEISHU_APP_SECRET?.trim();
-const channels = await application.enableChannels([feishuProvider()], {
+// Scan-to-connect retries switching a new bot to the long connection; each refusal Feishu gives is logged here.
+const channels = await application.enableChannels([feishuProvider({ onError: (error) => console.error("[data-agent-web] feishu:", error instanceof Error ? error.message : error) })], {
   allowGroupDelivery: (address) => groupChats.has(address.chatId),
   // Dashboards reach phones as a picture; it needs Edge or Chrome on this host, and without one only the page is sent.
   snapshot: createDashboardSnapshotter(),
