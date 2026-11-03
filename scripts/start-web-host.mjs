@@ -111,6 +111,7 @@ console.log(`[data-agent-web] knowledge dir: ${knowledgeRoot} (${application.kno
 // FEISHU_APP_SECRET still work as a fallback when nothing has been saved. Results reach a group only
 // when its chat id is listed in FEISHU_GROUP_DELIVERY_CHATS; otherwise they go to the asker privately.
 const { feishuProvider } = await import(toUrl(path.join(root, "packages/channel-feishu/dist/index.js")));
+const { weixinProvider } = await import(toUrl(path.join(root, "packages/channel-weixin/dist/index.js")));
 const { createDashboardSnapshotter } = await import(toUrl(path.join(root, "apps/server/dist/dashboard-snapshot.js")));
 const groupChats = new Set((process.env.FEISHU_GROUP_DELIVERY_CHATS ?? "").split(",").map((chatId) => chatId.trim()).filter(Boolean));
 // A chat's next message after this much quiet starts a new conversation; "/new" starts one at any time.
@@ -118,7 +119,11 @@ const idleMinutes = Number(process.env.DATA_AGENT_CHANNEL_IDLE_MINUTES ?? 120);
 const feishuAppId = process.env.FEISHU_APP_ID?.trim();
 const feishuAppSecret = process.env.FEISHU_APP_SECRET?.trim();
 // Scan-to-connect retries switching a new bot to the long connection; each refusal Feishu gives is logged here.
-const channels = await application.enableChannels([feishuProvider({ onError: (error) => console.error("[data-agent-web] feishu:", error instanceof Error ? error.message : error) })], {
+const channels = await application.enableChannels([
+  feishuProvider({ onError: (error) => console.error("[data-agent-web] feishu:", error instanceof Error ? error.message : error) }),
+  // Personal WeChat through ClawBot: private chats only, connected by scanning in the settings page.
+  weixinProvider({ onError: (error) => console.error("[data-agent-web] weixin:", error instanceof Error ? error.message : error) }),
+], {
   allowGroupDelivery: (address) => groupChats.has(address.chatId),
   // Dashboards reach phones as a picture; it needs Edge or Chrome on this host, and without one only the page is sent.
   snapshot: createDashboardSnapshotter(),

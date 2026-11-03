@@ -23,7 +23,7 @@ run("npm run build:contracts");
 run("npm run build:charts");
 run("npm run build:runtime");
 // mcp-sqlite before server: the server's evaluation launcher imports it.
-for (const pkg of ["@data-agent/database", "@data-agent/mcp-plugins", "@data-agent/transport", "@data-agent/channel-feishu", "@data-agent/electron-host", "@data-agent/mcp-sqlite", "@data-agent/server", "@data-agent/mcp-mysql", "@data-agent/mcp-pg"]) {
+for (const pkg of ["@data-agent/database", "@data-agent/mcp-plugins", "@data-agent/transport", "@data-agent/channel-feishu", "@data-agent/channel-weixin", "@data-agent/electron-host", "@data-agent/mcp-sqlite", "@data-agent/server", "@data-agent/mcp-mysql", "@data-agent/mcp-pg"]) {
   run(`npm run build --workspace=${pkg}`);
 }
 run("npm run build --workspace=frontend");
