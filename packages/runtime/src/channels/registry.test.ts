@@ -15,8 +15,11 @@ function fakeHub(options: { refuse?: boolean } = {}) {
     },
     async unregister(channelId: string) { registered.delete(channelId); },
     async forgetAccess(channelId: string) { forgotten.push(channelId); },
-  } as unknown as ChannelHub;
-  return { hub, registered, owners, forgotten };
+    details: new Map<string, string>(),
+    setReplyDetail(channelId: string, detail: string) { this.details.set(channelId, detail); },
+    onReplyDetailChange: undefined as undefined | ((channelId: string, detail: "summary" | "standard" | "full") => Promise<void>),
+  };
+  return { hub: hub as unknown as ChannelHub, registered, owners, forgotten, details: hub.details, fromChat: (channelId: string, detail: "summary" | "standard" | "full") => hub.onReplyDetailChange!(channelId, detail) };
 }
 
 function memoryStore(initial: Record<string, ChannelConfig> = {}) {
@@ -61,7 +64,7 @@ describe("ChannelRegistry", () => {
     await registry.start();
     expect(built).toEqual([{ appSecret: "saved" }]);
     expect(registered.has("im")).toBe(true);
-    expect(registry.list()).toEqual([{ id: "im", label: "IM", state: "connected", provisionable: true }]);
+    expect(registry.list()).toEqual([{ id: "im", label: "IM", state: "connected", provisionable: true, settings: { enabled: true, replyDetail: "standard" } }]);
     expect(JSON.stringify(registry.list())).not.toContain("saved");
 
     const fromEnv = fakeProvider();
@@ -87,7 +90,7 @@ describe("ChannelRegistry", () => {
     expect(saved()).toEqual({ im: { appSecret: "new" } });
     expect(built).toEqual([{ appSecret: "new" }]);
     expect(registered.has("im")).toBe(true);
-    expect(registry.list()[0]).toEqual({ id: "im", label: "IM", state: "connected", provisionable: true, warnings: ["改成长连接"] });
+    expect(registry.list()[0]).toEqual({ id: "im", label: "IM", state: "connected", provisionable: true, warnings: ["改成长连接"], settings: { enabled: true, replyDetail: "standard" } });
   });
 
   it("makes whoever scanned the owner of the new bot, forgetting the old bot's members, and keeps it across restarts", async () => {
@@ -149,5 +152,53 @@ describe("ChannelRegistry", () => {
     await registry.start();
     expect(registry.list()[0]).toMatchObject({ state: "failed", message: "connect failed" });
     expect(errors).toHaveLength(1);
+  });
+
+  it("pauses a bot without losing its credentials, and keeps it paused across restarts", async () => {
+    const { hub, registered } = fakeHub();
+    const { provider, built } = fakeProvider();
+    const { store, saved } = memoryStore({ im: { appSecret: "saved" } });
+    const registry = new ChannelRegistry(hub, store, [provider]);
+    await registry.start();
+    expect((await registry.configure("im", { enabled: false }))[0]).toMatchObject({ state: "paused", settings: { enabled: false } });
+    expect(registered.has("im")).toBe(false);
+    expect(saved().im).toEqual({ appSecret: "saved" });
+
+    const restarted = fakeHub();
+    const again = new ChannelRegistry(restarted.hub, store, [provider]);
+    await again.start();
+    expect(again.list()[0]!.state).toBe("paused");
+    expect(restarted.registered.has("im")).toBe(false);
+
+    expect((await again.configure("im", { enabled: true }))[0]!.state).toBe("connected");
+    expect(restarted.registered.has("im")).toBe(true);
+    expect(built).toEqual([{ appSecret: "saved" }, { appSecret: "saved" }]);
+  });
+
+  it("saves the reply detail from the page or the chat, restores it on start, and forgets it on disconnect", async () => {
+    const first = fakeHub();
+    const { provider } = fakeProvider();
+    const { store, saved } = memoryStore({ im: { appSecret: "saved" } });
+    const registry = new ChannelRegistry(first.hub, store, [provider]);
+    await registry.start();
+    await registry.configure("im", { replyDetail: "full" });
+    expect(first.details.get("im")).toBe("full");
+    await first.fromChat("im", "summary");
+    expect(registry.list()[0]!.settings).toEqual({ enabled: true, replyDetail: "summary" });
+
+    const second = fakeHub();
+    await new ChannelRegistry(second.hub, store, [provider]).start();
+    expect(second.details.get("im")).toBe("summary");
+
+    await registry.disconnect("im");
+    expect(saved()).toEqual({});
+    expect(registry.list()[0]).not.toHaveProperty("settings");
+  });
+
+  it("refuses settings for a bot that is not set up", async () => {
+    const { hub } = fakeHub();
+    const registry = new ChannelRegistry(hub, memoryStore().store, [fakeProvider().provider]);
+    await registry.start();
+    await expect(registry.configure("im", { enabled: false })).rejects.toThrow("CHANNEL_NOT_CONFIGURED");
   });
 });

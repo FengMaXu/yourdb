@@ -218,6 +218,7 @@ export class DataAgentApplication implements ApplicationCommandHost {
       // Whoever scans owns the new bot; the transport has already authenticated them.
       provision: (channelId, userId) => registry.provision(channelId, userId),
       disconnect: (channelId) => registry.disconnect(channelId),
+      configure: (channelId, settings) => registry.configure(channelId, settings),
       createLinkCode: (userId) => hub.createLinkCode(userId),
       access: () => hub.access(),
       decideAccess: (requestId, decision, decidedBy) => hub.decideAccess(requestId, decision, decidedBy),

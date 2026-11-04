@@ -74,6 +74,7 @@ describe("Feishu cards", () => {
   it("turns workspace links into plain text and keeps web links", () => {
     expect(withoutLocalLinks("看板：**[sales.html](dashboards/sales.html)**，口径见[文档](https://example.com/a)。![图](charts/a.png)")).toBe("看板：**sales.html**，口径见[文档](https://example.com/a)。");
     expect(JSON.parse(progressCard({ state: "completed", text: "见 [看板](dashboards/a.html)" })).body.elements[0].content).toBe("见 看板");
+    expect(JSON.stringify(JSON.parse(progressCard({ state: "completed", text: "好", steps: ["查询数据库", "生成图表"] })).body.elements[1])).toContain("做过的步骤：查询数据库 → 生成图表");
   });
 
   it("renders a result as a table and says when columns were dropped", () => {
