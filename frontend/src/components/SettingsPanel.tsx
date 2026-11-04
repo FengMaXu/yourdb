@@ -143,7 +143,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     const [dbPort, setDbPort] = useState(DB_DRIVER_DEFAULTS.mysql.port);
     const [dbUser, setDbUser] = useState(DB_DRIVER_DEFAULTS.mysql.user);
     const [dbPassword, setDbPassword] = useState('');
-    const [dbName, setDbName] = useState('my_database');
+    const [dbName, setDbName] = useState('');
     // A SQLite file is not a database name: each keeps its own value while the other driver is chosen.
     const [dbFile, setDbFile] = useState('');
     const [isTestingDB, setIsTestingDB] = useState(false);
@@ -647,7 +647,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                     className={cn(UI.input, UI.mono)}
                                     type="text"
                                     spellCheck={false}
-                                    placeholder={dbDriver === 'sqlite' ? 'C:\\data\\sales.sqlite' : 'my_database'}
+                                    placeholder={dbDriver === 'sqlite' ? 'C:\\data\\sales.sqlite' : t('settings.dbDatabasePlaceholder')}
                                     aria-describedby={dbDriver === 'sqlite' ? 'settings-db-file-help' : undefined}
                                     value={dbDriver === 'sqlite' ? dbFile : dbName}
                                     onChange={e => (dbDriver === 'sqlite' ? setDbFile : setDbName)(e.target.value)}

@@ -49,6 +49,7 @@ vi.mock('../../hooks/useSession', () => ({
 import ChatArea from '../ChatArea';
 import { LanguageProvider } from '../../context/LanguageContext';
 import { PreviewProvider } from '../../context/PreviewContext';
+import { ReadinessProvider } from '../../hooks/useReadiness';
 
 describe('ChatArea empty session', () => {
     beforeEach(() => {
@@ -64,5 +65,13 @@ describe('ChatArea empty session', () => {
         await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('生成一张本月经营概况看板'));
         expect(screen.getByRole('textbox')).toHaveFocus();
         expect(calls.sent).toEqual([]);
+    });
+
+    it('shows the setup checklist first and keeps the examples locked until it is done', async () => {
+        // The runtime mock cannot read settings, so both steps stay unticked.
+        render(<LanguageProvider><PreviewProvider><ReadinessProvider onOpenSettings={vi.fn()}><ChatArea /></ReadinessProvider></PreviewProvider></LanguageProvider>);
+        expect(await screen.findByRole('heading', { name: '提问前还需要两样东西' })).toBeInTheDocument();
+        expect(screen.getByText('示例问题（完成上面两步后可用）')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /生成一张本月经营概况看板/ })).toBeDisabled();
     });
 });
