@@ -13,6 +13,7 @@ const sourceRoots = [
   "packages/contracts/src",
   "packages/charts/src",
   "packages/channel-feishu/src",
+  "packages/channel-weixin/src",
   "packages/electron-host/src",
   "packages/database/src",
   "packages/mcp-plugins/src",

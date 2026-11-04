@@ -15,7 +15,13 @@ const STATE_LABEL: Record<ChannelStatusView['state'], { text: string; tone: 'idl
 /** How often the page asks for news while someone is scanning. */
 const POLL_MS = 2000;
 
-const QrLink: React.FC<{ url: string; expiresAt: number }> = ({ url, expiresAt }) => {
+/** What scanning does on each platform; the first line under the QR code. */
+const SCAN_HINT: Record<string, string> = {
+    feishu: '用手机飞书扫码，按页面提示创建机器人并确认授权。',
+    weixin: '用手机微信扫码并确认连接。连接后，在微信里和机器人私聊即可提问。',
+};
+
+const QrLink: React.FC<{ channelId: string; label: string; url: string; expiresAt: number }> = ({ channelId, label, url, expiresAt }) => {
     const [image, setImage] = useState<string>();
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
@@ -30,10 +36,10 @@ const QrLink: React.FC<{ url: string; expiresAt: number }> = ({ url, expiresAt }
     const seconds = Math.max(0, Math.round((expiresAt - now) / 1000));
     return (
         <div className="mt-1 flex items-center gap-6 rounded-xl bg-[#fafaf9] p-4 max-[720px]:flex-col max-[720px]:items-start [&_img]:flex-none [&_img]:rounded-[10px] [&_img]:bg-white [&_img]:shadow-[0_0_0_1px_var(--border),0_8px_24px_-16px_rgba(28,25,23,0.3)]">
-            {image ? <img src={image} width={168} height={168} alt="用飞书扫码接入" /> : <Loader2 size={24} className="animate-spin" />}
+            {image ? <img src={image} width={168} height={168} alt={`用${label}扫码接入`} /> : <Loader2 size={24} className="animate-spin" />}
             <div className="grid gap-1 text-[0.875rem] leading-[1.7] text-[#44403c] [&_a]:text-brand">
-                <div>用手机飞书扫码，按页面提示创建机器人并确认授权。</div>
-                <div>也可以 <a href={url} target="_blank" rel="noreferrer">在本机飞书中打开</a>。</div>
+                <div>{SCAN_HINT[channelId] ?? `用手机${label}扫码接入。`}</div>
+                {channelId === 'feishu' && <div>也可以 <a href={url} target="_blank" rel="noreferrer">在本机飞书中打开</a>。</div>}
                 <div className="text-[0.8rem] text-muted-foreground">{seconds > 0 ? `二维码 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒后过期` : '二维码已过期，请重新扫码'}</div>
             </div>
         </div>
@@ -84,7 +90,7 @@ const LinkAccount: React.FC = () => {
     );
 };
 
-const PLATFORM: Record<string, string> = { feishu: '飞书' };
+const PLATFORM: Record<string, string> = { feishu: '飞书', weixin: '微信' };
 /** IM ids are long and opaque; a short form is enough to tell people apart. */
 const shortId = (id: string) => id.length > 12 ? `${id.slice(0, 7)}…${id.slice(-4)}` : id;
 const when = (at: number) => new Date(at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -221,7 +227,7 @@ const ChannelsSettings: React.FC = () => {
                                 <button type="button" className={cn(UI.btn, UI.btnDanger)} disabled={working} onClick={() => { if (window.confirm(`断开${channel.label}？已保存的接入凭证会被删除。`)) void run(channel.id, disconnectChannelViaRuntime); }}>断开</button>
                             )}
                         </div>
-                        {channel.provisioning && channel.state === 'provisioning' && <QrLink url={channel.provisioning.url} expiresAt={channel.provisioning.expiresAt} />}
+                        {channel.provisioning && channel.state === 'provisioning' && <QrLink channelId={channel.id} label={channel.label} url={channel.provisioning.url} expiresAt={channel.provisioning.expiresAt} />}
                         {channel.message && <div role="alert" className={UI.alert} data-tone="error">{channel.message}</div>}
                         {channel.warnings?.map((warning) => (
                             <div key={warning} role="status" className={UI.alert} data-tone="warn">还差一步：{warning}</div>

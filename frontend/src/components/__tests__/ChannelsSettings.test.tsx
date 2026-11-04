@@ -38,6 +38,15 @@ describe('ChannelsSettings', () => {
         expect(screen.queryByRole('img', { name: '用飞书扫码接入' })).toBeNull();
     });
 
+    it('tells a WeChat scan apart from a Feishu one', async () => {
+        const weixin = { id: 'weixin', label: '微信', provisionable: true };
+        api.listChannelsViaRuntime.mockResolvedValue([{ ...weixin, state: 'provisioning', provisioning: { url: 'https://liteapp.weixin.qq.com/q/x', expiresAt: Date.now() + 300_000 } }]);
+        render(<ChannelsSettings />);
+        expect(await screen.findByRole('img', { name: '用微信扫码接入' })).toBeInTheDocument();
+        expect(screen.getByText(/用手机微信扫码并确认连接/)).toBeInTheDocument();
+        expect(screen.queryByText(/在本机飞书中打开/)).toBeNull();
+    });
+
     it('disconnects only after confirmation', async () => {
         api.listChannelsViaRuntime.mockResolvedValueOnce([{ ...feishu, state: 'connected' }]);
         api.disconnectChannelViaRuntime.mockResolvedValueOnce([{ ...feishu, state: 'unconfigured' }]);
