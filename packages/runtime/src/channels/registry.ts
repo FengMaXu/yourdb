@@ -1,5 +1,5 @@
 import type { ChannelConfig, ChannelProvider, ChannelStatus } from "@data-agent/contracts";
-import type { ChannelHub } from "./hub.js";
+import type { ChannelHub, ChannelOwner } from "./hub.js";
 
 /** Where saved channel configuration lives; it holds credentials and never leaves the core. */
 export interface ChannelConfigStore {
@@ -14,6 +14,14 @@ export interface ChannelRegistryOptions {
 }
 
 type Entry = { status: ChannelStatus; abort?: AbortController };
+
+/** Saved beside a scanned channel's own configuration: who scanned, in the bot's ids, and their account. */
+const OWNER_KEY = "$owner";
+
+function ownerOf(config: ChannelConfig): ChannelOwner | undefined {
+  const owner = config[OWNER_KEY] as Partial<ChannelOwner> | undefined;
+  return typeof owner?.externalUserId === "string" && typeof owner.userId === "string" ? { externalUserId: owner.externalUserId, userId: owner.userId } : undefined;
+}
 
 function failure(error: unknown): string {
   const record = error && typeof error === "object" ? error as { code?: unknown; description?: unknown; message?: unknown } : {};
@@ -55,7 +63,7 @@ export class ChannelRegistry {
   }
 
   /** Starts scan-to-connect and returns once the link is ready; the rest finishes in the background. */
-  async provision(channelId: string): Promise<ChannelStatus[]> {
+  async provision(channelId: string, userId?: string): Promise<ChannelStatus[]> {
     const provider = this.provider(channelId);
     if (!provider.provision) throw new Error(`CHANNEL_NOT_PROVISIONABLE: ${channelId}`);
     const entry = this.entry(channelId);
@@ -64,11 +72,14 @@ export class ChannelRegistry {
     entry.abort = abort;
     const flow = provider.provision(abort.signal);
     const current = () => this.entry(channelId).abort === abort;
-    void flow.done.then(async ({ config, warnings }) => {
+    void flow.done.then(async ({ config, warnings, owner }) => {
       if (!current()) return;
       delete this.entry(channelId).abort;
-      await this.store.save({ ...(await this.store.load()), [channelId]: config });
-      await this.connect(provider, config, warnings);
+      // A new bot gives everyone new ids, so the old bot's members and requests mean nothing now.
+      await this.hub.forgetAccess(channelId);
+      const saved = owner && userId ? { ...config, [OWNER_KEY]: { externalUserId: owner.externalUserId, userId } } : config;
+      await this.store.save({ ...(await this.store.load()), [channelId]: saved });
+      await this.connect(provider, saved, warnings);
     }).catch((error: unknown) => {
       if (!current()) return;
       delete this.entry(channelId).abort;
@@ -93,6 +104,7 @@ export class ChannelRegistry {
     entry.abort?.abort();
     delete entry.abort;
     await this.hub.unregister(channelId);
+    await this.hub.forgetAccess(channelId);
     const { [channelId]: _removed, ...rest } = await this.store.load();
     await this.store.save(rest);
     this.set(channelId, { state: "unconfigured" });
@@ -106,7 +118,8 @@ export class ChannelRegistry {
   private async connect(provider: ChannelProvider, config: ChannelConfig, warnings: readonly string[] = []): Promise<void> {
     try {
       await this.hub.unregister(provider.id);
-      await this.hub.register(provider.create(config));
+      const { [OWNER_KEY]: _owner, ...own } = config;
+      await this.hub.register(provider.create(own), ownerOf(config));
       this.set(provider.id, { state: "connected", ...(warnings.length > 0 ? { warnings: [...warnings] } : {}) });
     } catch (error) {
       this.options.onError?.(error);

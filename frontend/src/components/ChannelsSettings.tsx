@@ -68,9 +68,9 @@ const LinkAccount: React.FC = () => {
             <div className={UI.cardHead}>
                 <div>
                     <h3 className={UI.cardTitle}>绑定我的 IM 账号</h3>
-                    <p className={UI.cardDesc}>机器人只回应已绑定账号的人。绑定后，你在 IM 里的对话会出现在这个账号下；查询用的是本应用配置的数据库，绑定任何人都等于让他能查询这些数据。</p>
+                    <p className={UI.cardDesc}>扫码接入的人会自动绑定到当前账号，不需要这一步。只有想用另一个 IM 账号使用机器人时，才需要绑定码。查询用的是本应用配置的数据库，绑定任何人都等于让他能查询这些数据。</p>
                 </div>
-                <button type="button" className={cn(UI.btn, !link && UI.btnPrimary)} onClick={() => { void issue(); }}>{link ? '重新获取' : '获取绑定码'}</button>
+                <button type="button" className={UI.btn} onClick={() => { void issue(); }}>{link ? '重新获取' : '获取绑定码'}</button>
             </div>
             {link && seconds > 0 && (
                 <div className="grid gap-1.5 rounded-xl bg-[#fafaf9] px-4 py-3.5 text-[0.9rem] leading-[1.7] text-[#44403c]">
@@ -108,7 +108,7 @@ const AccessList: React.FC = () => {
             <div className={UI.cardHead}>
                 <div>
                     <h3 className={UI.cardTitle}>授权名单</h3>
-                    <p className={UI.cardDesc}>没有权限的人给机器人发消息时，会向已绑定账号的成员发出使用申请。账号成员可以审批别人；访客只能使用。</p>
+                    <p className={UI.cardDesc}>扫码接入的人可以直接使用。其他人给机器人发消息时，会向账号成员发出使用申请。账号成员可以审批别人；访客只能使用。重新扫码或断开后，名单会清空。</p>
                 </div>
                 <button type="button" className={UI.btn} onClick={() => { void apply(listChannelAccessViaRuntime); }}>刷新</button>
             </div>
@@ -133,7 +133,7 @@ const AccessList: React.FC = () => {
                     </div>
                     <div>
                         <h4 className={UI.subhead}>可以使用的人</h4>
-                        {access.members.length === 0 ? <p className={UI.empty}>还没有人。先用上面的绑定码绑定你自己的 IM 账号。</p> : (
+                        {access.members.length === 0 ? <p className={UI.empty}>还没有人。扫码接入后，给机器人发第一条消息就会出现在这里。</p> : (
                             <table className={UI.table}>
                                 <thead><tr><th>平台</th><th>IM 账号</th><th>身份</th><th>开始时间</th><th aria-label="操作" /></tr></thead>
                                 <tbody>
