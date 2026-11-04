@@ -41,6 +41,8 @@ export interface McpPluginSupervisorOptions {
 }
 
 interface Connection {
+  /** `<plugin>/<connection id>`; it survives a change of key or headers, while the Connection object does not. */
+  readonly id: string;
   readonly plugin: string;
   readonly spec: McpConnectionSpec;
   readonly key: string;
@@ -133,12 +135,26 @@ export function createMcpPluginSupervisor(options: McpPluginSupervisorOptions) {
         originalName: tool.name,
         description: tool.description ?? tool.title ?? tool.name,
         inputSchema: tool.inputSchema as Record<string, unknown>,
+        // Sessions keep their tools for their whole life, so a call goes through whatever connection is current:
+        // a new key, a restart or a lost stream must not leave a session holding a closed one.
         call: async (args, callOptions = {}) => {
-          if (!connection.client) throw new Error(`MCP_PLUGIN_DISCONNECTED: ${connection.plugin}`);
-          const result = await connection.client.callTool({ name: tool.name, arguments: args }, undefined, {
-            timeout: callTimeoutMs,
-            ...(callOptions.signal ? { signal: callOptions.signal } : {}),
-          });
+          const attempt = async () => {
+            const client = await liveClient(connection.id);
+            try {
+              return await client.callTool({ name: tool.name, arguments: args }, undefined, {
+                timeout: callTimeoutMs,
+                ...(callOptions.signal ? { signal: callOptions.signal } : {}),
+              });
+            } catch (error) {
+              // Closed under us before anything was sent (a key saved just now): the new connection takes it.
+              // Only then, since a plugin call may be billed or have effects, and a sent one is never repeated.
+              const unsent = error instanceof Error && error.message === "Not connected";
+              if (unsent && connections.get(connection.id)?.client !== client && !callOptions.signal?.aborted) return undefined;
+              throw error;
+            }
+          };
+          const result = await attempt() ?? await attempt();
+          if (!result) throw new Error(`MCP_PLUGIN_DISCONNECTED: ${connection.plugin}（连接刚被替换，请重试）`);
           return { text: resultText(result, maxResultChars), isError: result.isError === true };
         },
       }));
@@ -151,7 +167,21 @@ export function createMcpPluginSupervisor(options: McpPluginSupervisorOptions) {
     }
   };
 
-  const reconcile = (onlyPlugin?: string, force = false) => serialize(async () => {
+  /** The connected client for a connection id, connecting it again first when it is down. */
+  const liveClient = async (id: string): Promise<Client> => {
+    // A reconcile already queued (a save just now) decides which connection is current.
+    await serialize(async () => undefined);
+    let current = connections.get(id);
+    if (!current?.client) {
+      await reconcile();
+      current = connections.get(id);
+    }
+    if (current?.client) return current.client;
+    const plugin = id.slice(0, id.indexOf("/"));
+    throw new Error(`MCP_PLUGIN_DISCONNECTED: ${plugin}（${current?.error ?? "插件已停用或已移除"}）`);
+  };
+
+  const reconcile = (onlyPlugin?: string, force = false): Promise<ReturnType<typeof readStoredConfig>> => serialize(async () => {
     const config = readStoredConfig(await options.readConfig());
     const desired = new Map<string, Connection>();
     configErrors.clear();
@@ -159,7 +189,8 @@ export function createMcpPluginSupervisor(options: McpPluginSupervisorOptions) {
       if (!server.enabled) continue;
       try {
         for (const spec of connectionsOf(server, presets)) {
-          desired.set(`${server.name}/${spec.id}`, { plugin: server.name, spec, key: JSON.stringify(spec), tools: [], closed: false });
+          const id = `${server.name}/${spec.id}`;
+          desired.set(id, { id, plugin: server.name, spec, key: JSON.stringify(spec), tools: [], closed: false });
         }
       } catch (error) {
         configErrors.set(server.name, message(error));
