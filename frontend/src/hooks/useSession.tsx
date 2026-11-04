@@ -81,6 +81,8 @@ function writeCurrentSessionId(sessionId: string) {
 export function SessionProvider({ children }: { children: ReactNode }) {
     const { t } = useLanguage();
     const [isLoaded, setIsLoaded] = useState(false);
+    // Only a successful load that found no tasks is a first use; a failed one must not create anything.
+    const [foundNoTasks, setFoundNoTasks] = useState(false);
     const [tasks, setTasks] = useState<Task[]>([]);
     const [sessions, setSessions] = useState<Session[]>([]);
     const [currentTaskId, setCurrentTaskId] = useState('');
@@ -194,6 +196,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 }
 
                 setTasks(loadedTasks);
+                setFoundNoTasks(loadedTasks.length === 0);
                 setSessions(loadedSessions);
                 setCurrentTaskId(selectedTask?.id || '');
                 setCurrentSessionId(selectedSession?.id || '');
@@ -286,6 +289,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             openSession(task.id);
         }).catch((error) => console.warn('Failed to create task:', error));
     }, [defaultTaskName, openSession]);
+
+    // First use: there is nothing to pick, so open a task and a session straight away and let the first question be one step.
+    const firstTaskCreatedRef = useRef(false);
+    useEffect(() => {
+        if (!foundNoTasks || firstTaskCreatedRef.current) return;
+        firstTaskCreatedRef.current = true;
+        createTask();
+    }, [createTask, foundNoTasks]);
 
 
     const switchSession = useCallback((sessionId: string) => {
