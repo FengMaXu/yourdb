@@ -32,10 +32,11 @@ function supervise(initial: unknown, presets: readonly McpPreset[], hostServers:
   return { supervisor, stored: () => stored };
 }
 
-/** A Streamable HTTP MCP endpoint that requires `Authorization: Bearer <token>`. */
-async function httpEndpoint(token = "secret"): Promise<string> {
+/** A Streamable HTTP MCP endpoint that requires `Authorization: Bearer <token>`; `token` may be a set the test changes. */
+async function httpEndpoint(token: string | Set<string> = "secret"): Promise<string> {
+  const accepted = typeof token === "string" ? new Set([token]) : token;
   const server = http.createServer(async (req, res) => {
-    if (req.headers.authorization !== `Bearer ${token}`) { res.writeHead(401).end(); return; }
+    if (![...accepted].some((value) => req.headers.authorization === `Bearer ${value}`)) { res.writeHead(401).end(); return; }
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on("close", () => { void transport.close(); });
     await echoServer().connect(transport);
@@ -100,6 +101,36 @@ describe("MCP plugin supervisor", () => {
     await supervisor.save({ servers: [{ ...stdio(), enabled: false }] });
     expect(await supervisor.tools()).toEqual([]);
     expect(await supervisor.test("echo")).toEqual({ ok: false, message: "插件未启用，请先启用后再测试" });
+  }, 30_000);
+
+  it("keeps a session's tools working when the key changes under them, and says why when they cannot", async () => {
+    const valid = new Set(["key-old"]);
+    const url = await httpEndpoint(valid);
+    const preset: McpPreset = {
+      id: "remote",
+      title: "Remote",
+      description: "test preset",
+      fields: [{ key: "apiKey", label: "API Key", kind: "secret", required: true }],
+      connections: (values) => [{ id: "remote", transport: "streamable-http", url, headers: { Authorization: `Bearer ${String(values.apiKey ?? "")}` } }],
+    };
+    const { supervisor } = supervise(undefined, [preset]);
+    await supervisor.save({ servers: [{ name: "remote", enabled: true, field_values: { apiKey: "key-old" } }] });
+    // A session takes its tools once, when it starts.
+    const echo = (await supervisor.tools()).find((tool) => tool.originalName === "echo")!;
+    expect(await echo.call({ text: "a" })).toEqual({ text: "echo:a", isError: false });
+
+    // The user swaps the key in settings, and the old one stops working.
+    valid.add("key-new");
+    valid.delete("key-old");
+    await supervisor.save({ servers: [{ name: "remote", enabled: true, field_values: { apiKey: "key-new" } }] });
+    expect(await echo.call({ text: "b" })).toEqual({ text: "echo:b", isError: false });
+
+    // A key the platform refuses is named as the reason, not as a bare disconnect.
+    await supervisor.save({ servers: [{ name: "remote", enabled: true, field_values: { apiKey: "key-wrong" } }] });
+    await expect(echo.call({ text: "c" })).rejects.toThrow(/MCP_PLUGIN_DISCONNECTED: remote（.+）/);
+
+    await supervisor.save({ servers: [{ name: "remote", enabled: false, field_values: { apiKey: "key-new" } }] });
+    await expect(echo.call({ text: "d" })).rejects.toThrow("插件已停用或已移除");
   }, 30_000);
 
   it("lists presets, keeps their secrets out of the view and connects with the saved key", async () => {
