@@ -30,6 +30,8 @@ import { IdCard } from 'lucide-react';
 import { isAgentMessageEmpty } from '../utils/agent-message';
 import { groupIntoTurns } from '../utils/agent-turns';
 import AgentTurn from './AgentTurn';
+import { SetupChecklist } from './SetupChecklist';
+import { useReadiness } from '../hooks/useReadiness';
 import { mergeToolResultState, type ToolCallState } from './tool-event-state';
 
 interface SkillActivation {
@@ -252,6 +254,8 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     } = useSession();
 
     const { t } = useLanguage();
+    // Until a model and a database are both set up, the empty page walks the user through them first.
+    const { ready: setupDone } = useReadiness();
 
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>(() => currentTranscript.map(fromSnapshotMessage));
@@ -1090,17 +1094,23 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 className="scrollable-area flex min-h-0 flex-1 flex-col gap-8 bg-[var(--frame-surface)] py-6 pr-7 pl-6 [scrollbar-gutter:stable] max-[720px]:gap-5 max-[720px]:py-4 max-[720px]:pr-4 max-[720px]:pl-3"
             >
                 {messages.length === 0 && (
-                    <div className="mt-[clamp(40px,9vh,96px)] flex w-[min(720px,100%)] flex-col gap-2.5 self-center">
+                    <div className={`${setupDone ? 'mt-[clamp(40px,9vh,96px)]' : 'mt-[clamp(8px,3vh,32px)]'} flex w-[min(720px,100%)] flex-col gap-2.5 self-center`}>
+                        {setupDone ? (<>
                         <span className="animate-rise-sm font-mono text-[0.75rem] text-[#a8a29e] motion-reduce:animate-none" aria-hidden="true">-- {t('chat.starterCaption')}</span>
                         <h2 className="m-0 animate-rise-sm text-[clamp(1.5rem,2.4vw,1.95rem)] leading-[1.2] font-[650] tracking-[-0.02em] text-balance text-[#1c1917] [animation-delay:40ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterTitle')}</h2>
                         <p className="m-0 animate-rise-sm text-[length:var(--font-size-body-sm)] leading-[1.65] text-pretty text-[#78716c] [animation-delay:80ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterHint')}</p>
-                        <div className="mt-[22px] grid grid-cols-2 gap-2.5 max-[720px]:grid-cols-1">
+                        </>) : (<>
+                        <SetupChecklist />
+                        <p className="m-0 mt-5 text-[0.8rem] text-[#a8a29e]">{t('setup.examplesLocked')}</p>
+                        </>)}
+                        <div className={`grid grid-cols-2 gap-2.5 max-[720px]:grid-cols-1 ${setupDone ? 'mt-[22px]' : 'opacity-50'}`}>
                             {STARTER_PROMPTS.map((kind, index) => (
                                 <button
                                     key={kind}
                                     type="button"
-                                    className="group/starter relative flex min-h-[92px] [font:inherit] animate-rise-sm cursor-pointer flex-col items-start gap-2 rounded-[14px] border border-[var(--hairline)] bg-white py-4 pr-11 pl-[18px] text-left text-[#1c1917] transition-[border-color,box-shadow,transform,background-color] [animation-delay:calc(140ms+var(--i)*60ms)] [animation-duration:480ms] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] active:scale-[0.985] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:min-h-0 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-[#e2e0dc] pointer-fine:hover:bg-[#fffdfb] pointer-fine:hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-20px_rgba(28,25,23,0.28)]"
+                                    className="group/starter relative flex min-h-[92px] [font:inherit] animate-rise-sm cursor-pointer flex-col disabled:pointer-events-none items-start gap-2 rounded-[14px] border border-[var(--hairline)] bg-white py-4 pr-11 pl-[18px] text-left text-[#1c1917] transition-[border-color,box-shadow,transform,background-color] [animation-delay:calc(140ms+var(--i)*60ms)] [animation-duration:480ms] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] active:scale-[0.985] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:min-h-0 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-[#e2e0dc] pointer-fine:hover:bg-[#fffdfb] pointer-fine:hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-20px_rgba(28,25,23,0.28)]"
                                     style={{ '--i': index } as React.CSSProperties}
+                                    disabled={!setupDone}
                                     onClick={() => {
                                         // Examples are generic; the user adapts one to their own data before sending.
                                         setInputValue(t(`chat.starter.${kind}.prompt`));
@@ -1297,7 +1307,7 @@ function sendButton(state: 'idle' | 'ready' | 'stop', size = 'size-9 rounded-xl'
 }
 
 const ChatArea: React.FC<ChatAreaProps> = (props) => {
-    const { currentTask, currentSession, createSession } = useSession();
+    const { currentTask, currentSession, createSession, createTask } = useSession();
     const { t } = useLanguage();
 
     if (currentTask && currentSession) {
@@ -1323,12 +1333,10 @@ const ChatArea: React.FC<ChatAreaProps> = (props) => {
             </header>
             <div className="mt-[88px] flex w-[min(520px,100%)] flex-col items-center gap-3.5 self-center rounded-3xl border border-[rgba(120,53,15,0.1)] bg-white/58 px-[26px] py-[22px] text-center text-[#8a7a6d] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
                 <div>{currentTask ? t('session.emptyPrompt') : t('task.emptyPrompt')}</div>
-                {currentTask && (
-                    <button type="button" className="inline-flex cursor-pointer items-center gap-[7px] rounded-[9px] [font:inherit] border border-[rgba(120,53,15,0.14)] bg-white px-[13px] py-2 text-[#475569] hover:border-[rgba(120,53,15,0.28)] hover:text-[#1f2937]" onClick={() => createSession(currentTask.id)}>
-                        <Plus size={14} />
-                        <span>{t('session.create')}</span>
-                    </button>
-                )}
+                <button type="button" className="inline-flex cursor-pointer items-center gap-[7px] rounded-[9px] [font:inherit] border border-[rgba(120,53,15,0.14)] bg-white px-[13px] py-2 text-[#475569] hover:border-[rgba(120,53,15,0.28)] hover:text-[#1f2937]" onClick={() => (currentTask ? createSession(currentTask.id) : createTask())}>
+                    <Plus size={14} />
+                    <span>{currentTask ? t('session.create') : t('task.startAsking')}</span>
+                </button>
             </div>
         </main>
     );

@@ -447,6 +447,12 @@ export async function testDbViaRuntime(connection: Record<string, unknown>): Pro
   return envelope.response as unknown as { success: boolean; message: string };
 }
 
+/** Creates the demo sales database on the runtime's machine and makes it the saved connection. */
+export async function createSampleDatabaseViaRuntime(): Promise<{ success: boolean; message: string }> {
+  const envelope = await getRuntimeClient().dispatch({ type: "db.sample" });
+  return envelope.response as unknown as { success: boolean; message: string };
+}
+
 export async function testLlmViaRuntime(profile: Record<string, unknown>): Promise<{ success: boolean; message: string }> {
   const envelope = await getRuntimeClient().dispatch({ type: "llm.test", profile });
   return envelope.response as unknown as { success: boolean; message: string };

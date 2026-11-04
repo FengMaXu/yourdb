@@ -24,6 +24,7 @@ import type { ApplicationAgentEvent } from "./application/host.js";
 import type { ApplicationCommandHost, ApplicationEventFilter, EventReplay } from "./application/protocol-host.js";
 import type { TranscriptMessage } from "./facets/transcript.js";
 import { readBoundedFile } from "./bounded-read.js";
+import { ensureSampleDatabase } from "./sample-database.js";
 import type { McpPluginPort } from "./tools/mcp-plugins.js";
 
 export class DataAgentRuntimeError extends Error {
@@ -102,6 +103,10 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   queryExecutor?: { run(sql: string, rowLimit: number, options?: { readonly idempotencyKey?: string }): Promise<{ columns: string[]; rows: unknown[][]; truncated: boolean }> };
   dbTester?: { test(connection: Record<string, unknown>): Promise<{ success: boolean; message: string; details?: unknown }> };
   llmTester?: { test(profile: Record<string, unknown>): Promise<{ success: boolean; message: string; details?: unknown }> };
+  /** The model profile a chat would use now; lets `llm.test` with an empty profile check the saved settings, keys included. */
+  savedModelProfile?: (context: RequestContext) => Promise<Record<string, unknown>>;
+  /** Where the demo database is created; without it `db.sample` is unavailable. */
+  sampleDatabaseRoot?: string;
   /** Host callback for capability controllers after config changes. */
   onConfigSaved?: (config: Record<string, unknown>, context: RequestContext) => void | Promise<void>;
   /** The host's MCP plugin supervisor; without one, plugin settings are only stored. */
@@ -262,29 +267,19 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "dashboard.refresh.result", ...result } };
     }
     if (command.command.type === "config.get" || command.command.type === "config.save") {
-      if (command.command.type === "config.save") {
-        const current = sanitizeConfigForHost(await this.metadata!.getConfig("ui.settings"), context.host);
-        const patch = { ...((command.command as { patch: Record<string, unknown> }).patch) };
-        for (const field of DESKTOP_SECRET_CONFIG_FIELDS) {
-          if (typeof patch[field] === "string" && patch[field].trim() === "" && typeof current[field] === "string" && current[field] !== "") {
-            delete patch[field];
-          }
-        }
-        const next: Record<string, unknown> = { ...current, ...patch };
-        if (context.host === "electron") {
-          for (const field of DESKTOP_SECRET_CONFIG_FIELDS) delete next[field];
-        }
-        await this.metadata!.setConfig("ui.settings", next);
-        const pythonConfig = asRecord(patch.python_runtime);
-        if (pythonConfig) {
-          this.pythonExecutable = pythonConfig.mode === "external" && typeof pythonConfig.executable === "string" && pythonConfig.executable.trim()
-            ? pythonConfig.executable
-            : this.bundledPythonExecutable;
-        }
-        await this.onConfigSaved?.(next, context);
-      }
+      if (command.command.type === "config.save") await this.saveSettings({ ...((command.command as { patch: Record<string, unknown> }).patch) }, context);
       const config = sanitizeConfigForHost(await this.metadata!.getConfig("ui.settings"), context.host);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "config.get.result", config } };
+    }
+    if (command.command.type === "db.sample") {
+      if (!this.sampleDatabaseRoot) throw new DataAgentRuntimeError("INVALID_COMMAND", "SAMPLE_DATABASE_NOT_CONFIGURED");
+      try {
+        const database = ensureSampleDatabase(this.sampleDatabaseRoot);
+        await this.saveSettings({ driver: "sqlite", database }, context);
+        return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: true, message: "已连接示例销售库", details: { database } } };
+      } catch (error) {
+        return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: false, message: `示例库创建失败: ${error instanceof Error ? error.message : String(error)}` } };
+      }
     }
     if (command.command.type === "python.runtime.test") {
       const { execFile } = await import("node:child_process");
@@ -305,7 +300,17 @@ export class DataAgentRuntime implements ApplicationCommandHost {
     }
     if (command.command.type === "llm.test") {
       if (!this.llmTester) throw new DataAgentRuntimeError("INVALID_COMMAND", "LLM_TESTER_NOT_CONFIGURED");
-      const result = await this.llmTester.test((command.command as { profile: Record<string, unknown> }).profile);
+      const given = (command.command as { profile: Record<string, unknown> }).profile;
+      // An empty profile means "the model chats use now", which on the desktop includes a key the renderer never sees.
+      let profile = given;
+      if (Object.keys(given).length === 0 && this.savedModelProfile) {
+        try {
+          profile = await this.savedModelProfile(context);
+        } catch (error) {
+          return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: false, message: error instanceof Error ? error.message : String(error) } };
+        }
+      }
+      const result = await this.llmTester.test(profile);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: result.success, message: result.message, details: result.details } };
     }
     if (command.command.type === "channel.access.list" || command.command.type === "channel.access.decide" || command.command.type === "channel.access.revoke") {
@@ -530,6 +535,28 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   }
 
   /** Checks each attached file exists in the Session workspace; a missing one rejects the prompt rather than reaching the model. */
+  /** Merges a settings patch, keeping desktop keys out of the store, then lets the host react. */
+  private async saveSettings(patch: Record<string, unknown>, context: RequestContext): Promise<void> {
+    const current = sanitizeConfigForHost(await this.metadata!.getConfig("ui.settings"), context.host);
+    for (const field of DESKTOP_SECRET_CONFIG_FIELDS) {
+      if (typeof patch[field] === "string" && patch[field].trim() === "" && typeof current[field] === "string" && current[field] !== "") {
+        delete patch[field];
+      }
+    }
+    const next: Record<string, unknown> = { ...current, ...patch };
+    if (context.host === "electron") {
+      for (const field of DESKTOP_SECRET_CONFIG_FIELDS) delete next[field];
+    }
+    await this.metadata!.setConfig("ui.settings", next);
+    const pythonConfig = asRecord(patch.python_runtime);
+    if (pythonConfig) {
+      this.pythonExecutable = pythonConfig.mode === "external" && typeof pythonConfig.executable === "string" && pythonConfig.executable.trim()
+        ? pythonConfig.executable
+        : this.bundledPythonExecutable;
+    }
+    await this.onConfigSaved?.(next, context);
+  }
+
   private async resolveAttachments(requested: readonly { path: string }[], context: RequestContext): Promise<PromptAttachment[]> {
     if (requested.length === 0) return [];
     if (!this.workspace) throw new DataAgentRuntimeError("INVALID_COMMAND", "Workspace is not configured");

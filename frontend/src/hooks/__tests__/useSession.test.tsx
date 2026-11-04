@@ -66,6 +66,33 @@ describe('SessionProvider runtime identities', () => {
     });
 });
 
+describe('SessionProvider first use', () => {
+    it('opens one task and one session when there is nothing yet', async () => {
+        runtime.listTasksViaRuntime.mockResolvedValue([]);
+        runtime.listSessionsViaRuntime.mockResolvedValue([]);
+        const { result } = renderHook(() => useSession(), { wrapper });
+        await waitFor(() => expect(result.current?.currentSession?.id).toBe('session-runtime'));
+        expect(result.current.currentTask?.id).toBe('task-runtime');
+        expect(runtime.createTaskWithIdViaRuntime).toHaveBeenCalledTimes(1);
+        expect(runtime.createSessionViaRuntime).toHaveBeenCalledTimes(1);
+    });
+
+    it('creates nothing when the task list could not be read', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        runtime.listTasksViaRuntime.mockRejectedValue(new Error('offline'));
+        const { result } = renderHook(() => useSession(), { wrapper });
+        await waitFor(() => expect(result.current).not.toBeNull());
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        expect(runtime.createTaskWithIdViaRuntime).not.toHaveBeenCalled();
+    });
+
+    it('leaves existing work alone', async () => {
+        const { result } = renderHook(() => useSession(), { wrapper });
+        await waitFor(() => expect(result.current?.currentSession?.id).toBe('session-1'));
+        expect(runtime.createTaskWithIdViaRuntime).not.toHaveBeenCalled();
+    });
+});
+
 describe('SessionProvider automatic session titles', () => {
     it('renames from the first user message once, across later turns', async () => {
         const { result } = renderHook(() => useSession(), { wrapper });

@@ -162,6 +162,12 @@ export class DataAgentApplication implements ApplicationCommandHost {
     });
     const agent = sessions.createAgentAdapter({ ...(options.defaultUserId ? { userId: options.defaultUserId } : {}), host: options.host });
     application = new DataAgentApplication(runtime, sessions, metadata, workspace, knowledge, agent, options.queryExecutor);
+    runtime.sampleDatabaseRoot = path.join(dataRoot, "samples");
+    // The tester speaks the settings' field names; the profile is what a chat in this request would use.
+    runtime.savedModelProfile = async (context) => {
+      const profile = await options.resolveProfile({ userId: context.userId, sessionId: "", host: options.host }, application);
+      return { provider: profile.provider, model: profile.model, api_key: profile.apiKey ?? "", ...(profile.baseUrl ? { base_url: profile.baseUrl } : {}) };
+    };
     if (sessions.sessionStore) runtime.attachSessionStore(sessions.sessionStore);
     runtime.attachAgent(agent);
     if (options.queryExecutor) application.setQueryExecutor(options.queryExecutor);

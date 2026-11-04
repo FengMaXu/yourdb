@@ -5,7 +5,9 @@ import ToolPanel, { type ToolData } from './components/ToolPanel';
 import SettingsPanel from './components/SettingsPanel';
 import PluginsPanel from './components/PluginsPanel';
 import { CHAT_VIEW, type WorkspaceView } from './components/workspace-view';
-import { ModelSetupPrompt } from './components/ModelSetupPrompt';
+import { SetupPrompt } from './components/ModelSetupPrompt';
+import { ReadinessProvider, useReadiness } from './hooks/useReadiness';
+import type { SettingsSection } from './components/SettingsPanel';
 import { SessionProvider } from './hooks/useSession';
 import { NARROW_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import { AuthProvider, useAuth } from './hooks/useAuth';
@@ -23,9 +25,8 @@ type StartupState = 'checking' | 'ready' | 'error';
 interface AppShellProps {
   startupState: StartupState;
   onRetryStartup: () => void;
-  /** null until the startup check reads the configuration. */
-  modelConfigured: boolean | null;
-  onRecheckModel: () => void;
+  /** Bumped when a chat is refused for lack of a model. */
+  modelMissingSignal: number;
   onModelMissing: () => void;
 }
 
@@ -47,7 +48,21 @@ const SIDEBAR_PEEK_CLOSE_DELAY = 180;
 /** The full-window screen shown while the app starts or when it could not. */
 const APP_LOADING = 'grid min-h-screen place-items-center bg-[radial-gradient(circle_at_18%_20%,rgba(240,68,56,0.14),transparent_28%),radial-gradient(circle_at_82%_14%,rgba(17,24,39,0.1),transparent_26%),linear-gradient(135deg,#fff7ed_0%,#f8fafc_52%,#eef2ff_100%)] font-bold tracking-[0.02em] text-[#1f2937]';
 
-const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelConfigured, onRecheckModel, onModelMissing }) => {
+/** The "N steps left" strip; it also re-checks setup on the way back from settings, which save without notifying the shell. */
+const SetupBanner: React.FC<{ isChatView: boolean; hidden: boolean }> = ({ isChatView, hidden }) => {
+  const readiness = useReadiness();
+  const readyRef = useRef(readiness.ready);
+  readyRef.current = readiness.ready;
+  const { recheck } = readiness;
+  useEffect(() => {
+    if (isChatView && !readyRef.current) recheck();
+  }, [isChatView, recheck]);
+  if (hidden || readiness.remaining === 0) return null;
+  const next = readiness.model === 'missing' ? 'model' : 'database';
+  return <SetupPrompt remaining={readiness.remaining} next={next} onConfigure={() => readiness.openSettings(next)} />;
+};
+
+const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelMissingSignal, onModelMissing }) => {
   const { t } = useLanguage();
   const [tools, setTools] = useState<ToolData[]>([]);
   const [isToolPanelOpen, setIsToolPanelOpen] = useState(false);
@@ -90,11 +105,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
     if (sidebarPeekTimerRef.current) clearTimeout(sidebarPeekTimerRef.current);
   }, []);
 
-  // Settings saves the key without notifying the shell, so re-read it on the way back to chat.
-  const isChatView = activeView.kind === 'chat';
-  useEffect(() => {
-    if (isChatView && modelConfigured === false) onRecheckModel();
-  }, [isChatView, modelConfigured, onRecheckModel]);
+  const openSettings = useCallback((section: SettingsSection) => setActiveView({ kind: 'settings', section }), []);
 
   const handleUpdateTools = useCallback((newTools: ToolData[]) => {
     setTools(newTools);
@@ -228,6 +239,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   }
 
   return (
+    <ReadinessProvider onOpenSettings={openSettings} modelMissingSignal={modelMissingSignal}>
     <SessionProvider>
       <div className="flex h-full min-h-0 w-full flex-col bg-transparent">
         <SkipLink href="#main-content">{t('accessibility.skipToContent')}</SkipLink>
@@ -253,9 +265,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           </div>
         )}
 
-        {modelConfigured === false && activeView.kind !== 'settings' && (
-          <ModelSetupPrompt onConfigure={() => setActiveView({ kind: 'settings', section: 'model' })} />
-        )}
+        <SetupBanner isChatView={activeView.kind === 'chat'} hidden={activeView.kind === 'settings'} />
 
         {/* The framed workspace: inset on a wide window, edge to edge on a phone. */}
         <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-[var(--hairline)] bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:min-h-dvh max-[720px]:rounded-none max-[720px]:border-0">
@@ -335,26 +345,14 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
         </div>
       </div>
     </SessionProvider>
+    </ReadinessProvider>
   );
 };
-
-/** Whether a usable model key is stored; the runtime makes the final call when a chat starts. */
-async function readModelConfigured(): Promise<boolean> {
-  const config = await getConfigViaRuntime() as Record<string, unknown>;
-  const storedSecrets = await window.dataAgent?.getStoredSecrets();
-  return config.llm_enabled !== false && [
-    config.api_key,
-    config.openai_api_key,
-    config.anthropic_api_key,
-    storedSecrets?.openai_api_key,
-    storedSecrets?.anthropic_api_key,
-  ].some((value) => typeof value === 'string' && value.trim().length > 0);
-}
 
 const App: React.FC = () => {
   const [startupState, setStartupState] = useState<StartupState>('checking');
   const [startupAttempt, setStartupAttempt] = useState(0);
-  const [modelConfigured, setModelConfigured] = useState<boolean | null>(null);
+  const [modelMissingSignal, setModelMissingSignal] = useState(0);
   const { status } = useAuth();
   const { t } = useLanguage();
 
@@ -368,9 +366,9 @@ const App: React.FC = () => {
 
     const completeStartupCheck = async () => {
       try {
-        const configured = await readModelConfigured();
+        // Reading the settings proves the runtime answers; what is set up is the checklist's business.
+        await getConfigViaRuntime();
         if (cancelled) return;
-        setModelConfigured(configured);
         setStartupState('ready');
       } catch (error) {
         console.error('Startup config check failed:', error);
@@ -384,12 +382,7 @@ const App: React.FC = () => {
     };
   }, [status, startupAttempt]);
 
-  const recheckModel = useCallback(() => {
-    readModelConfigured()
-      .then(setModelConfigured)
-      .catch((error) => console.error('Model config check failed:', error));
-  }, []);
-  const markModelMissing = useCallback(() => setModelConfigured(false), []);
+  const markModelMissing = useCallback(() => setModelMissingSignal((signal) => signal + 1), []);
 
   if (status === 'checking') {
     return <div className={APP_LOADING}>{t('app.preparing')}</div>;
@@ -404,8 +397,7 @@ const App: React.FC = () => {
       <AppShell
         startupState={startupState}
         onRetryStartup={() => setStartupAttempt((attempt) => attempt + 1)}
-        modelConfigured={modelConfigured}
-        onRecheckModel={recheckModel}
+        modelMissingSignal={modelMissingSignal}
         onModelMissing={markModelMissing}
       />
       <GlobalPreviewModal />
