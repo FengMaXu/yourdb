@@ -201,4 +201,14 @@ describe("ChannelRegistry", () => {
     await registry.start();
     await expect(registry.configure("im", { enabled: false })).rejects.toThrow("CHANNEL_NOT_CONFIGURED");
   });
+
+  it("shows no settings for a platform whose first scan failed, since it has no bot yet", async () => {
+    const { hub } = fakeHub();
+    const { provider, flows } = fakeProvider();
+    const registry = new ChannelRegistry(hub, memoryStore().store, [provider]);
+    await registry.start();
+    const listed = registry.provision("im");
+    flows[0]!.ready.reject(Object.assign(new Error("denied"), { code: "access_denied" }));
+    expect((await listed)[0]).toEqual({ id: "im", label: "IM", state: "failed", provisionable: true, message: "扫码后没有确认授权。" });
+  });
 });

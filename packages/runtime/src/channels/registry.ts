@@ -50,6 +50,8 @@ function failure(error: unknown): string {
 export class ChannelRegistry {
   private readonly entries = new Map<string, Entry>();
   private readonly settings = new Map<string, ChannelSettings>();
+  /** Channels that have credentials; only these are bots with settings. A first scan that failed is not one. */
+  private readonly configured = new Set<string>();
 
   constructor(
     private readonly hub: ChannelHub,
@@ -73,6 +75,7 @@ export class ChannelRegistry {
       this.hub.setReplyDetail(provider.id, own.replyDetail);
       const config = saved[provider.id] ?? this.options.fallback?.[provider.id];
       if (!config) continue;
+      this.configured.add(provider.id);
       if (own.enabled) await this.connect(provider, config);
       else this.set(provider.id, { state: "paused" });
     }
@@ -81,8 +84,8 @@ export class ChannelRegistry {
   list(): ChannelStatus[] {
     return this.providers.map((provider) => {
       const { status } = this.entry(provider.id);
-      // Settings belong to a bot that exists; a platform not set up has none to show.
-      if (status.state === "unconfigured" || status.state === "provisioning") return status;
+      // Settings belong to a bot that exists; a platform not set up, or one whose first scan failed, has none to show.
+      if (!this.configured.has(provider.id) || status.state === "unconfigured" || status.state === "provisioning") return status;
       return { ...status, settings: { ...this.settingsOf(provider.id) } };
     });
   }
@@ -155,6 +158,7 @@ export class ChannelRegistry {
     const { [channelId]: _removed, [SETTINGS_KEY]: allSettings, ...rest } = await this.store.load();
     const { [channelId]: _settings, ...otherSettings } = (allSettings ?? {}) as Record<string, ChannelConfig>;
     await this.store.save({ ...rest, ...(Object.keys(otherSettings).length > 0 ? { [SETTINGS_KEY]: otherSettings } : {}) });
+    this.configured.delete(channelId);
     this.settings.set(channelId, DEFAULT_SETTINGS);
     this.hub.setReplyDetail(channelId, DEFAULT_SETTINGS.replyDetail);
     this.set(channelId, { state: "unconfigured" });
@@ -166,6 +170,7 @@ export class ChannelRegistry {
   }
 
   private async connect(provider: ChannelProvider, config: ChannelConfig, warnings: readonly string[] = []): Promise<void> {
+    this.configured.add(provider.id);
     try {
       await this.hub.unregister(provider.id);
       const { [OWNER_KEY]: _owner, ...own } = config;
