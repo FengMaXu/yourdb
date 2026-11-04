@@ -108,6 +108,8 @@ describe("WeChat channel", () => {
     await channel.progress(target, { state: "running", text: "正在查", runId: "run-1" });
     await channel.progress(target, { state: "completed", text: "**华东**最高。", runId: "run-1" });
     expect(sent.map((item) => item.text)).toEqual(["华东最高。"]);
+    await channel.progress(target, { state: "completed", text: "华南第二。", runId: "run-2", steps: ["查询数据库 ×2", "生成图表"] });
+    expect(sent.at(-1)!.text).toBe("华南第二。\n\n做过的步骤：查询数据库 ×2 → 生成图表");
   });
 
   it("writes a CSV result from the published file and a dashboard as a pointer to the computer", async () => {

@@ -287,7 +287,7 @@ describe("ChannelHub deliverables", () => {
     fake.emit(sessionId, { type: "agent.text_delta", delta: "查询" });
     await hub.idle();
     await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(channel.progressViews).toEqual([{ state: "running", runId: "run-1", text: "正在查询", activeTool: "query_database" }]);
+    expect(channel.progressViews).toEqual([{ state: "running", runId: "run-1", text: "正在查询", activeTool: "查询数据库" }]);
     fake.emit(sessionId, { type: "agent.tool_finished", toolCallId: "c1", toolName: "query_database", result: null, isError: false });
     fake.emit(sessionId, { type: "agent.completed" });
     await hub.idle();
@@ -477,7 +477,10 @@ describe("ChannelHub access requests", () => {
     expect(await hub.submit("im", input("evt-1", direct))).toBe("dispatched");
     await hub.flush();
     expect(fake.calls).toHaveLength(1);
-    expect(channel.delivered.filter((item) => item.deliverable.kind === "access_request" || item.deliverable.kind === "notice")).toEqual([]);
+    // Nothing to approve; the owner's first message only brings a welcome with the commands.
+    expect(channel.delivered.filter((item) => item.deliverable.kind === "access_request" || item.deliverable.kind === "notice").map((item) => item.deliverable)).toEqual([
+      { kind: "notice", code: "HELP", text: expect.stringContaining("/detail") },
+    ]);
     expect((await hub.access()).members).toEqual([expect.objectContaining({ actor: alice, role: "account" })]);
 
     // Someone else in a group still asks, and the request reaches the owner.
@@ -520,7 +523,7 @@ describe("ChannelHub access requests", () => {
     await hub.submit("im", decide(request.requestId, "deny", "evt-3", bob));
     await hub.flush();
     expect(channel.delivered.filter((item) => item.deliverable.kind === "notice").slice(-3).map((item) => [item.target.kind === "actor" ? item.target.actor.externalUserId : item.target.address.chatId, notice(item)])).toEqual([
-      ["carol", "管理员已同意你使用数据助手，请重新发送你的问题。"],
+      ["carol", "管理员已同意你使用数据助手，请重新发送你的问题。发送 /help 查看可用命令。"],
       ["dm-alice-admin", "已允许，对方会收到通知。"],
       ["dm-alice-admin", "这条申请已经处理过了。"],
     ]);
@@ -574,3 +577,70 @@ describe("ChannelHub access requests", () => {
   });
 });
 
+
+describe("ChannelHub commands and reply detail", () => {
+  const notices = (channel: { delivered: { deliverable: Deliverable }[] }) => channel.delivered.flatMap((item) => item.deliverable.kind === "notice" ? [item.deliverable] : []);
+
+  it("answers /help and /status without asking the agent", async () => {
+    const { hub, fake, channel } = await setup();
+    await hub.submit("im", input("evt-1", direct, alice, "/help"));
+    await hub.submit("im", input("evt-2", direct, alice, "/状态"));
+    await hub.flush();
+    expect(fake.calls).toHaveLength(0);
+    expect(notices(channel).map((item) => item.code)).toEqual(["HELP", "STATUS"]);
+    expect(notices(channel)[0]!.text).toContain("/new");
+    expect(notices(channel)[1]!.text).toContain("回复详细度：标准");
+    expect(notices(channel)[1]!.text).toContain("下一条消息会开始新对话");
+  });
+
+  it("lets an account member change the reply detail from the chat, saved for everyone, and refuses a guest", async () => {
+    const { hub, channel, store } = await setup();
+    const saved: string[] = [];
+    hub.onReplyDetailChange = async (channelId, detail) => { saved.push(`${channelId}:${detail}`); };
+    await store.link(bob, "user-guest", 0, "guest");
+    await hub.submit("im", input("evt-1", direct, alice, "/detail 摘要"));
+    await hub.submit("im", input("evt-2", direct, bob, "/detail full"));
+    await hub.submit("im", input("evt-3", direct, alice, "/detail 很多"));
+    await hub.submit("im", input("evt-4", direct, alice, "/详细度"));
+    await hub.flush();
+    expect(saved).toEqual(["im:summary"]);
+    expect(hub.replyDetail("im")).toBe("summary");
+    expect(notices(channel).map((item) => item.text)).toEqual([
+      expect.stringContaining("已改为“摘要”"),
+      "只有已绑定账号的成员可以调整回复详细度。",
+      expect.stringContaining("请发送 /detail"),
+      expect.stringContaining("当前回复详细度：摘要"),
+    ]);
+  });
+
+  const run = async (detail: "summary" | "standard" | "full") => {
+    const { hub, fake, channel } = await setup();
+    hub.setReplyDetail("im", detail);
+    await hub.submit("im", input("evt-1", direct));
+    const sessionId = fake.calls[0]!.sessionId!;
+    fake.emit(sessionId, { type: "agent.text_delta", delta: "我先查一下。" });
+    fake.emit(sessionId, { type: "agent.tool_started", toolCallId: "c1", toolName: "query_database", args: {} });
+    await hub.idle();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    fake.emit(sessionId, { type: "agent.tool_finished", toolCallId: "c1", toolName: "query_database", result: null, isError: false });
+    fake.emit(sessionId, { type: "agent.tool_started", toolCallId: "c2", toolName: "query_database", args: {} });
+    fake.emit(sessionId, { type: "agent.tool_finished", toolCallId: "c2", toolName: "query_database", result: null, isError: false });
+    fake.emit(sessionId, { type: "agent.tool_started", toolCallId: "c3", toolName: "render_chart", args: {} });
+    fake.emit(sessionId, { type: "agent.tool_finished", toolCallId: "c3", toolName: "render_chart", result: null, isError: false });
+    fake.emit(sessionId, { type: "agent.text_delta", delta: "上月销售额 120 万。" });
+    fake.emit(sessionId, { type: "agent.completed" });
+    await hub.idle();
+    return channel.progressViews;
+  };
+
+  it("sends only the final answer at summary detail, nothing while the run works", async () => {
+    expect(await run("summary")).toEqual([{ state: "completed", runId: "run-1", text: "上月销售额 120 万。" }]);
+  });
+
+  it("streams at standard detail and lists the steps taken at full detail", async () => {
+    const standard = await run("standard");
+    expect(standard[0]).toMatchObject({ state: "running", activeTool: "查询数据库" });
+    expect(standard.at(-1)).toEqual({ state: "completed", runId: "run-1", text: "我先查一下。上月销售额 120 万。" });
+    expect((await run("full")).at(-1)).toEqual({ state: "completed", runId: "run-1", text: "我先查一下。上月销售额 120 万。", steps: ["查询数据库 ×2", "生成图表"] });
+  });
+});

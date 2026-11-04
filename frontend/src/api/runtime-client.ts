@@ -516,7 +516,7 @@ export async function refreshDashboardViaRuntime(path: string, viewIds: string[]
 
 export type ChannelStatusView = Extract<DataAgentResponseEnvelope["response"], { type: "channel.list.result" }>["channels"][number];
 
-async function channelCommand(command: Extract<DataAgentCommand, { type: "channel.list" | "channel.provision" | "channel.disconnect" }>): Promise<ChannelStatusView[]> {
+async function channelCommand(command: Extract<DataAgentCommand, { type: "channel.list" | "channel.provision" | "channel.disconnect" | "channel.configure" }>): Promise<ChannelStatusView[]> {
   const result = (await getRuntimeClient().dispatch(command)).response;
   if (result.type !== "channel.list.result") throw new Error("UNEXPECTED_RESPONSE");
   return result.channels;
@@ -526,6 +526,9 @@ export const listChannelsViaRuntime = () => channelCommand({ type: "channel.list
 /** Starts scan-to-connect; the returned status carries the link to show as a QR code. */
 export const provisionChannelViaRuntime = (channelId: string) => channelCommand({ type: "channel.provision", channelId });
 export const disconnectChannelViaRuntime = (channelId: string) => channelCommand({ type: "channel.disconnect", channelId });
+export type ReplyDetailView = NonNullable<ChannelStatusView["settings"]>["replyDetail"];
+/** Switches a bot on or off, or changes how much of a run it sends. */
+export const configureChannelViaRuntime = (channelId: string, settings: { enabled?: boolean; replyDetail?: ReplyDetailView }) => channelCommand({ type: "channel.configure", channelId, ...settings });
 
 /** A one-time code to send to the bot as `/bind <code>`, linking that IM identity to the signed-in account. */
 export async function createChannelBindCodeViaRuntime(): Promise<{ code: string; expiresAt: number }> {

@@ -74,7 +74,9 @@ export class WeixinChannel implements Channel {
   /** A message cannot be edited, so only the finished answer is sent. */
   async progress(target: DeliveryTarget, view: ProgressView): Promise<void> {
     if (view.state !== "completed") return;
-    const text = plainText(view.text);
+    const answer = plainText(view.text);
+    // At full detail the steps taken follow the answer.
+    const text = view.steps?.length ? `${answer}\n\n做过的步骤：${view.steps.join(" → ")}`.trim() : answer;
     if (!text) return;
     const to = target.kind === "actor" ? target.actor.externalUserId : target.address.chatId;
     await this.sendText(to, text, `answer:${to}:${view.runId ?? this.now()}`);
