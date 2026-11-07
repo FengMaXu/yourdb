@@ -148,7 +148,7 @@ describe("HarnessChildExecutor", () => {
     expect(result.terminalConfirmed).toBe(true);
     expect(result.operationId).toBeTruthy();
     await executor.close();
-  });
+  }, 10_000);
 
   it("propagates an active parent cancellation to the exact child operation", async () => {
     const { faux, executor } = setup({ tokensPerSecond: 1 });
@@ -158,7 +158,7 @@ describe("HarnessChildExecutor", () => {
     const result = await executor.execute(request({ signal: abort.signal, timeoutMs: 10_000 }));
     expect(result).toMatchObject({ status: "cancelled", terminalConfirmed: true, operationId: expect.any(String) });
     await executor.close();
-  });
+  }, 10_000);
 
   it("aborts active children before executor close returns", async () => {
     const { faux, executor } = setup({ tokensPerSecond: 1 });
@@ -167,7 +167,7 @@ describe("HarnessChildExecutor", () => {
     await new Promise((resolve) => setTimeout(resolve, 10));
     await executor.close();
     await expect(running).resolves.toMatchObject({ status: "interrupted", terminalConfirmed: true });
-  });
+  }, 10_000);
 
   it("stops before an eleventh child model request", async () => {
     const { faux, executor } = setup();

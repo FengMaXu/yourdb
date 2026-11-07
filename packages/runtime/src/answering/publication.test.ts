@@ -62,6 +62,15 @@ describe("Publication disclosure", () => {
 const context = (invocationId: string): BusinessContext => ({ principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "operation-1", invocationId });
 const listSpec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "sum", of: "sales" }, grouping: "n/a", selection: "n/a", output: { rowMode: "full" } };
 
+class CountingResultStore extends InMemoryResultStore {
+  encodings = 0;
+
+  override async encodeCsv(...args: Parameters<InMemoryResultStore["encodeCsv"]>): ReturnType<InMemoryResultStore["encodeCsv"]> {
+    this.encodings += 1;
+    return super.encodeCsv(...args);
+  }
+}
+
 async function publishedAnswering(store = new InMemoryAnsweringStore(), resultStore = new InMemoryResultStore()) {
   const answering = new InMemoryAnswering({
     store,
@@ -78,6 +87,30 @@ async function publishedAnswering(store = new InMemoryAnsweringStore(), resultSt
 }
 
 describe("Publication Physical Profile", () => {
+  it("replays the durable Receipt without encoding the Candidate again", async () => {
+    const resultStore = new CountingResultStore();
+    const { answering, candidateId } = await publishedAnswering(new InMemoryAnsweringStore(), resultStore);
+    const first = await answering.publish({ candidateId, format: "auto", requestId: "publish-once" }, context("publish-once"));
+    const replay = await answering.publish({ candidateId, format: "auto", requestId: "publish-replay" }, context("publish-replay"));
+    expect(replay).toEqual(first);
+    expect(resultStore.encodings).toBe(1);
+  });
+
+  it("rejects an inconsistent persisted Candidate lifecycle without changing its snapshot shape", async () => {
+    const first = await publishedAnswering();
+    const snapshot = first.store.snapshot();
+    const inconsistent = {
+      ...snapshot,
+      candidates: snapshot.candidates.map((item) => item.candidateId === first.candidateId ? { ...item, status: "ready" as const, publishable: false } : item),
+    };
+    const reopened = new InMemoryAnswering({
+      store: new InMemoryAnsweringStore(inconsistent),
+      resultStore: first.resultStore,
+      sqlExecutor: { run: async () => { throw new Error("SQL must not re-run"); } },
+    });
+    await expect(reopened.publish({ candidateId: first.candidateId, format: "auto", requestId: "publish-inconsistent" }, context("publish-inconsistent"))).rejects.toMatchObject({ code: "RESULT_INTEGRITY_MISMATCH" });
+  });
+
   it("attaches a profile of every stored row without changing either content hash", async () => {
     const { answering, resultStore, candidateId, candidateHash } = await publishedAnswering();
     const receipt = await answering.publish({ candidateId, format: "auto", requestId: "publish-1" }, context("publish-1"));

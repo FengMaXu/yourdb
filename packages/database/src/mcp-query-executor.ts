@@ -40,6 +40,10 @@ function isConnectionLoss(error: unknown): boolean {
   return CONNECTION_LOST.test(error instanceof Error ? error.message : String(error));
 }
 
+function isRequestTimeout(error: unknown): boolean {
+  return /timed out|timeout|RequestTimeout/i.test(error instanceof Error ? error.message : String(error));
+}
+
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(new Error("QUERY_CANCELLED")); return; }
@@ -94,91 +98,129 @@ export interface McpSchemaEvidence {
  * databases directly; all SQL flows through this MCP client.
  */
 export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
-  let client: Client | null = null;
-  let activeTransport: StdioClientTransport | null = null;
-  const connect = async (): Promise<Client> => {
-    if (client) return client;
+  type Connection = { readonly generation: number; readonly client: Client; readonly transport: StdioClientTransport };
+  type ConnectionState =
+    | { readonly kind: "disconnected"; readonly generation: number }
+    | ({ readonly kind: "connecting"; readonly ready: Promise<Connection> } & Connection)
+    | ({ readonly kind: "connected" } & Connection);
+
+  let connection: ConnectionState = { kind: "disconnected", generation: 0 };
+  const owns = (generation: number, transport: StdioClientTransport): boolean =>
+    connection.kind !== "disconnected" && connection.generation === generation && connection.transport === transport;
+
+  const resetGeneration = async (expectedGeneration?: number): Promise<void> => {
+    const current = connection;
+    if (expectedGeneration !== undefined && current.generation !== expectedGeneration) return;
+    connection = { kind: "disconnected", generation: current.generation + 1 };
+    if (current.kind !== "disconnected") await current.transport.close().catch(() => undefined);
+  };
+  const resetConnection = (): Promise<void> => resetGeneration();
+
+  const connect = (): Promise<Connection> => {
+    if (connection.kind === "connected") return Promise.resolve(connection);
+    if (connection.kind === "connecting") return connection.ready;
+
+    const generation = connection.generation + 1;
     const transport = new StdioClientTransport({
       command: options.command,
       args: options.args ?? [],
       env: options.env ? { ...options.env } : undefined,
     });
-    activeTransport = transport;
+    const client = new Client({ name: "data-agent-query-executor", version: "1.0.0" });
+    let resolveReady!: (connected: Connection) => void;
+    let rejectReady!: (error: unknown) => void;
+    const ready = new Promise<Connection>((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+    connection = { kind: "connecting", generation, client, transport, ready };
     transport.onerror = (error) => console.error("[mcp-query-executor] transport error:", error.message);
-    // Note: client.connect(transport) invokes start(); do not call it here.
     transport.onclose = () => {
-      if (activeTransport === transport) activeTransport = null;
-      client = null;
+      if (owns(generation, transport)) connection = { kind: "disconnected", generation: generation + 1 };
       console.error("[mcp-query-executor] transport closed");
     };
-    client = new Client({ name: "data-agent-query-executor", version: "1.0.0" });
-    await client.connect(transport);
-    return client;
+    // client.connect(transport) invokes start(); do not call it separately.
+    void client.connect(transport).then(
+      () => {
+        if (!owns(generation, transport)) {
+          void transport.close().catch(() => undefined);
+          rejectReady(new Error("MCP_CONNECTION_SUPERSEDED"));
+          return;
+        }
+        const connected: Connection = { generation, client, transport };
+        connection = { kind: "connected", ...connected };
+        resolveReady(connected);
+      },
+      (error: unknown) => {
+        if (owns(generation, transport)) connection = { kind: "disconnected", generation: generation + 1 };
+        void transport.close().catch(() => undefined);
+        rejectReady(error);
+      },
+    );
+    return ready;
   };
-  const resetConnection = async (): Promise<void> => {
-    const transport = activeTransport;
-    client = null;
-    activeTransport = null;
-    await transport?.close().catch(() => undefined);
-  };
+
   const reconnectDelays = options.reconnectDelaysMs ?? [500, 2_000, 5_000];
   /**
    * Runs one read-only MCP call, replacing a lost database process and retrying
    * the call after a health check. Exhausting the reconnects is terminal for
    * the caller: the Agent must not work around a missing database.
    */
-  const withConnection = async <T>(operation: (connected: Client) => Promise<T>, signal?: AbortSignal): Promise<T> => {
+  const withConnection = async <T>(
+    operation: (connected: Client) => Promise<T>,
+    signal?: AbortSignal,
+    resetOnError?: (error: unknown) => boolean,
+  ): Promise<T> => {
     let lastError: unknown;
+    let failedGeneration: number | undefined;
     for (let attempt = 0; attempt <= reconnectDelays.length; attempt += 1) {
       if (attempt > 0) {
-        await resetConnection();
+        if (failedGeneration !== undefined) await resetGeneration(failedGeneration);
         await delay(reconnectDelays[attempt - 1]!, signal);
       }
-      let connected: Client;
+      let connected: Connection | undefined;
       try {
         connected = await connect();
-        if (attempt > 0) await connected.listTools(undefined, { timeout: 10_000 });
+        if (attempt > 0) await connected.client.listTools(undefined, { timeout: 10_000 });
       } catch (error) {
         if (signal?.aborted) throw error;
+        if (connected) failedGeneration = connected.generation;
         lastError = error;
         continue;
       }
       try {
-        return await operation(connected);
+        return await operation(connected.client);
       } catch (error) {
-        if (signal?.aborted || !isConnectionLoss(error)) throw error;
+        if (signal?.aborted) throw error;
+        if (resetOnError?.(error)) {
+          await resetGeneration(connected.generation);
+          throw error;
+        }
+        if (!isConnectionLoss(error)) throw error;
+        failedGeneration = connected.generation;
         lastError = error;
       }
     }
-    await resetConnection();
+    if (failedGeneration !== undefined) await resetGeneration(failedGeneration);
     throw new DatabaseUnavailableError(`database process unavailable after ${reconnectDelays.length} reconnects (${lastError instanceof Error ? lastError.message : String(lastError)})`);
   };
   const run = async (sql: string, rowLimit: number, execution?: McpQueryExecutionOptions): Promise<McpQueryResult> => {
       if (execution?.signal?.aborted) throw new Error("QUERY_CANCELLED");
       const finalResult = execution?.kind === "result";
       const effectiveLimit = Math.min(Math.max(1, Math.floor(rowLimit)), finalResult ? 100000 : 10000);
-      let result: { isError?: boolean; content?: Array<{ type: string; text?: string }> };
-      try {
-        result = await withConnection((c) => {
-          const remaining = execution?.deadlineAt ? Math.max(1, execution.deadlineAt - Date.now()) : undefined;
-          // The server enforces the statement's limit itself; the client only waits for its answer.
-          const statementMs = Math.max(1, Math.floor(Math.min(options.requestTimeoutMs ?? 60_000, remaining ?? Number.POSITIVE_INFINITY)));
-          return c.callTool({
-            name: finalResult ? "execute_query_export" : "execute_query_preview",
-            arguments: finalResult
-              ? { sql, maxRows: effectiveLimit, timeoutMs: statementMs }
-              : { sql, limit: effectiveLimit, timeoutMs: statementMs, ...(execution?.maxPreviewBytes ? { maxBytes: execution.maxPreviewBytes } : {}) },
-          }, undefined, {
-            timeout: statementMs + STATEMENT_REPORT_GRACE_MS,
-            ...(execution?.signal ? { signal: execution.signal } : {}),
-          });
-        }, execution?.signal) as unknown as typeof result;
-      } catch (error) {
-        // A cancelled call is stopped on the server through MCP cancellation, so the process stays.
-        // Only a server that missed its own time limit and the grace after it is replaced.
-        if (!execution?.signal?.aborted && /timed out|timeout|RequestTimeout/i.test(error instanceof Error ? error.message : String(error))) await resetConnection();
-        throw error;
-      }
+      // A cancelled call is stopped on the server through MCP cancellation, so the process stays.
+      // Only a server that missed its own time limit and the grace after it is replaced.
+      const result = await withConnection((c) => {
+        const remaining = execution?.deadlineAt ? Math.max(1, execution.deadlineAt - Date.now()) : undefined;
+        // The server enforces the statement's limit itself; the client only waits for its answer.
+        const statementMs = Math.max(1, Math.floor(Math.min(options.requestTimeoutMs ?? 60_000, remaining ?? Number.POSITIVE_INFINITY)));
+        return c.callTool({
+          name: finalResult ? "execute_query_export" : "execute_query_preview",
+          arguments: finalResult
+            ? { sql, maxRows: effectiveLimit, timeoutMs: statementMs }
+            : { sql, limit: effectiveLimit, timeoutMs: statementMs, ...(execution?.maxPreviewBytes ? { maxBytes: execution.maxPreviewBytes } : {}) },
+        }, undefined, {
+          timeout: statementMs + STATEMENT_REPORT_GRACE_MS,
+          ...(execution?.signal ? { signal: execution.signal } : {}),
+        });
+      }, execution?.signal, isRequestTimeout) as unknown as { isError?: boolean; content?: Array<{ type: string; text?: string }> };
       const text = result.content?.find((part) => part.type === "text")?.text;
       if (!text) throw new Error("MCP_QUERY_EMPTY_RESPONSE");
       if (result.isError) throw new Error(`MCP_TOOL_ERROR: ${text.slice(0, 300)}`);
