@@ -89,12 +89,20 @@ describe("Answering vertical slice", () => {
     const replayedByNewInvocation = await service.execute({ kind: "result", taskId: first.taskId, revisionId: first.revisionId, sql: "select 1" }, context("result-new-invocation"));
     expect(replayedByNewInvocation.artifact).toEqual(execution.artifact);
     expect(calls).toBe(1);
+    await expect(service.inspect({ taskId: first.taskId }, context("inspect-result-attempt"))).resolves.toMatchObject({
+      attempts: expect.arrayContaining([expect.objectContaining({ kind: "result", state: "succeeded", outcome: "succeeded", sqlExecuted: true })]),
+      candidate: { status: "ready", publishable: true },
+    });
     const receipt = await service.publish({ candidateId: execution.artifact.candidateId, format: "auto", requestId: "publish-1" }, context("publish-1"));
     const repeated = await service.publish({ candidateId: execution.artifact.candidateId, format: "auto", requestId: "publish-1" }, context("publish-retry"));
     expect(repeated).toEqual(receipt);
     expect(calls).toBe(1);
     expect(receipt.format).toBe("inline");
     expect(receipt.resultRef).toBe(execution.artifact.resultRef);
+    await expect(service.inspect({ taskId: first.taskId }, context("inspect-published"))).resolves.toMatchObject({
+      task: { lifecycle: "published", publicationId: receipt.receiptId },
+      publication: { receiptId: receipt.receiptId, candidateId: execution.artifact.candidateId },
+    });
   });
 
   it("coalesces concurrent final retries with different invocation ids", async () => {
@@ -238,7 +246,7 @@ describe("Answering vertical slice", () => {
       obstacle: { kind: "business_judgment_required", sqlExecuted: false, executionOutcome: "not_started", requiresOuterDecision: true },
     });
     expect(calls).toBe(0);
-    await expect(service.inspect({ taskId: first.taskId }, context("inspect-unknown-field"))).resolves.toMatchObject({ undeclared: ["population.time"], attempts: [{ kind: "result", state: "blocked" }] });
+    await expect(service.inspect({ taskId: first.taskId }, context("inspect-unknown-field"))).resolves.toMatchObject({ undeclared: ["population.time"], attempts: [{ kind: "result", state: "blocked", outcome: "not_started", sqlExecuted: false, obstacleKind: "business_judgment_required" }] });
   });
 
   it("keeps a technical SQL failure inside the inner loop and records the attempt", async () => {
@@ -254,7 +262,7 @@ describe("Answering vertical slice", () => {
     });
     expect(calls).toBe(1);
     const inspected = await service.inspect({ taskId: first.taskId }, context("inspect-technical-failure"));
-    expect(inspected.attempts).toEqual(expect.arrayContaining([expect.objectContaining({ state: "failed", obstacleKind: "technical_failure", sqlExecuted: true })]));
+    expect(inspected.attempts).toEqual(expect.arrayContaining([expect.objectContaining({ state: "failed", outcome: "failed", obstacleKind: "technical_failure", sqlExecuted: true })]));
     expect(inspected.currentRevision.fields["measure.formula"]).toMatchObject({ state: "specified" });
   });
 
@@ -292,6 +300,9 @@ describe("Answering vertical slice", () => {
     await expect(service.execute(input, { ...context("unknown-invocation"), memo })).rejects.toMatchObject({ code: "RESULT_EXECUTION_OUTCOME_UNKNOWN", obstacle: { kind: "execution_outcome_unknown", sqlExecuted: true } });
     await expect(service.execute(input, context("unknown-new-invocation"))).rejects.toMatchObject({ code: "RESULT_EXECUTION_OUTCOME_UNKNOWN", obstacle: { kind: "execution_outcome_unknown", sqlExecuted: true } });
     expect(calls).toBe(1);
+    await expect(service.inspect({ taskId: first.taskId }, context("inspect-unknown-result"))).resolves.toMatchObject({
+      attempts: expect.arrayContaining([expect.objectContaining({ kind: "result", state: "unknown", outcome: "unknown", sqlExecuted: true, obstacleKind: "execution_outcome_unknown" })]),
+    });
   });
 
   it("charges exploration budget for observed rows removed from a byte-bounded preview", async () => {

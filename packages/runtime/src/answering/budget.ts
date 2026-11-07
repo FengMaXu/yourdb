@@ -67,34 +67,45 @@ export function budgetFailure(budget: QueryBudgetState, kind: QueryAttemptKind, 
   return undefined;
 }
 
-export function makeAttempt(
-  taskId: TaskId,
-  kind: QueryAttemptKind,
-  revisionId: RevisionId,
-  invocationId: string,
-  createdAt: string,
-  state: QueryAttemptRecord["state"],
-  outcome: ExecutionOutcome,
-  sqlExecuted: boolean,
-  obstacleKind?: ImplementationObstacleKind,
-  queryHash?: string,
-  purpose?: QueryAttemptPurpose,
-): QueryAttemptRecord {
+interface AttemptIdentity {
+  readonly taskId: TaskId;
+  readonly kind: QueryAttemptKind;
+  readonly revisionId: RevisionId;
+  readonly invocationId: string;
+  readonly queryHash?: string;
+  readonly purpose?: QueryAttemptPurpose;
+}
+
+type InitialAttemptLifecycle =
+  | { readonly state: "blocked"; readonly outcome: "not_started"; readonly sqlExecuted: false; readonly obstacleKind: ImplementationObstacleKind }
+  | { readonly state: "started"; readonly outcome: "not_started"; readonly sqlExecuted: false };
+
+export type AttemptSettlement =
+  | { readonly state: "succeeded"; readonly outcome: "succeeded"; readonly sqlExecuted: true }
+  | { readonly state: "failed"; readonly outcome: "failed" | "succeeded"; readonly sqlExecuted: boolean; readonly obstacleKind: ImplementationObstacleKind }
+  | { readonly state: "unknown"; readonly outcome: "unknown"; readonly sqlExecuted: true; readonly obstacleKind: "execution_outcome_unknown" };
+
+function newAttempt(identity: AttemptIdentity, lifecycle: InitialAttemptLifecycle, createdAt: string): QueryAttemptRecord {
   return {
     attemptId: makeInternalId("attempt"),
-    taskId,
-    kind,
-    ...(purpose ? { purpose } : {}),
-    revisionId,
-    invocationId,
-    ...(queryHash ? { queryHash } : {}),
-    state,
-    sqlExecuted,
-    outcome,
-    ...(obstacleKind ? { obstacleKind } : {}),
+    taskId: identity.taskId,
+    kind: identity.kind,
+    ...(identity.purpose ? { purpose: identity.purpose } : {}),
+    revisionId: identity.revisionId,
+    invocationId: identity.invocationId,
+    ...(identity.queryHash ? { queryHash: identity.queryHash } : {}),
+    ...lifecycle,
     createdAt,
     updatedAt: createdAt,
   };
+}
+
+export function blockedAttempt(identity: AttemptIdentity, obstacleKind: ImplementationObstacleKind, createdAt = now()): QueryAttemptRecord {
+  return newAttempt(identity, { state: "blocked", outcome: "not_started", sqlExecuted: false, obstacleKind }, createdAt);
+}
+
+export function startedAttempt(identity: AttemptIdentity, createdAt = now()): QueryAttemptRecord {
+  return newAttempt(identity, { state: "started", outcome: "not_started", sqlExecuted: false }, createdAt);
 }
 
 export function obstacle(
@@ -155,7 +166,7 @@ export function reserveAttempt(
         : probeCount >= MAX_FIELD_PROBES ? "probe budget exhausted" : undefined
     : budgetFailure(budget, kind, at);
   if (reason) {
-    const blocked = makeAttempt(task.taskId, kind, revisionId, invocationId, now(), "blocked", "not_started", false, "budget_exhausted", queryHash, purpose);
+    const blocked = blockedAttempt({ taskId: task.taskId, kind, revisionId, invocationId, ...(queryHash ? { queryHash } : {}), ...(purpose ? { purpose } : {}) }, "budget_exhausted");
     tx.putAttempt(blocked);
     const current = { ...task, budget, updatedAt: blocked.updatedAt };
     tx.putTask(current);
@@ -177,29 +188,17 @@ export function reserveAttempt(
     : kind === "exploration"
       ? { ...budget, explorationAttempts: budget.explorationAttempts + 1 }
       : { ...budget, resultAttempts: budget.resultAttempts + 1 };
-  const started = makeAttempt(task.taskId, kind, revisionId, invocationId, now(), "started", "not_started", false, undefined, queryHash, purpose);
+  const started = startedAttempt({ taskId: task.taskId, kind, revisionId, invocationId, ...(queryHash ? { queryHash } : {}), ...(purpose ? { purpose } : {}) });
   const current = { ...task, budget: nextBudget, updatedAt: started.updatedAt };
   tx.putTask(current);
   tx.putAttempt(started);
   return { task: current, attempt: started };
 }
 
-export function updateAttempt(
-  tx: AnsweringTransaction,
-  attempt: QueryAttemptRecord,
-  state: QueryAttemptRecord["state"],
-  outcome: ExecutionOutcome,
-  sqlExecuted: boolean,
-  obstacleKind?: ImplementationObstacleKind,
-): QueryAttemptRecord {
-  const updated = {
-    ...attempt,
-    state,
-    outcome,
-    sqlExecuted,
-    ...(obstacleKind ? { obstacleKind } : {}),
-    updatedAt: now(),
-  };
+export function settleAttempt(tx: AnsweringTransaction, attempt: QueryAttemptRecord, settlement: AttemptSettlement): QueryAttemptRecord {
+  if (attempt.state !== "started") return attempt;
+  const { obstacleKind: _previousObstacle, ...base } = attempt;
+  const updated: QueryAttemptRecord = { ...base, ...settlement, updatedAt: now() };
   tx.putAttempt(updated);
   return updated;
 }
@@ -226,7 +225,7 @@ export async function throwExecutionFailure(
     await store.transact((tx) => {
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
-      if (attempt) updateAttempt(tx, attempt, "failed", "failed", sqlStarted, "technical_failure");
+      if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "failed", sqlExecuted: sqlStarted, obstacleKind: "technical_failure" });
     }, context);
     throw new AnsweringError(DATABASE_UNAVAILABLE, error instanceof Error ? error.message : String(error));
   }
@@ -235,7 +234,9 @@ export async function throwExecutionFailure(
   const details = await store.transact((tx) => {
     const current = tx.getTask(taskId);
     assertTaskAccess(current, context);
-    if (attempt) updateAttempt(tx, attempt, unknown ? "unknown" : "failed", unknown ? "unknown" : "failed", sqlStarted, kind);
+    if (attempt) settleAttempt(tx, attempt, unknown
+      ? { state: "unknown", outcome: "unknown", sqlExecuted: true, obstacleKind: "execution_outcome_unknown" }
+      : { state: "failed", outcome: "failed", sqlExecuted: sqlStarted, obstacleKind: kind });
     return obstacle(tx, current, revisionId, kind, error instanceof Error ? error.message : String(error), {
       requiresOuterDecision: unknown || kind !== "technical_failure",
       retryable: !unknown && kind === "technical_failure",
