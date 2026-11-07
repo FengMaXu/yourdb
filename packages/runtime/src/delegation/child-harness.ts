@@ -14,6 +14,15 @@ import { withToolPromptCatalog } from "../agent/tool-prompt-models.js";
 import { withCoalescedDeltas } from "../agent/coalesced-stream-models.js";
 import { failedStream, overrideModels } from "../agent/models-overrides.js";
 import { infrastructureFailureOf } from "../agent/infrastructure-failure.js";
+import {
+  firstStopReason,
+  isStopping,
+  markAbortRequested,
+  requestChildStop,
+  runningChildExecution,
+  stoppedOutcomeStatus,
+  type ChildExecutionState,
+} from "./lifecycle.js";
 
 /** Explorers answer bounded fact questions; fewer turns keep the parent waiting less. */
 const MAX_MODEL_REQUESTS = 10;
@@ -249,25 +258,20 @@ export class HarnessChildExecutor implements ChildExecutor {
     let resolveCompletion!: (value: RawChildExecution) => void;
     const completion = new Promise<RawChildExecution>((resolve) => { resolveCompletion = resolve; });
     let outcome: RawChildExecution | undefined;
-    let timedOut = false;
-    let cancelled = false;
-    let interrupted = false;
-    let abortRequested = false;
+    let lifecycle: ChildExecutionState = runningChildExecution();
     const executionAbort = new AbortController();
     let lane: AgentLane | undefined;
     let abortPromise: Promise<void> | undefined;
     let infrastructureFailure: string | undefined;
 
     const abort = (reason: "timeout" | "cancel" | "close"): Promise<void> => {
-      if (reason === "timeout") timedOut = true;
-      if (reason === "cancel") cancelled = true;
-      if (reason === "close") interrupted = true;
+      lifecycle = requestChildStop(lifecycle, reason);
       executionAbort.abort();
       if (!lane || !operationId) return Promise.resolve();
       if (abortPromise) return abortPromise;
       abortPromise = (async () => {
         const requested = await lane.requestAbort(operationId, TODO_CONTEXT).catch(() => undefined);
-        abortRequested = requested?.ok === true || abortRequested;
+        if (requested?.ok === true) lifecycle = markAbortRequested(lifecycle);
       })();
       return abortPromise;
     };
@@ -286,7 +290,7 @@ export class HarnessChildExecutor implements ChildExecutor {
     try {
       session = await this.options.sessions.create({ id: request.childSessionId, parentSessionId: request.parentSessionId, signal: executionAbort.signal });
       if (executionAbort.signal.aborted) {
-        outcome = { status: timedOut ? "timed_out" : this.closing ? "interrupted" : "cancelled", terminalConfirmed: true, usage: nullUsage() };
+        outcome = { status: stoppedOutcomeStatus(lifecycle, ["timeout", "close", "cancel"]) ?? "cancelled", terminalConfirmed: true, usage: nullUsage() };
         return outcome;
       }
       const tools = request.toolDefinitions.map((definition) => definition.tool);
@@ -329,7 +333,7 @@ export class HarnessChildExecutor implements ChildExecutor {
       }
       lane = await harness.lane("main", operationContext);
       if (executionAbort.signal.aborted) {
-        outcome = { status: timedOut ? "timed_out" : this.closing ? "interrupted" : "cancelled", terminalConfirmed: true, usage: nullUsage() };
+        outcome = { status: stoppedOutcomeStatus(lifecycle, ["timeout", "close", "cancel"]) ?? "cancelled", terminalConfirmed: true, usage: nullUsage() };
         return outcome;
       }
       const accepted = await lane.accept({ kind: "prompt", prompt: request.prompt }, operationContext);
@@ -349,11 +353,11 @@ export class HarnessChildExecutor implements ChildExecutor {
       if (this.closing) await abort("close");
 
       let driven = await lane.drive({ operationId }, operationContext).catch((error) => ({ ok: false as const, error }));
-      if (!driven.ok && (timedOut || cancelled || interrupted || abortRequested)) {
+      if (!driven.ok && (isStopping(lifecycle) || lifecycle.abortRequested)) {
         await abortPromise?.catch(() => undefined);
         driven = await lane.drive({ operationId }, TODO_CONTEXT).catch((error) => ({ ok: false as const, error }));
       }
-      while (driven.ok && driven.value.kind === "waiting" && !timedOut && !cancelled && !interrupted) {
+      while (driven.ok && driven.value.kind === "waiting" && !isStopping(lifecycle)) {
         const delay = driven.value.reason === "retry"
           ? Math.max(0, driven.value.notBefore - Date.now())
           : Math.max(10, driven.value.deferred.pollAfterMs ?? 250);
@@ -361,7 +365,7 @@ export class HarnessChildExecutor implements ChildExecutor {
         driven = await lane.drive({ operationId }, operationContext).catch((error) => ({ ok: false as const, error }));
       }
       if (driven.ok && driven.value.kind === "waiting") {
-        await abort(timedOut ? "timeout" : cancelled ? "cancel" : "close");
+        await abort(firstStopReason(lifecycle, ["timeout", "cancel", "close"]) ?? "close");
         driven = await lane.drive({ operationId }, TODO_CONTEXT).catch((error) => ({ ok: false as const, error }));
       }
 
@@ -374,7 +378,7 @@ export class HarnessChildExecutor implements ChildExecutor {
       };
       if (!driven.ok) {
         outcome = {
-          status: timedOut || cancelled || interrupted || abortRequested ? "abort_unconfirmed" : "failed",
+          status: isStopping(lifecycle) || lifecycle.abortRequested ? "abort_unconfirmed" : "failed",
           terminalConfirmed: false,
           operationId,
           usage,
@@ -384,7 +388,7 @@ export class HarnessChildExecutor implements ChildExecutor {
         outcome = { status: "abort_unconfirmed", terminalConfirmed: false, operationId, usage, error: "SUBAGENT_OPERATION_DID_NOT_SETTLE" };
       } else if (driven.value.outcome.status === "aborted") {
         outcome = {
-          status: timedOut ? "timed_out" : cancelled ? "cancelled" : "interrupted",
+          status: stoppedOutcomeStatus(lifecycle, ["timeout", "cancel", "close"]) ?? "interrupted",
           terminalConfirmed: true,
           operationId,
           usage,
@@ -409,9 +413,9 @@ export class HarnessChildExecutor implements ChildExecutor {
     } catch (error) {
       if (operationId) await abort(this.closing ? "close" : request.signal?.aborted ? "cancel" : "close");
       outcome = {
-        status: operationId && (timedOut || cancelled || interrupted || abortRequested)
+        status: operationId && (isStopping(lifecycle) || lifecycle.abortRequested)
           ? "abort_unconfirmed"
-          : timedOut ? "timed_out" : interrupted ? "interrupted" : cancelled ? "cancelled" : "failed",
+          : stoppedOutcomeStatus(lifecycle, ["timeout", "close", "cancel"]) ?? "failed",
         terminalConfirmed: !operationId,
         ...(operationId ? { operationId } : {}),
         usage: nullUsage(),
