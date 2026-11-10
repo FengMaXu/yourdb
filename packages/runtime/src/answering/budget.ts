@@ -196,8 +196,10 @@ export function reserveAttempt(
 }
 
 export function settleAttempt(tx: AnsweringTransaction, attempt: QueryAttemptRecord, settlement: AttemptSettlement): QueryAttemptRecord {
-  if (attempt.state !== "started") return attempt;
-  const { obstacleKind: _previousObstacle, ...base } = attempt;
+  // Callers may hold a copy from before an earlier settlement in this run; the stored record decides.
+  const stored = tx.listAttempts(attempt.taskId).find((record) => record.attemptId === attempt.attemptId) ?? attempt;
+  if (stored.state !== "started") return stored;
+  const { obstacleKind: _previousObstacle, ...base } = stored;
   const updated: QueryAttemptRecord = { ...base, ...settlement, updatedAt: now() };
   tx.putAttempt(updated);
   return updated;

@@ -271,6 +271,8 @@ export class NativeDelegation implements Delegation {
     const startedAt = Date.now();
     progress({ key: task.key, type: "started", at: startedAt });
     let stopState: StopState = activeStopState();
+    // Once the terminal write has started, an abort leaves its outcome unknown; writing a second terminal record would contradict it.
+    let terminalWriteStarted = false;
     let parentLease: ConcurrencyLease | undefined;
     const runController = new AbortController();
     this.runControllers.add(runController);
@@ -360,6 +362,7 @@ export class NativeDelegation implements Delegation {
         usage: raw.usage,
         ...(error ? { error } : {}),
       };
+      terminalWriteStarted = true;
       await this.appendTerminal(base, outcome, delegatedSignal);
       if (context.memo) {
         await awaitWithSignal(
@@ -376,7 +379,7 @@ export class NativeDelegation implements Delegation {
         terminalConfirmed: true,
         usage: { inputTokens: null, outputTokens: null, cost: null }, error: boundedError(error),
       };
-      await this.appendTerminal(base, outcome, delegatedSignal);
+      if (!(terminalWriteStarted && delegatedSignal.aborted)) await this.appendTerminal(base, outcome, delegatedSignal);
       return outcome;
     } finally {
       clearTimeout(deadline);

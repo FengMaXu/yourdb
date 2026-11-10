@@ -69,4 +69,21 @@ describe("MCP query executor connection lifecycle", () => {
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 15_000);
+
+  it("starts no database process once closed", async () => {
+    const root = await mkdtemp(path.join(process.cwd(), ".tmp-mcp-closed-"));
+    const server = path.join(root, "server.mjs");
+    const log = path.join(root, "starts.log");
+    await writeFile(server, DELAYED_SERVER, "utf8");
+    const executor = createMcpQueryExecutor({ command: process.execPath, args: [server, log, "0"], reconnectDelaysMs: [] });
+    try {
+      await executor.run("SELECT 1", 1, { kind: "exploration" });
+      await executor.close();
+      await expect(executor.run("SELECT 2", 1, { kind: "exploration" })).rejects.toThrow("MCP_EXECUTOR_CLOSED");
+      expect((await readFile(log, "utf8")).trim().split("\n")).toHaveLength(1);
+    } finally {
+      await executor.close();
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 15_000);
 });

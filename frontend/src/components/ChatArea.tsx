@@ -894,7 +894,9 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 if (!current()) return;
                 console.error('Chat error:', err);
                 if (isModelNotConfiguredError(err)) onModelNotConfigured?.();
-                endRun('error', true);
+                // endRun stops following, so the onFinish that follows returns early: reload the lost events here.
+                if (!endRun('error', true)) return;
+                if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             () => {
                 if (!endRun()) return;

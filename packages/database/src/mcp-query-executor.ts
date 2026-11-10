@@ -102,14 +102,16 @@ export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
   type ConnectionState =
     | { readonly kind: "disconnected"; readonly generation: number }
     | ({ readonly kind: "connecting"; readonly ready: Promise<Connection> } & Connection)
-    | ({ readonly kind: "connected" } & Connection);
+    | ({ readonly kind: "connected" } & Connection)
+    | { readonly kind: "closed"; readonly generation: number };
 
   let connection: ConnectionState = { kind: "disconnected", generation: 0 };
   const owns = (generation: number, transport: StdioClientTransport): boolean =>
-    connection.kind !== "disconnected" && connection.generation === generation && connection.transport === transport;
+    (connection.kind === "connecting" || connection.kind === "connected") && connection.generation === generation && connection.transport === transport;
 
   const resetGeneration = async (expectedGeneration?: number): Promise<void> => {
     const current = connection;
+    if (current.kind === "closed") return;
     if (expectedGeneration !== undefined && current.generation !== expectedGeneration) return;
     connection = { kind: "disconnected", generation: current.generation + 1 };
     if (current.kind !== "disconnected") await current.transport.close().catch(() => undefined);
@@ -119,6 +121,8 @@ export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
   const connect = (): Promise<Connection> => {
     if (connection.kind === "connected") return Promise.resolve(connection);
     if (connection.kind === "connecting") return connection.ready;
+    // A closed executor never starts another database process.
+    if (connection.kind === "closed") return Promise.reject(new Error("MCP_EXECUTOR_CLOSED"));
 
     const generation = connection.generation + 1;
     const transport = new StdioClientTransport({
@@ -180,7 +184,7 @@ export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
         connected = await connect();
         if (attempt > 0) await connected.client.listTools(undefined, { timeout: 10_000 });
       } catch (error) {
-        if (signal?.aborted) throw error;
+        if (signal?.aborted || connection.kind === "closed") throw error;
         if (connected) failedGeneration = connected.generation;
         lastError = error;
         continue;
@@ -267,7 +271,10 @@ export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
     },
     resetConnection,
     async close(): Promise<void> {
-      await resetConnection();
+      const current = connection;
+      if (current.kind === "closed") return;
+      connection = { kind: "closed", generation: current.generation + 1 };
+      if (current.kind !== "disconnected") await current.transport.close().catch(() => undefined);
     },
   };
 }
