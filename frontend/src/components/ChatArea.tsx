@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { AGENT_ICON_SVG, AGENT_ROW, MESSAGE_COLUMN, USER_ROW, agentIcon } from './chat-styles';
 import {
     Loader2,
@@ -15,11 +15,10 @@ import {
     type SSEEvent,
     type WidgetSpec,
     type SessionSnapshotMessage,
-    type ClarificationRequest,
     type AgentProgressStage,
     type AgentTerminalReason,
 } from '../api/client';
-import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeConnectionState, type RuntimeResyncReason, type RuntimeSessionState } from '../api/runtime-client';
+import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeResyncReason, type RuntimeSessionState } from '../api/runtime-client';
 import { attachRunViaRuntime, sendChatViaRuntime, type ChatStreamOptions, type RuntimeChatHandle } from '../api/chat-events';
 import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData } from './ToolPanel';
@@ -33,6 +32,7 @@ import AgentTurn from './AgentTurn';
 import { SetupChecklist } from './SetupChecklist';
 import { useReadiness } from '../hooks/useReadiness';
 import { mergeToolResultState, type ToolCallState } from './tool-event-state';
+import { chatRunReducer, initialChatRunState, isRunActive, runConnection, runReason as selectRunReason, type ChatRunReason } from './chat-run-state';
 
 interface SkillActivation {
     name: string;
@@ -259,17 +259,18 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
 
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>(() => currentTranscript.map(fromSnapshotMessage));
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [streamConnection, setStreamConnection] = useState<RuntimeConnectionState>('connected');
+    const [runState, dispatchRun] = useReducer(chatRunReducer, initialChatRunState);
+    const isStreaming = isRunActive(runState);
+    const streamConnection = runConnection(runState);
+    // interrupted: the run ended with a server that went away; nothing reported how.
+    // rejected: the server refused to stream the session's events (signed out, no access).
+    const runReason = selectRunReason(runState);
+    const pendingClarification = runState.clarification?.request ?? null;
+    const isSubmittingClarification = runState.clarification?.submitting ?? false;
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-    // interrupted: the run ended with a server that went away; nothing reported how.
-    // rejected: the server refused to stream the session's events (signed out, no access).
-    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | 'interrupted' | 'rejected' | null>(null);
-    const [pendingClarification, setPendingClarification] = useState<ClarificationRequest | null>(null);
     const [clarificationInput, setClarificationInput] = useState('');
-    const [isSubmittingClarification, setIsSubmittingClarification] = useState(false);
 
     const currentSessionIdRef = useRef(currentSession.id);
     const activeAgentMessageIdRef = useRef<string | null>(null);
@@ -329,12 +330,8 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         isRestoringRef.current = true;
         currentSessionIdRef.current = currentSession.id;
         replaceWithSnapshot(currentTranscript);
-        setIsStreaming(false);
-        setStreamConnection('connected');
-        setRunReason(null);
-        setPendingClarification(null);
+        dispatchRun({ type: 'session_reset' });
         setClarificationInput('');
-        setIsSubmittingClarification(false);
         onUpdateToolsRef.current?.([]);
 
         // A run may still be going (or waiting on a clarification): resume following it.
@@ -342,17 +339,19 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         let superseded = false;
         void getSessionStateViaRuntime(sessionId).then((state) => {
             if (superseded || currentSessionIdRef.current !== sessionId || streamHandleRef.current) return;
-            if (state.pendingClarification) {
-                setPendingClarification({
-                    clarification_id: state.pendingClarification.clarificationId,
-                    question: state.pendingClarification.question,
-                    options: state.pendingClarification.options,
-                });
+            const clarification = state.pendingClarification ? {
+                clarification_id: state.pendingClarification.clarificationId,
+                question: state.pendingClarification.question,
+                options: state.pendingClarification.options,
+            } : undefined;
+            if (!state.inProgressRun) {
+                if (clarification) dispatchRun({ type: 'clarification_requested', request: clarification });
+                return;
             }
-            if (!state.inProgressRun) return;
             const runId = state.inProgressRun.runId;
             replaceWithSnapshot(state.messages);
-            setIsStreaming(true);
+            dispatchRun({ type: 'run_started' });
+            if (clarification) dispatchRun({ type: 'clarification_requested', request: clarification });
             followRun(sessionId, (onEvent, onError, onFinish, streamSessionId, stream) => (
                 attachRunViaRuntime(runId, { sequence: state.eventSequence, ...(state.eventInstance ? { instance: state.eventInstance } : {}) }, onEvent, onError, onFinish, streamSessionId, stream)
             ), true);
@@ -550,9 +549,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             return;
         }
 
-        setIsStreaming(true);
-        setRunReason(null);
-        setPendingClarification(null);
+        dispatchRun({ type: 'run_started' });
         setClarificationInput('');
         activeAgentMessageIdRef.current = null;
         pendingAgentMessageIdRef.current = `pending-${Date.now()}`;
@@ -594,9 +591,11 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         let streamLostEvents = lostEvents;
-        const handle: RuntimeChatHandle = start(
+        let handle!: RuntimeChatHandle;
+        const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === runSessionId;
+        handle = start(
             (event: SSEEvent) => {
-                if (event.session_id && event.session_id !== currentSessionIdRef.current) {
+                if (!current() || (event.session_id && event.session_id !== currentSessionIdRef.current)) {
                     return;
                 }
 
@@ -606,10 +605,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'clarification_request') {
-                    setPendingClarification({
-                        clarification_id: event.clarification_id,
-                        question: event.question,
-                        options: event.options || [],
+                    dispatchRun({
+                        type: 'clarification_requested',
+                        request: {
+                            clarification_id: event.clarification_id,
+                            question: event.question,
+                            options: event.options || [],
+                        },
                     });
                     setClarificationInput('');
                     setShouldAutoScroll(true);
@@ -617,9 +619,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'clarification_settled') {
-                    setPendingClarification((current) => (
-                        current?.clarification_id === event.clarification_id ? null : current
-                    ));
+                    dispatchRun({ type: 'clarification_settled', clarificationId: event.clarification_id });
                     setClarificationInput('');
                     return;
                 }
@@ -651,8 +651,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'done') {
-                    setRunReason(event.reason);
-                    setPendingClarification(null);
+                    dispatchRun({ type: 'terminal_reported', reason: event.reason });
                     setClarificationInput('');
                     markTerminalReason(event.reason);
                     flushAllBuffers();
@@ -660,7 +659,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'error') {
-                    setRunReason('error');
+                    dispatchRun({ type: 'terminal_reported', reason: 'error' });
                     const targetId = activeAgentMessageIdRef.current ?? pendingAgentMessageIdRef.current ?? `error-${Date.now()}`;
                     activeAgentMessageIdRef.current = targetId;
                     const message = ensureBufferedAgentMessage(targetId);
@@ -892,14 +891,15 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
             },
             (err) => {
+                if (!current()) return;
                 console.error('Chat error:', err);
                 if (isModelNotConfiguredError(err)) onModelNotConfigured?.();
-                setRunReason('error');
-                setPendingClarification(null);
-                setIsStreaming(false);
+                // endRun stops following, so the onFinish that follows returns early: reload the lost events here.
+                if (!endRun('error', true)) return;
+                if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             () => {
-                endRun();
+                if (!endRun()) return;
                 if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             runSessionId,
@@ -910,31 +910,30 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     void resyncRun(runSessionId, handle, reason, endRun);
                 },
                 onConnectionChange: (state) => {
+                    if (!current()) return;
                     if (state !== 'rejected') {
-                        setStreamConnection(state);
+                        dispatchRun({ type: 'connection_changed', connection: state });
                         return;
                     }
                     // Retrying cannot help: stop following, and say why.
-                    if (streamHandleRef.current !== handle) return;
                     handle.detach();
-                    endRun();
-                    setRunReason('rejected');
+                    endRun('rejected');
                 },
             },
         );
         /** Every way a followed run ends locally: flush what was buffered and stop following. */
-        function endRun() {
+        function endRun(reason?: ChatRunReason | null, clearClarification = false): boolean {
+            if (!current()) return false;
             if (flushTimer) {
                 clearTimeout(flushTimer);
                 flushTimer = null;
             }
             flushAllBuffers();
-            setIsStreaming(false);
-            setIsSubmittingClarification(false);
+            dispatchRun({ type: 'run_ended', ...(reason !== undefined ? { reason } : {}), ...(clearClarification ? { clearClarification: true } : {}) });
             activeAgentMessageIdRef.current = null;
             pendingAgentMessageIdRef.current = null;
             streamHandleRef.current = null;
-            setStreamConnection('connected');
+            return true;
         }
         streamHandleRef.current = handle;
     };
@@ -949,7 +948,12 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
      * is not known yet (its prompt is still being dispatched) is left to the
      * dispatch.
      */
-    const resyncRun = async (sessionId: string, handle: RuntimeChatHandle, reason: RuntimeResyncReason, endRun: () => void) => {
+    const resyncRun = async (
+        sessionId: string,
+        handle: RuntimeChatHandle,
+        reason: RuntimeResyncReason,
+        endRun: (reason?: ChatRunReason | null, clearClarification?: boolean) => boolean,
+    ) => {
         const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === sessionId;
         let state: RuntimeSessionState | undefined;
         for (let attempt = 0; attempt < RESYNC_ATTEMPTS && current(); attempt += 1) {
@@ -974,13 +978,11 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             return;
         }
         handle.detach();
-        endRun();
-        setPendingClarification(null);
         if (state) replaceWithSnapshot(state.messages);
         // After a restart the run was cut off. Otherwise it ended unseen: the server's
         // transcript tells a failure; how else it ended is not known, so no status is claimed.
         const lastAgent = state?.messages.filter((message) => message.role === 'agent').at(-1);
-        setRunReason(reason === 'restarted' ? 'interrupted' : lastAgent?.terminalReason === 'error' ? 'error' : null);
+        endRun(reason === 'restarted' ? 'interrupted' : lastAgent?.terminalReason === 'error' ? 'error' : null, true);
     };
 
     const handlePrimaryAction = async () => {
@@ -996,18 +998,16 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const answer = (answerText ?? clarificationInput).trim();
         if (!answer) return;
 
-        setIsSubmittingClarification(true);
+        dispatchRun({ type: 'clarification_submitting', submitting: true });
         try {
             // The answer reaches the agent as the tool result; it is not a chat turn.
             await answerClarificationViaRuntime(pendingClarification.clarification_id, answer, currentSession.id);
-            setPendingClarification((current) => (
-                current?.clarification_id === pendingClarification.clarification_id ? null : current
-            ));
+            dispatchRun({ type: 'clarification_answered', clarificationId: pendingClarification.clarification_id });
             setClarificationInput('');
         } catch (err) {
             console.error('Failed to answer clarification:', err);
         } finally {
-            setIsSubmittingClarification(false);
+            dispatchRun({ type: 'clarification_submitting', submitting: false });
         }
     };
 

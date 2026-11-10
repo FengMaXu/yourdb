@@ -6,6 +6,7 @@ import {
   type BusinessContext,
   type CheckCoverage,
   type ExecuteQuery,
+  type ImplementationObstacle,
   type QueryAttemptRecord,
   type QueryExecutionView,
   type ReadyRevision,
@@ -16,7 +17,7 @@ import {
 import { assertTaskAccess } from "./answering-store.js";
 import { AnsweringError } from "./errors.js";
 import { makeInternalId } from "./internal-ids.js";
-import { makeAttempt, obstacle, obstacleDetails, reserveAttempt, taskBudget, throwExecutionFailure, updateAttempt } from "./budget.js";
+import { blockedAttempt, obstacle, obstacleDetails, reserveAttempt, settleAttempt, taskBudget, throwExecutionFailure } from "./budget.js";
 import { sealForResult } from "./qualification.js";
 import { assertDeliverable } from "./report.js";
 import { equivalentPaths, realizationConflicts } from "./probes.js";
@@ -34,14 +35,34 @@ import type { AnsweringDeps } from "./deps.js";
 
 type ResultInput = Extract<ExecuteQuery, { readonly kind: "result" }>;
 
-interface ResultExecutionMemo {
-  readonly state: "started" | "settled";
-  readonly taskId: string;
-  readonly revisionId: string;
-  readonly queryHash: string;
-  /** Settled memos point at ResultStore; result rows never enter Pi Session state. */
-  readonly resultRef?: string;
-  readonly contentHash?: string;
+type ResultExecutionMemo =
+  | {
+      readonly state: "started";
+      readonly taskId: string;
+      readonly revisionId: string;
+      readonly queryHash: string;
+    }
+  | {
+      readonly state: "settled";
+      readonly taskId: string;
+      readonly revisionId: string;
+      readonly queryHash: string;
+      /** Settled memos point at ResultStore; result rows never enter Pi Session state. */
+      readonly resultRef: string;
+      readonly contentHash: string;
+    };
+
+type ReadyCandidate = ResultCandidateRecord & { readonly status: "ready"; readonly publishable: true };
+type CorruptCandidate = ResultCandidateRecord & { readonly status: "corrupt"; readonly publishable: false };
+type CandidateLifecycle =
+  | { readonly state: "ready"; readonly candidate: ReadyCandidate }
+  | { readonly state: "corrupt"; readonly candidate: CorruptCandidate }
+  | { readonly state: "invalid"; readonly candidate: ResultCandidateRecord };
+
+export function candidateLifecycle(candidate: ResultCandidateRecord): CandidateLifecycle {
+  if (candidate.status === "ready" && candidate.publishable === true) return { state: "ready", candidate: candidate as ReadyCandidate };
+  if (candidate.status === "corrupt" && candidate.publishable === false) return { state: "corrupt", candidate: candidate as CorruptCandidate };
+  return { state: "invalid", candidate };
 }
 
 function resultExecutionMemo(value: unknown): ResultExecutionMemo | undefined {
@@ -63,7 +84,7 @@ export async function markCandidateCorrupt(deps: AnsweringDeps, candidate: Resul
 }
 
 async function resultView(deps: AnsweringDeps, candidate: ResultCandidateRecord, context: BusinessContext): Promise<QueryExecutionView> {
-  if (candidate.status !== "ready" || !candidate.publishable) throw new AnsweringError("RESULT_INTEGRITY_MISMATCH", "Result Candidate is corrupt and cannot be used");
+  if (candidateLifecycle(candidate).state !== "ready") throw new AnsweringError("RESULT_INTEGRITY_MISMATCH", "Result Candidate is corrupt and cannot be used");
   try {
     const result = await deps.resultStore.openPrivate(candidate.resultRef, context);
     if (!result || result.contentHash !== candidate.contentHash) throw new Error("RESULT_INTEGRITY_MISMATCH");
@@ -104,7 +125,7 @@ async function sealRevision(deps: AnsweringDeps, input: ResultInput, taskId: Tas
           },
         };
     if (!result.ok) {
-      const blocked = makeAttempt(taskId, "result", revisionId, context.invocationId, now(), "blocked", "not_started", false, "business_judgment_required", queryHash);
+      const blocked = blockedAttempt({ taskId, kind: "result", revisionId, invocationId: context.invocationId, queryHash }, "business_judgment_required");
       tx.putAttempt(blocked);
       const parts = [
         ...(result.undeclared.length > 0 ? [`declare ${result.undeclared.join(", ")}`] : []),
@@ -127,6 +148,79 @@ async function sealRevision(deps: AnsweringDeps, input: ResultInput, taskId: Tas
     throw new AnsweringError("UNRESOLVED_ASSUMPTIONS", sealedOutcome.obstacle.message, obstacleDetails({ undeclared: sealedOutcome.undeclared, open: sealedOutcome.open }, sealedOutcome.obstacle));
   }
   return sealedOutcome.revision;
+}
+
+type ResultPreflight =
+  | { readonly state: "existing"; readonly candidate: ResultCandidateRecord }
+  | { readonly state: "unknown"; readonly obstacle: ImplementationObstacle }
+  | { readonly state: "blocked"; readonly obstacle: ImplementationObstacle }
+  | { readonly state: "reserved"; readonly attempt: QueryAttemptRecord };
+
+async function prepareResultExecution(
+  deps: AnsweringDeps,
+  taskId: TaskId,
+  revisionId: RevisionId,
+  queryHash: string,
+  context: BusinessContext,
+): Promise<ResultPreflight> {
+  return deps.store.transact((tx) => {
+    const existing = tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash);
+    if (existing) return { state: "existing", candidate: existing };
+    const current = tx.getTask(taskId);
+    assertTaskAccess(current, context);
+    const unknownAttempt = tx.findAttemptByQuery(taskId, revisionId, queryHash, "result");
+    if (unknownAttempt?.outcome === "unknown") {
+      return {
+        state: "unknown",
+        obstacle: obstacle(tx, current, revisionId, "execution_outcome_unknown", "A matching result query has an unknown execution outcome; SQL was not retried", {
+          requiresOuterDecision: true,
+          retryable: false,
+          sqlExecuted: true,
+          executionOutcome: "unknown",
+          queryHash,
+        }),
+      };
+    }
+    const reservation = reserveAttempt(tx, current, deps.budgetPolicy, "result", revisionId, context.invocationId, queryHash);
+    if (reservation.obstacle) return { state: "blocked", obstacle: reservation.obstacle };
+    if (!reservation.attempt) throw new Error("RESULT_ATTEMPT_RESERVATION_INVALID");
+    return { state: "reserved", attempt: reservation.attempt };
+  }, context);
+}
+
+type CandidateCommitOutcome =
+  | { readonly state: "created"; readonly candidate: ResultCandidateRecord }
+  | { readonly state: "existing"; readonly candidate: ResultCandidateRecord }
+  | { readonly state: "recovered"; readonly candidate: ResultCandidateRecord };
+
+async function commitCandidate(
+  deps: AnsweringDeps,
+  candidate: ResultCandidateRecord,
+  taskId: TaskId,
+  revisionId: RevisionId,
+  queryHash: string,
+  context: BusinessContext,
+): Promise<CandidateCommitOutcome> {
+  try {
+    return await deps.store.transact((tx) => {
+      const currentTask = tx.getTask(taskId);
+      assertTaskAccess(currentTask, context);
+      if (currentTask.currentRevisionId !== revisionId) throw new AnsweringError("REVISION_STALE", "Revision changed while the result was executing");
+      const prior = tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash);
+      if (prior) return { state: "existing", candidate: prior } as const;
+      tx.putCandidate(candidate);
+      tx.putTask({ ...currentTask, latestCandidateId: candidate.candidateId, updatedAt: candidate.createdAt });
+      return { state: "created", candidate } as const;
+    }, context);
+  } catch (error) {
+    // A commit response may be lost after the Candidate became durable. Look
+    // it up by stable query identity before reporting failure. Otherwise keep
+    // the private object for Pi invocation replay; a later GC pass removes
+    // objects that remain unreferenced after the invocation is settled.
+    const recovered = await deps.store.transact((tx) => tx.findCandidateByQuery(taskId, revisionId, queryHash), context).catch(() => undefined);
+    if (recovered) return { state: "recovered", candidate: recovered };
+    throw error;
+  }
 }
 
 /**
@@ -154,7 +248,7 @@ export async function executeResult(
     const details = await deps.store.transact((tx) => {
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
-      tx.putAttempt(makeAttempt(taskId, "result", revisionId, context.invocationId, now(), "blocked", "not_started", false, "technical_failure", queryHash));
+      tx.putAttempt(blockedAttempt({ taskId, kind: "result", revisionId, invocationId: context.invocationId, queryHash }, "technical_failure"));
       return obstacle(tx, current, revisionId, "technical_failure", `The final SQL does not implement the sealed Answer Spec: ${unrealized.map((item) => item.message).join("; ")}`, {
         requiresOuterDecision: false,
         retryable: true,
@@ -177,7 +271,7 @@ export async function executeResult(
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
       const priorAttempt = tx.findAttemptByInvocation(taskId, context.invocationId, "result");
-      if (priorAttempt && priorAttempt.state === "started") updateAttempt(tx, priorAttempt, "unknown", "unknown", true, "execution_outcome_unknown");
+      if (priorAttempt?.state === "started") settleAttempt(tx, priorAttempt, { state: "unknown", outcome: "unknown", sqlExecuted: true, obstacleKind: "execution_outcome_unknown" });
       return obstacle(tx, current, revisionId, "execution_outcome_unknown", "The previous result execution has no safe replay outcome; SQL was not retried", {
         requiresOuterDecision: true,
         retryable: false,
@@ -189,30 +283,14 @@ export async function executeResult(
     throw new AnsweringError("RESULT_EXECUTION_OUTCOME_UNKNOWN", details.message, obstacleDetails(undefined, details));
   }
   if (!memo) {
-    const preflight = await deps.store.transact((tx) => {
-      const existing = tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash);
-      if (existing) return { existing } as const;
-      const current = tx.getTask(taskId);
-      assertTaskAccess(current, context);
-      const unknownAttempt = tx.findAttemptByQuery(taskId, revisionId, queryHash, "result");
-      if (unknownAttempt?.outcome === "unknown") {
-        return { unknown: obstacle(tx, current, revisionId, "execution_outcome_unknown", "A matching result query has an unknown execution outcome; SQL was not retried", {
-          requiresOuterDecision: true,
-          retryable: false,
-          sqlExecuted: true,
-          executionOutcome: "unknown",
-          queryHash,
-        }) } as const;
-      }
-      return { reservation: reserveAttempt(tx, current, deps.budgetPolicy, "result", revisionId, context.invocationId, queryHash) } as const;
-    }, context);
-    if ("existing" in preflight) {
-      if (preflight.existing.queryHash !== queryHash) throw new AnsweringError("INVALID_REQUEST", "RESULT_INVOCATION_IDEMPOTENCY_CONFLICT");
-      return resultView(deps, preflight.existing, context);
+    const preflight = await prepareResultExecution(deps, taskId, revisionId, queryHash, context);
+    if (preflight.state === "existing") {
+      if (preflight.candidate.queryHash !== queryHash) throw new AnsweringError("INVALID_REQUEST", "RESULT_INVOCATION_IDEMPOTENCY_CONFLICT");
+      return resultView(deps, preflight.candidate, context);
     }
-    if ("unknown" in preflight) throw new AnsweringError("RESULT_EXECUTION_OUTCOME_UNKNOWN", preflight.unknown.message, obstacleDetails(undefined, preflight.unknown));
-    if (preflight.reservation.obstacle) throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", preflight.reservation.obstacle.message, obstacleDetails(undefined, preflight.reservation.obstacle));
-    attempt = preflight.reservation.attempt;
+    if (preflight.state === "unknown") throw new AnsweringError("RESULT_EXECUTION_OUTCOME_UNKNOWN", preflight.obstacle.message, obstacleDetails(undefined, preflight.obstacle));
+    if (preflight.state === "blocked") throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", preflight.obstacle.message, obstacleDetails(undefined, preflight.obstacle));
+    attempt = preflight.attempt;
   } else {
     const existing = await deps.store.transact((tx) => tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash), context);
     if (existing) {
@@ -256,7 +334,7 @@ export async function executeResult(
         const details = await deps.store.transact((tx) => {
           const current = tx.getTask(taskId);
           assertTaskAccess(current, context);
-          if (attempt) updateAttempt(tx, attempt, "failed", "succeeded", true, "technical_failure");
+          if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "technical_failure" });
           return obstacle(tx, current, revisionId, "technical_failure", "A truncated result cannot become a Result Candidate", {
             requiresOuterDecision: false,
             retryable: true,
@@ -281,7 +359,7 @@ export async function executeResult(
     const details = await deps.store.transact((tx) => {
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
-      if (attempt) updateAttempt(tx, attempt, "failed", "succeeded", true, "technical_failure");
+      if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "technical_failure" });
       // The finding leads the message so the fix is on the first line, not after the attempt history.
       return obstacle(tx, current, revisionId, "technical_failure", `The result failed an online CandidateCheck: ${failure.message}`, {
         requiresOuterDecision: false,
@@ -306,7 +384,7 @@ export async function executeResult(
       const details = await deps.store.transact((tx) => {
         const current = tx.getTask(taskId);
         assertTaskAccess(current, context);
-        if (attempt) updateAttempt(tx, attempt, "failed", "succeeded", true, "business_judgment_required");
+        if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "business_judgment_required" });
         return obstacle(tx, current, revisionId, "business_judgment_required", `${explanation}. Make the SQL implement the adopted alternative, or revise the decision with its rationale before querying again.`, {
           requiresOuterDecision: true,
           retryable: true,
@@ -331,7 +409,7 @@ export async function executeResult(
     if (budget.observedRows + privateResult.rowCount > budget.policy.maxObservedRows) {
       const chargedTask = { ...current, budget: { ...budget, observedRows: budget.observedRows + privateResult.rowCount }, updatedAt: now() };
       tx.putTask(chargedTask);
-      if (attempt) updateAttempt(tx, attempt, "failed", "succeeded", true, "budget_exhausted");
+      if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "budget_exhausted" });
       return obstacle(tx, chargedTask, revisionId, "budget_exhausted", "Observed-row budget exhausted after result execution", {
         requiresOuterDecision: true,
         retryable: false,
@@ -342,7 +420,7 @@ export async function executeResult(
       });
     }
     tx.putTask({ ...current, budget: { ...budget, observedRows: budget.observedRows + privateResult.rowCount }, updatedAt: now() });
-    if (attempt) updateAttempt(tx, attempt, "succeeded", "succeeded", true);
+    if (attempt) settleAttempt(tx, attempt, { state: "succeeded", outcome: "succeeded", sqlExecuted: true });
     return undefined;
   }, context);
   if (budgetAfterResult) {
@@ -369,27 +447,7 @@ export async function executeResult(
     status: "ready",
     publishable: true,
   };
-  let committed: ResultCandidateRecord;
-  try {
-    committed = await deps.store.transact((tx) => {
-      const currentTask = tx.getTask(taskId);
-      assertTaskAccess(currentTask, context);
-      if (currentTask.currentRevisionId !== revisionId) throw new AnsweringError("REVISION_STALE", "Revision changed while the result was executing");
-      const prior = tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash);
-      if (prior) return prior;
-      tx.putCandidate(baseCandidate);
-      tx.putTask({ ...currentTask, latestCandidateId: baseCandidate.candidateId, updatedAt: baseCandidate.createdAt });
-      return baseCandidate;
-    }, context);
-  } catch (error) {
-    // A commit response may be lost after the Candidate became durable. Look
-    // it up by stable query identity before reporting failure. Otherwise keep
-    // the private object for Pi invocation replay; a later GC pass removes
-    // objects that remain unreferenced after the invocation is settled.
-    const recovered = await deps.store.transact((tx) => tx.findCandidateByQuery(taskId, revisionId, queryHash), context).catch(() => undefined);
-    if (recovered) return resultView(deps, recovered, context);
-    throw error;
-  }
-  if (committed.candidateId !== baseCandidate.candidateId) await deps.resultStore.discard(privateResult.resultRef, context);
-  return resultView(deps, committed, context);
+  const commit = await commitCandidate(deps, baseCandidate, taskId, revisionId, queryHash, context);
+  if (commit.candidate.candidateId !== baseCandidate.candidateId) await deps.resultStore.discard(privateResult.resultRef, context);
+  return resultView(deps, commit.candidate, context);
 }

@@ -11,7 +11,7 @@ import {
 import { assertTaskAccess } from "./answering-store.js";
 import { AnsweringError } from "./errors.js";
 import { makeInternalId } from "./internal-ids.js";
-import { obstacle, obstacleDetails, reserveAttempt, taskBudget, throwExecutionFailure, updateAttempt } from "./budget.js";
+import { obstacle, obstacleDetails, reserveAttempt, settleAttempt, taskBudget, throwExecutionFailure } from "./budget.js";
 import { boundedResult } from "./sql-execution.js";
 import { asRecord, now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
@@ -56,7 +56,7 @@ export async function executeExploration(
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
       const attempt = tx.findAttemptByInvocation(taskId, context.invocationId, "exploration");
-      if (attempt && attempt.state === "started") updateAttempt(tx, attempt, "unknown", "unknown", true, "execution_outcome_unknown");
+      if (attempt?.state === "started") settleAttempt(tx, attempt, { state: "unknown", outcome: "unknown", sqlExecuted: true, obstacleKind: "execution_outcome_unknown" });
       return obstacle(tx, current, revisionId, "execution_outcome_unknown", "The exploration execution outcome is unknown; SQL was not retried", {
         requiresOuterDecision: true,
         retryable: false,
@@ -120,7 +120,7 @@ export async function executeExploration(
       if (budget.observedRows + observedRows > budget.policy.maxObservedRows) {
         const chargedTask = { ...current, budget: { ...budget, observedRows: budget.observedRows + observedRows }, updatedAt: now() };
         tx.putTask(chargedTask);
-        updateAttempt(tx, attempt, "failed", "succeeded", true, "budget_exhausted");
+        settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "budget_exhausted" });
         return obstacle(tx, chargedTask, revisionId, "budget_exhausted", "Observed-row budget exhausted after exploration", {
           requiresOuterDecision: true,
           retryable: false,
@@ -145,7 +145,7 @@ export async function executeExploration(
         ? [...(current.fieldProbes ?? []).filter((item) => item.path !== probeRecord.path || item.alternativeId !== probeRecord.alternativeId), probeRecord]
         : current.fieldProbes;
       tx.putTask({ ...current, budget: { ...budget, observedRows: budget.observedRows + observedRows }, ...(fieldProbes ? { fieldProbes } : {}), updatedAt: now() });
-      updateAttempt(tx, attempt, "succeeded", "succeeded", true);
+      settleAttempt(tx, attempt, { state: "succeeded", outcome: "succeeded", sqlExecuted: true });
       tx.appendEvidence(taskId, observation);
       return undefined;
     }, context);

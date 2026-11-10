@@ -9,6 +9,7 @@ import {
   type Session,
 } from "@earendil-works/pi-agent-core";
 import type { ChildRecovery, DelegationLedger, DelegationLedgerRecord } from "./index.js";
+import { interruptedLedgerRecord, unfinishedLedgerRecords } from "./lifecycle.js";
 
 const COUNTS = value<Record<string, number>>("data-agent.delegation", "operation-counts");
 const RECORDS = list<DelegationLedgerRecord & JsonValue>("data-agent.delegation", "runs");
@@ -24,14 +25,9 @@ export class InMemoryDelegationLedger implements DelegationLedger {
   async reconcile(recovery: readonly ChildRecovery[] = [], signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) throw new Error("SUBAGENT_LEDGER_RECONCILE_CANCELLED");
     const recoveryByRun = new Map(recovery.map((item) => [item.runId, item]));
-    const terminal = new Set(this.records.filter((record) => record.state === "settled" || record.state === "interrupted").map((record) => record.runId));
-    const latest = new Map<string, DelegationLedgerRecord>();
-    for (const record of this.records) latest.set(record.runId, record);
-    for (const record of latest.values()) {
+    for (const record of unfinishedLedgerRecords(this.records)) {
       if (signal?.aborted) throw new Error("SUBAGENT_LEDGER_RECONCILE_CANCELLED");
-      if ((record.state !== "reserved" && record.state !== "accepted") || terminal.has(record.runId)) continue;
-      const recovered = recoveryByRun.get(record.runId);
-      this.records.push({ ...record, state: "interrupted", ...(recovered?.operationId ? { operationId: recovered.operationId } : {}), status: recovered?.status ?? "interrupted", terminalConfirmed: recovered?.terminalConfirmed ?? true, ...(recovered?.error ? { error: recovered.error } : {}), recordedAt: new Date().toISOString() });
+      this.records.push(interruptedLedgerRecord(record, recoveryByRun.get(record.runId), new Date().toISOString()));
     }
   }
 
@@ -59,13 +55,8 @@ export class PiSessionDelegationLedger implements DelegationLedger {
   async reconcile(recovery: readonly ChildRecovery[] = [], signal?: AbortSignal): Promise<void> {
     const records = await this.list(signal);
     const recoveryByRun = new Map(recovery.map((item) => [item.runId, item]));
-    const terminal = new Set(records.filter((record) => record.state === "settled" || record.state === "interrupted").map((record) => record.runId));
-    const latest = new Map<string, DelegationLedgerRecord>();
-    for (const record of records) latest.set(record.runId, record);
-    for (const record of latest.values()) {
-      if (terminal.has(record.runId) || (record.state !== "reserved" && record.state !== "accepted")) continue;
-      const recovered = recoveryByRun.get(record.runId);
-      await this.append({ ...record, state: "interrupted", ...(recovered?.operationId ? { operationId: recovered.operationId } : {}), status: recovered?.status ?? "interrupted", terminalConfirmed: recovered?.terminalConfirmed ?? true, ...(recovered?.error ? { error: recovered.error } : {}), recordedAt: new Date().toISOString() }, signal);
+    for (const record of unfinishedLedgerRecords(records)) {
+      await this.append(interruptedLedgerRecord(record, recoveryByRun.get(record.runId), new Date().toISOString()), signal);
     }
   }
 
