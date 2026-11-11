@@ -17,7 +17,7 @@ status: done
 - `lucide-react` 已经是开发依赖，但只有 2 处导入。图标主要通过 `components/icons/Typicons.tsx`（13 处导入）和 `RemixIcons.tsx`（5 处导入）两个包装层使用。
 - `tsconfig.app.json` 没有 `paths` 别名（没有 `@/*`）。
 - Electron 生产包通过 `file://` 加载，`vite.config.ts` 在构建时设 `base: './'`。Web Host 直接服务 `frontend/dist`。
-- 落地页走单独的构建模式 `build:landing`（`--mode landing`），由 `Root.tsx` 按路由懒加载。
+- 落地页与应用同一次构建，由 `Root.tsx` 按路由懒加载；"开始使用"始终弹出桌面端下载，不链接网页端。
 - 没有暗色模式。
 - 测试用 vitest + jsdom + Testing Library，按角色和文本断言，不依赖类名。
 

@@ -15,11 +15,15 @@ import { Trace, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/com
 import { cn } from '@/lib/utils';
 import { useLanguage } from '../../context/LanguageContext';
 
-/** Where the "get started" buttons go when there is no download panel: the bundled /app, or VITE_APP_URL. */
-const APP_URL = (import.meta.env.VITE_APP_URL as string | undefined)?.trim() || '/app';
-/** A landing-only build (.env.landing) has no app to enter, so "get started" offers the desktop installer instead. */
-const DOWNLOAD_URL = (import.meta.env.VITE_DOWNLOAD_URL as string | undefined)?.trim();
-const RELEASES_URL = (import.meta.env.VITE_RELEASES_URL as string | undefined)?.trim();
+/*
+ * yourdb is a desktop product, so "get started" always offers the installer; the web build of the
+ * app is for development only and is never linked from here. The installer is attached to each
+ * GitHub release; a mirror sets VITE_DOWNLOAD_URL and VITE_RELEASES_URL at build time.
+ */
+const DOWNLOAD_URL = (import.meta.env.VITE_DOWNLOAD_URL as string | undefined)?.trim()
+    || 'https://github.com/FengMaXu/yourdb/releases/latest/download/yourdb-setup.exe';
+const RELEASES_URL = (import.meta.env.VITE_RELEASES_URL as string | undefined)?.trim()
+    || 'https://github.com/FengMaXu/yourdb/releases';
 const APP_VERSION = import.meta.env.VITE_APP_VERSION as string;
 
 const WRAP = 'mx-auto w-full max-w-[1200px] px-4 sm:px-6';
@@ -494,11 +498,9 @@ const DownloadDialog: React.FC<{ open: boolean; onOpenChange: (open: boolean) =>
                         <Button variant="outline" size="lg" className="h-10 px-4" disabled>{t('landing.download.soon')}</Button>
                     </li>
                 </ul>
-                {RELEASES_URL && (
-                    <a className="mt-5 font-mono text-xs text-muted-foreground hover:text-foreground" href={RELEASES_URL} target="_blank" rel="noreferrer">
-                        {t('landing.download.releases')} ↗
-                    </a>
-                )}
+                <a className="mt-5 font-mono text-xs text-muted-foreground hover:text-foreground" href={RELEASES_URL} target="_blank" rel="noreferrer">
+                    {t('landing.download.releases')} ↗
+                </a>
             </DialogContent>
         </Dialog>
     );
@@ -508,9 +510,9 @@ const LandingPage: React.FC = () => {
     const { t, language, toggleLanguage } = useLanguage();
     const [downloadOpen, setDownloadOpen] = useState(false);
 
-    const getStarted = (className: string, children: React.ReactNode) => (DOWNLOAD_URL
-        ? <Button className={className} onClick={() => setDownloadOpen(true)}>{children}</Button>
-        : <a className={cn(buttonVariants(), className)} href={APP_URL}>{children}</a>);
+    const getStarted = (className: string, children: React.ReactNode) => (
+        <Button className={className} onClick={() => setDownloadOpen(true)}>{children}</Button>
+    );
 
     return (
         <main className="h-dvh overflow-x-hidden overflow-y-auto scroll-smooth bg-background text-foreground motion-reduce:scroll-auto">
@@ -586,7 +588,7 @@ const LandingPage: React.FC = () => {
                 </div>
             </footer>
 
-            {DOWNLOAD_URL && <DownloadDialog open={downloadOpen} onOpenChange={setDownloadOpen} />}
+            <DownloadDialog open={downloadOpen} onOpenChange={setDownloadOpen} />
         </main>
     );
 };

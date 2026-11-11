@@ -10,7 +10,6 @@
     "dev": "vite",
     "electron:dev": "electron . --dev",
     "build": "tsc -b && vite build",
-    "build:landing": "tsc -b && vite build --mode landing",
     "build:unpacked": "npm --prefix .. run build:distribution && electron-builder --dir",
     "build:installer": "npm --prefix .. run build:distribution && electron-builder",
     "build:desktop": "npm run build:installer",
