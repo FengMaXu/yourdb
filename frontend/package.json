@@ -28,8 +28,6 @@
     "@data-agent/contracts": "0.1.0",
     "@data-agent/transport": "0.1.0",
     "@eslint/js": "^9.39.1",
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/noto-serif-sc": "^5.3.0",
     "@tailwindcss/vite": "^4.3.3",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

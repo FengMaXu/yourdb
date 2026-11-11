@@ -2,13 +2,12 @@
  * The one stylesheet entry. Every rule sits in a cascade layer, in this order:
  *   theme      Tailwind's design tokens and ours (theme.css)
  *   base       Tailwind's Preflight and the few global base styles (base.css)
- *   landing    the landing page's own hand-written sheet, loaded only with it
  *   components shadcn/ui components
  *   utilities  Tailwind utilities
  * Nothing may be left outside a layer: unlayered CSS beats every layer.
  * See docs/前端迁移计划-Tailwind与shadcn.md.
  */
-@layer theme, base, landing, components, utilities;
+@layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
 @import "./theme.css" layer(theme);

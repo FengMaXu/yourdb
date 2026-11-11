@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, LogIn, UserPlus } from 'lucide-react';
 import { BrandWordmark } from './Brand';
+import { InkBackdrop } from './InkBackdrop';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,8 +15,8 @@ const SQL_LINES = [
     ['WHERE', 'auth.sql.where'],
 ] as const;
 
-const FIELD = 'h-11 rounded-[11px] border-[#e2e0dc] bg-white px-3.5 text-[0.95rem] text-foreground md:text-[0.95rem] hover:border-[#d6d3d1] focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/15';
-const ACTION = 'h-11 gap-2 rounded-[11px] text-[0.925rem] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand focus-visible:ring-0';
+const FIELD = 'h-11 rounded-lg border-input bg-white px-3.5 text-[0.95rem] text-foreground md:text-[0.95rem] hover:border-border-strong focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/15';
+const ACTION = 'h-11 gap-2 rounded-lg text-[0.925rem] font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand focus-visible:ring-0';
 
 /** Sign-in: the brand's SQL voice on a dark panel, the form on paper. */
 const LoginView: React.FC = () => {
@@ -53,29 +54,27 @@ const LoginView: React.FC = () => {
     };
 
     return (
-        <main className="grid min-h-screen w-screen grid-cols-1 bg-[#fafaf9] min-[861px]:grid-cols-2">
-            <aside className="relative isolate hidden flex-col justify-between gap-8 overflow-hidden bg-[#1c1917] px-12 py-10 text-[#e7e5e4] min-[861px]:flex" aria-hidden="true">
-                {/* A faint grid, like ruled paper for numbers, and a warm glow in the corner. */}
-                <div className="absolute inset-0 -z-10 bg-[linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-size-[32px_32px] mask-[radial-gradient(ellipse_at_30%_40%,#000_20%,transparent_75%)]" />
-                <div className="absolute -right-[180px] -bottom-[220px] -z-10 size-[520px] rounded-full bg-[radial-gradient(circle,rgba(234,88,12,0.32),transparent_65%)] blur-[10px]" />
-                <div className="flex items-center gap-2.5 font-mono text-xs text-[#a8a29e]">
-                    <span className="inline-block size-[7px] rounded-full bg-[#ea580c] shadow-[0_0_0_4px_rgba(234,88,12,0.18)]" />
+        <main className="grid min-h-screen w-screen grid-cols-1 bg-paper min-[861px]:grid-cols-2">
+            <aside className="relative isolate hidden flex-col justify-between gap-8 overflow-hidden bg-ink-panel px-12 py-10 text-ink-panel-foreground min-[861px]:flex" aria-hidden="true">
+                <InkBackdrop />
+                <div className="flex items-center gap-2.5 font-mono text-xs text-faint">
+                    <span className="inline-block size-[7px] rounded-full bg-brand-bright shadow-[0_0_0_4px_rgba(234,88,12,0.18)]" />
                     yourdb.sql
                 </div>
-                <pre className="m-0 grid gap-1.5 font-mono text-[clamp(1.15rem,1.9vw,1.6rem)] leading-normal whitespace-pre-wrap text-[#fafaf9]">
-                    <span className="mb-2.5 animate-type-in text-[0.6em] text-[#78716c] motion-reduce:animate-none">-- {t('auth.sql.comment')}</span>
+                <pre className="m-0 grid gap-1.5 font-mono text-[clamp(1.15rem,1.9vw,1.6rem)] leading-normal whitespace-pre-wrap text-paper">
+                    <span className="mb-2.5 animate-type-in text-[0.6em] text-muted-foreground motion-reduce:animate-none">-- {t('auth.sql.comment')}</span>
                     {SQL_LINES.map(([keyword, key], index) => (
                         <span
                             key={keyword}
                             className="animate-type-in [animation-delay:calc(160ms+var(--line)*140ms)] motion-reduce:animate-none"
                             style={{ '--line': index } as React.CSSProperties}
                         >
-                            <b className="mr-[1.2ch] inline-block min-w-[5.2ch] font-semibold text-[#fb923c]">{keyword}</b>{t(key)}{index === SQL_LINES.length - 1 ? ';' : ''}
+                            <b className="mr-[1.2ch] inline-block min-w-[5.2ch] font-semibold text-brand-bright">{keyword}</b>{t(key)}{index === SQL_LINES.length - 1 ? ';' : ''}
                         </span>
                     ))}
-                    <span className="mt-0.5 h-[1.15em] w-[0.6ch] animate-blink bg-[#fb923c] motion-reduce:animate-none" />
+                    <span className="mt-0.5 h-[1.15em] w-[0.6ch] animate-blink bg-brand-bright motion-reduce:animate-none" />
                 </pre>
-                <p className="max-w-[34ch] text-sm leading-relaxed text-[#a8a29e]">{t('auth.tagline')}</p>
+                <p className="max-w-[34ch] text-sm leading-relaxed text-faint">{t('auth.tagline')}</p>
             </aside>
             <div className="grid place-items-center px-8 py-10">
                 <form className="flex w-[min(360px,100%)] animate-rise flex-col gap-[18px] text-left motion-reduce:animate-none" onSubmit={handleSubmit}>
@@ -115,12 +114,12 @@ const LoginView: React.FC = () => {
                     </div>
 
                     {error && (
-                        <div className="animate-rise-quick rounded-[10px] border border-[#fecaca] bg-[#fef2f2] px-3 py-2.5 text-[0.85rem] text-[#991b1b] motion-reduce:animate-none" role="alert" aria-live="assertive">
+                        <div className="animate-rise-quick rounded-lg border border-destructive-border bg-destructive-soft px-3 py-2.5 text-[0.85rem] text-destructive motion-reduce:animate-none" role="alert" aria-live="assertive">
                             {error}
                         </div>
                     )}
 
-                    <Button type="submit" disabled={submitting} className={`${ACTION} mt-1.5 bg-primary text-white shadow-[0_1px_2px_rgba(28,25,23,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-[#292524] active:scale-[0.985] disabled:cursor-progress disabled:opacity-70 [&_svg:not([class*='size-'])]:size-[17px]`}>
+                    <Button type="submit" disabled={submitting} className={`${ACTION} mt-1.5 bg-primary text-white shadow-[0_1px_2px_rgba(28,25,23,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] hover:bg-primary-hover active:scale-[0.985] disabled:cursor-progress disabled:opacity-70 [&_svg:not([class*='size-'])]:size-[17px]`}>
                         {submitting ? <Loader2 className="animate-spin" /> : isRegister ? <UserPlus /> : <LogIn />}
                         <span>{submitting ? t('auth.submitting') : isRegister ? t('auth.createAccount') : t('auth.signIn')}</span>
                     </Button>
