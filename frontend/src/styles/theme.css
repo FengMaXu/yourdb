@@ -1,8 +1,9 @@
 /*
- * Design tokens, the single source for colour, radius and motion.
+ * Design tokens, the single source for colour, radius and motion. See DESIGN.md.
  * Names follow shadcn/ui's semantic variables (baseColor stone), mapped to yourdb's
  * existing values. --accent keeps shadcn's meaning, a quiet hover surface; the brand
  * orange is --brand. --primary is ink, as the primary buttons are.
+ * Components use these through utilities (text-body, bg-success-soft, …), never a raw hex.
  */
 :root {
   --background: #ffffff;
@@ -25,7 +26,35 @@
   --ring: #c2410c;
   --brand: #c2410c;
   --brand-soft: #fff7ed;
+  /* The brand on the ink panel, where #c2410c is too dark to read. */
+  --brand-bright: #fb923c;
+
+  /* Text on paper, darkest to lightest: foreground, body-strong, body, muted-foreground, faint. */
+  --body-strong: #44403c;
   --body: #57534e;
+  --faint: #a8a29e;
+  --border-strong: #d6d3d1;
+  /* The off-white of rails, table heads and quiet panels. */
+  --paper: #fafaf9;
+  --hover: #f2f1ef;
+  --primary-hover: #292524;
+
+  /* Status: text colour, a soft fill, a border for the fill. */
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --success-border: #a7f3d0;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
+  --destructive-soft: #fef2f2;
+  --destructive-border: #fecaca;
+  --link: #1d4ed8;
+  --link-soft: #eff6ff;
+  --link-border: #bfdbfe;
+
+  /* The ink panel: sign-in, the landing page's dark bands, code blocks. */
+  --ink-panel: #1c1917;
+  --ink-panel-foreground: #e7e5e4;
   --radius: 10px;
   --radius-card: 14px;
   --chart-1: #c2410c;
@@ -47,44 +76,31 @@
 
 /* App tokens beyond shadcn's: surfaces, text, motion, layout sizes, the sidebar tree. */
 :root {
-  --status-error: #dc2626;
   --bubble-bg: #f5f5f4;
   --bubble-radius: 10px;
   --frame-backdrop: #ebeae7;
   --frame-surface: #ffffff;
   --frame-rail: #fafaf9;
-  --hairline: var(--border);
   --font-code: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
   --font-mono: var(--font-code);
   --sidebar-width: 184px;
   --sidebar-rail-width: 64px;
   --thread-line: rgba(120, 53, 15, 0.14);
-  --thread-muted: #a8a29e;
-  --surface-bg: #ffffff;
+  --thread-muted: #a8a29e;
   --tool-panel-width: 410px;
-  --text-primary: #1f2937;
-  --text-secondary: #4b5563;
-  --text-tertiary: #6b7280;
-  --text-placeholder: #6b7280;
-  --accent-strong: var(--brand);
   --font-size-caption: 0.75rem;
   --font-size-body-sm: 0.875rem;
-  --accent-color: #f04438;
-  --border-light: #e5e7eb;
-  --border-medium: #d1d5db;
-
-  --shadow-ring: 0 0 0 4px rgba(240, 68, 56, 0.12);
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --radius-sm: 6px;
-  --radius-md: 12px;
+  --radius-md: 12px;
   --agent-detail-font-size: 0.86rem;
   --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
   --tree-indent: 16px;
   --tree-inset: 12px;
   --tree-row-bg: var(--frame-rail);
-  --tree-row-hover: #f2f1ef;
+  --tree-row-hover: var(--hover);
   --tree-row-active: #ecebe8;
   --tree-guide: #d6d3ce;
 }
@@ -110,7 +126,27 @@
   --color-ring: var(--ring);
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-bright: var(--brand-bright);
+  --color-body-strong: var(--body-strong);
   --color-body: var(--body);
+  --color-faint: var(--faint);
+  --color-border-strong: var(--border-strong);
+  --color-paper: var(--paper);
+  --color-hover: var(--hover);
+  --color-primary-hover: var(--primary-hover);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-border: var(--destructive-border);
+  --color-link: var(--link);
+  --color-link-soft: var(--link-soft);
+  --color-link-border: var(--link-border);
+  --color-ink-panel: var(--ink-panel);
+  --color-ink-panel-foreground: var(--ink-panel-foreground);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);

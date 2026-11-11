@@ -18,8 +18,8 @@ export interface ChartSpecWidgetData {
 const CANVAS_SIZE = { width: '100%', height: 360 } as const;
 
 /** Notes under a chart: provenance, disclosures and data checks (checks in amber). */
-const NOTE = 'text-[12px] leading-[1.6] text-[#64748b]';
-const CHECK = 'text-[12px] leading-[1.6] text-[#b45309]';
+const NOTE = 'text-[12px] leading-[1.6] text-muted-foreground';
+const CHECK = 'text-[12px] leading-[1.6] text-warning';
 
 /**
  * A chat chart built by the Runtime: a ChartSpec plus the published rows it was
@@ -51,7 +51,7 @@ const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) 
 
     if (!compiled.ok) {
         return (
-            <div role="alert" className="text-[13px] text-[#b91c1c]">
+            <div role="alert" className="text-[13px] text-destructive">
                 {compiled.errors.map((error, index) => <div key={index}>[{error.code}] {error.message}</div>)}
             </div>
         );

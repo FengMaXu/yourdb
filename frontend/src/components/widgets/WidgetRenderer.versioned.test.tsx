@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const setOption = vi.fn();
@@ -19,14 +19,15 @@ const chartSpec = {
 describe('Versioned widgets', () => {
     beforeEach(() => setOption.mockClear());
 
-    it('compiles a Runtime-built ChartSpec widget and shows its notices and provenance', () => {
+    it('compiles a Runtime-built ChartSpec widget and shows its notices and provenance', async () => {
         render(<WidgetRenderer widget={{
             widget_id: 'w1', kind: 'chart', title: '行业销售额', contractVersion: 2, chartSpec,
             dataset: { columns: ['industry', 'sales'], rows: [['批发业', '5234.00'], ['零售业', null]] },
             disclosure: '以下槽位为模型推断', declaredFields: ['sales'],
             semanticChecks: [{ code: 'RATIO_OUT_OF_RANGE', field: 'sales', message: '销售额 声明为比率，但数值范围为 [499.88, 5234.00]' }],
         }} />);
-        expect(setOption).toHaveBeenCalledTimes(1);
+        // The chart widget loads lazily, with ECharts.
+        await waitFor(() => expect(setOption).toHaveBeenCalledTimes(1));
         const option = setOption.mock.calls[0]![0] as { xAxis: { data: string[] }; series: { data: unknown[] }[] };
         expect(option.xAxis.data).toEqual(['批发业', '零售业']);
         expect(option.series[0]!.data).toEqual([5234, null]);
@@ -36,12 +37,12 @@ describe('Versioned widgets', () => {
         expect(screen.getByText(/声明为比率，但数值范围为/)).toBeInTheDocument();
     });
 
-    it('shows compiler errors instead of drawing an altered chart', () => {
+    it('shows compiler errors instead of drawing an altered chart', async () => {
         render(<WidgetRenderer widget={{
             widget_id: 'w2', kind: 'chart', title: 'dup', contractVersion: 2, chartSpec,
             dataset: { columns: ['industry', 'sales'], rows: [['批发业', 1], ['批发业', 2]] },
         }} />);
-        expect(screen.getByRole('alert')).toHaveTextContent('DUPLICATE_KEY');
+        expect(await screen.findByRole('alert')).toHaveTextContent('DUPLICATE_KEY');
         expect(setOption).not.toHaveBeenCalled();
     });
 

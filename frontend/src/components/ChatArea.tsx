@@ -1053,27 +1053,27 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
 
     return (
         <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
-            <header className="flex h-14 items-center justify-between gap-3 border-b border-[var(--hairline)] bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-[var(--text-secondary)] max-[720px]:px-3">
+            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:px-3">
                 <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
                 <div className="flex min-w-0 flex-auto items-center gap-2 overflow-hidden max-[480px]:gap-[5px]">
-                    <span className="-ml-1 inline-flex items-center justify-center p-1 text-[var(--text-secondary)]" aria-hidden="true">
+                    <span className="-ml-1 inline-flex items-center justify-center p-1 text-body" aria-hidden="true">
                         <AgentOrbitIcon
                             size={32}
-                            className={`shrink-0 transition-colors ${isStreaming ? 'text-[var(--accent-color)]' : 'text-[#9ca3af]'}`}
+                            className={`shrink-0 transition-colors ${isStreaming ? 'text-brand' : 'text-faint'}`}
                             animated={isStreaming}
                         />
                     </span>
-                    <span className="shrink-0 font-bold tracking-[-0.02em] whitespace-nowrap text-[#1f2937]">{t('chat.breadcrumbRoot')}</span>
-                    <span className="mx-1 shrink-0 text-[var(--border-medium)]">/</span>
-                    <span className="max-w-[180px] truncate text-[#475569] max-[480px]:max-w-[76px]">{currentTask.name}</span>
-                    <span className="mx-1 shrink-0 text-[var(--border-medium)]">/</span>
+                    <span className="shrink-0 font-bold tracking-[-0.02em] whitespace-nowrap text-foreground">{t('chat.breadcrumbRoot')}</span>
+                    <span className="mx-1 shrink-0 text-border-strong">/</span>
+                    <span className="max-w-[180px] truncate text-body max-[480px]:max-w-[76px]">{currentTask.name}</span>
+                    <span className="mx-1 shrink-0 text-border-strong">/</span>
                     <span className="max-w-[340px] min-w-0 shrink truncate font-medium max-[480px]:max-w-[76px]">{currentSession.name}</span>
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1">
                     <button
                         type="button"
-                        className={`group/details inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-0 rounded-none border-0 bg-transparent px-2 whitespace-nowrap transition-[background-color,border-color,color,transform] focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:opacity-45 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 ${isToolPanelOpen ? 'text-[var(--accent-strong)]' : 'text-[#78716c] pointer-fine:enabled:hover:text-[#1f2937]'}`}
+                        className={`group/details inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-0 rounded-none border-0 bg-transparent px-2 whitespace-nowrap transition-[background-color,border-color,color,transform] focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-45 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 ${isToolPanelOpen ? 'text-brand' : 'text-muted-foreground pointer-fine:enabled:hover:text-foreground'}`}
                         onClick={onToggleToolPanel}
                         aria-pressed={isToolPanelOpen}
                         disabled={!hasTools && !isToolPanelOpen}
@@ -1096,19 +1096,19 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 {messages.length === 0 && (
                     <div className={`${setupDone ? 'mt-[clamp(40px,9vh,96px)]' : 'mt-[clamp(8px,3vh,32px)]'} flex w-[min(720px,100%)] flex-col gap-2.5 self-center`}>
                         {setupDone ? (<>
-                        <span className="animate-rise-sm font-mono text-[0.75rem] text-[#a8a29e] motion-reduce:animate-none" aria-hidden="true">-- {t('chat.starterCaption')}</span>
-                        <h2 className="m-0 animate-rise-sm text-[clamp(1.5rem,2.4vw,1.95rem)] leading-[1.2] font-[650] tracking-[-0.02em] text-balance text-[#1c1917] [animation-delay:40ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterTitle')}</h2>
-                        <p className="m-0 animate-rise-sm text-[length:var(--font-size-body-sm)] leading-[1.65] text-pretty text-[#78716c] [animation-delay:80ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterHint')}</p>
+                        <span className="animate-rise-sm font-mono text-[0.75rem] text-faint motion-reduce:animate-none" aria-hidden="true">-- {t('chat.starterCaption')}</span>
+                        <h2 className="m-0 animate-rise-sm text-[clamp(1.5rem,2.4vw,1.95rem)] leading-[1.2] font-[650] tracking-[-0.02em] text-balance text-foreground [animation-delay:40ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterTitle')}</h2>
+                        <p className="m-0 animate-rise-sm text-[length:var(--font-size-body-sm)] leading-[1.65] text-pretty text-muted-foreground [animation-delay:80ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterHint')}</p>
                         </>) : (<>
                         <SetupChecklist />
-                        <p className="m-0 mt-5 text-[0.8rem] text-[#a8a29e]">{t('setup.examplesLocked')}</p>
+                        <p className="m-0 mt-5 text-[0.8rem] text-faint">{t('setup.examplesLocked')}</p>
                         </>)}
                         <div className={`grid grid-cols-2 gap-2.5 max-[720px]:grid-cols-1 ${setupDone ? 'mt-[22px]' : 'opacity-50'}`}>
                             {STARTER_PROMPTS.map((kind, index) => (
                                 <button
                                     key={kind}
                                     type="button"
-                                    className="group/starter relative flex min-h-[92px] [font:inherit] animate-rise-sm cursor-pointer flex-col disabled:pointer-events-none items-start gap-2 rounded-[14px] border border-[var(--hairline)] bg-white py-4 pr-11 pl-[18px] text-left text-[#1c1917] transition-[border-color,box-shadow,transform,background-color] [animation-delay:calc(140ms+var(--i)*60ms)] [animation-duration:480ms] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] active:scale-[0.985] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:min-h-0 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-[#e2e0dc] pointer-fine:hover:bg-[#fffdfb] pointer-fine:hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-20px_rgba(28,25,23,0.28)]"
+                                    className="group/starter relative flex min-h-[92px] [font:inherit] animate-rise-sm cursor-pointer flex-col disabled:pointer-events-none items-start gap-2 rounded-xl border border-border bg-white py-4 pr-11 pl-[18px] text-left text-foreground transition-[border-color,box-shadow,transform,background-color] [animation-delay:calc(140ms+var(--i)*60ms)] [animation-duration:480ms] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.985] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:min-h-0 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-input pointer-fine:hover:bg-paper pointer-fine:hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-20px_rgba(28,25,23,0.28)]"
                                     style={{ '--i': index } as React.CSSProperties}
                                     disabled={!setupDone}
                                     onClick={() => {
@@ -1117,12 +1117,12 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                         textareaRef.current?.focus();
                                     }}
                                 >
-                                    <span className="inline-flex items-baseline gap-2 text-[0.75rem] font-semibold text-[#78716c]">
-                                        <span className="font-mono text-[0.7rem] font-medium text-[#c2410c]" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                                    <span className="inline-flex items-baseline gap-2 text-[0.75rem] font-semibold text-muted-foreground">
+                                        <span className="font-mono text-[0.7rem] font-medium text-brand" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
                                         {t(`chat.starter.${kind}.label`)}
                                     </span>
-                                    <span className="text-[0.925rem] leading-[1.55] text-[#1c1917]">{t(`chat.starter.${kind}.prompt`)}</span>
-                                    <ChevronRight size={16} className="absolute right-4 bottom-4 -translate-x-1.5 text-[#a8a29e] opacity-0 transition-[opacity,transform,color] group-focus-visible/starter:translate-x-0 group-focus-visible/starter:opacity-100 motion-reduce:transition-none max-[720px]:top-1/2 max-[720px]:bottom-auto max-[720px]:-mt-[7px] max-[720px]:translate-x-0 max-[720px]:opacity-100 pointer-fine:group-hover/starter:translate-x-0 pointer-fine:group-hover/starter:text-[#c2410c] pointer-fine:group-hover/starter:opacity-100" aria-hidden="true" />
+                                    <span className="text-[0.925rem] leading-[1.55] text-foreground">{t(`chat.starter.${kind}.prompt`)}</span>
+                                    <ChevronRight size={16} className="absolute right-4 bottom-4 -translate-x-1.5 text-faint opacity-0 transition-[opacity,transform,color] group-focus-visible/starter:translate-x-0 group-focus-visible/starter:opacity-100 motion-reduce:transition-none max-[720px]:top-1/2 max-[720px]:bottom-auto max-[720px]:-mt-[7px] max-[720px]:translate-x-0 max-[720px]:opacity-100 pointer-fine:group-hover/starter:translate-x-0 pointer-fine:group-hover/starter:text-brand pointer-fine:group-hover/starter:opacity-100" aria-hidden="true" />
                                 </button>
                             ))}
                         </div>
@@ -1133,13 +1133,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     item.kind === 'user' ? (
                         <div key={item.message.id} className={USER_ROW} data-message-role="user">
                             <div className="flex min-w-0 flex-col items-end gap-1.5">
-                                <div className="rounded-[var(--bubble-radius)] border-0 bg-[var(--bubble-bg)] px-4 py-3 text-[0.95rem] leading-[1.6] wrap-anywhere whitespace-pre-wrap text-[#1f2937] shadow-none in-[:lang(zh-CN)]:leading-[1.75]">
+                                <div className="rounded-[var(--bubble-radius)] border-0 bg-[var(--bubble-bg)] px-4 py-3 text-[0.95rem] leading-[1.6] wrap-anywhere whitespace-pre-wrap text-foreground shadow-none in-[:lang(zh-CN)]:leading-[1.75]">
                                     {item.message.content}
                                 </div>
                                 {item.message.attachments && item.message.attachments.length > 0 && (
                                     <ul className="m-0 flex list-none flex-wrap justify-end gap-1.5 p-0" aria-label={t('chat.attachedFiles')}>
                                         {item.message.attachments.map((file) => (
-                                            <li key={file} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border border-[var(--border-light)] bg-white py-1 pr-2 pl-2.5 text-[0.8rem] text-[var(--text-secondary)] [&>span]:min-w-0 [&>span]:truncate" title={file}>
+                                            <li key={file} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border border-border bg-white py-1 pr-2 pl-2.5 text-[0.8rem] text-body [&>span]:min-w-0 [&>span]:truncate" title={file}>
                                                 <FileIcon filename={file} size={14} />
                                                 <span>{file}</span>
                                             </li>
@@ -1147,7 +1147,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                     </ul>
                                 )}
                             </div>
-                            <div className="mt-[7.5px] flex size-8 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,#111827,#374151)] text-sm font-semibold text-white shadow-[0_12px_24px_-18px_rgba(17,24,39,0.9)]">U</div>
+                            <div className="mt-[7.5px] flex size-8 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,var(--foreground),var(--body-strong))] text-sm font-semibold text-white shadow-[0_12px_24px_-18px_rgba(28,25,23,0.9)]">U</div>
                         </div>
                     ) : (
                         <AgentTurn
@@ -1171,8 +1171,8 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         </div>
                         <div className={MESSAGE_COLUMN}>
                             <div className="rounded-[var(--bubble-radius)] bg-[var(--bubble-bg)] px-3.5 py-3">
-                                <div className="mb-1 text-[length:var(--font-size-caption)] font-semibold text-[var(--accent-strong)]">{t('chat.clarificationTitle')}</div>
-                                <div className="text-[0.95rem] leading-[1.6] wrap-anywhere whitespace-pre-wrap text-[var(--text-primary)]">{pendingClarification.question}</div>
+                                <div className="mb-1 text-[length:var(--font-size-caption)] font-semibold text-brand">{t('chat.clarificationTitle')}</div>
+                                <div className="text-[0.95rem] leading-[1.6] wrap-anywhere whitespace-pre-wrap text-foreground">{pendingClarification.question}</div>
                                 {pendingClarification.options.length > 0 && (
                                     <div className="mt-2.5 flex flex-col gap-1.5" role="radiogroup" aria-label={t('chat.clarificationOptions')}>
                                         {pendingClarification.options.map((option) => {
@@ -1183,24 +1183,24 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                                     type="button"
                                                     role="radio"
                                                     aria-checked={isSelected}
-                                                    className={`group/option flex w-full cursor-pointer items-start gap-2.5 rounded-[var(--radius-sm)] border bg-[var(--frame-surface)] px-3 py-2 text-left text-[length:var(--font-size-body-sm)] leading-normal text-[var(--text-primary)] transition-[border-color,background-color] disabled:cursor-not-allowed disabled:opacity-58 motion-reduce:transition-none ${isSelected ? 'border-[rgba(194,65,12,0.36)]' : 'border-[var(--hairline)] enabled:hover:border-[var(--border-medium)]'}`}
+                                                    className={`group/option flex w-full cursor-pointer items-start gap-2.5 rounded-[var(--radius-sm)] border bg-[var(--frame-surface)] px-3 py-2 text-left text-[length:var(--font-size-body-sm)] leading-normal text-foreground transition-[border-color,background-color] disabled:cursor-not-allowed disabled:opacity-58 motion-reduce:transition-none ${isSelected ? 'border-[rgba(194,65,12,0.36)]' : 'border-border enabled:hover:border-border-strong'}`}
                                                     onClick={() => {
                                                         setClarificationInput(option);
                                                         clarificationInputRef.current?.focus();
                                                     }}
                                                     disabled={isSubmittingClarification}
                                                 >
-                                                    <span className={`mt-[3px] size-3.5 shrink-0 rounded-full transition-[border-color,border-width] motion-reduce:transition-none ${isSelected ? 'border-4 border-[var(--accent-strong)]' : 'border-[1.5px] border-[var(--border-medium)]'}`} aria-hidden="true" />
+                                                    <span className={`mt-[3px] size-3.5 shrink-0 rounded-full transition-[border-color,border-width] motion-reduce:transition-none ${isSelected ? 'border-4 border-brand' : 'border-[1.5px] border-border-strong'}`} aria-hidden="true" />
                                                     <span>{option}</span>
                                                 </button>
                                             );
                                         })}
                                     </div>
                                 )}
-                                <div className="mt-2.5 flex items-end gap-2 rounded-[var(--radius-md)] border border-[var(--hairline)] bg-[var(--frame-surface)] py-1.5 pr-1.5 pl-3 transition-[border-color,box-shadow] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
+                                <div className="mt-2.5 flex items-end gap-2 rounded-[var(--radius-md)] border border-border bg-[var(--frame-surface)] py-1.5 pr-1.5 pl-3 transition-[border-color,box-shadow] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                                     <textarea
                                         ref={clarificationInputRef}
-                                        className="max-h-40 min-h-9 flex-1 resize-none border-0 bg-transparent py-[7px] text-[length:var(--font-size-body-sm)] leading-normal text-[var(--text-primary)] outline-none [field-sizing:content] placeholder:text-[var(--text-placeholder)]"
+                                        className="max-h-40 min-h-9 flex-1 resize-none border-0 bg-transparent py-[7px] text-[length:var(--font-size-body-sm)] leading-normal text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
                                         rows={1}
                                         value={clarificationInput}
                                         onChange={(e) => setClarificationInput(e.target.value)}
@@ -1211,7 +1211,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                     />
                                     <button
                                         type="button"
-                                        className={sendButton(clarificationInput.trim() ? 'ready' : 'idle', 'size-8 rounded-[10px]')}
+                                        className={sendButton(clarificationInput.trim() ? 'ready' : 'idle', 'size-8 rounded-lg')}
                                         onClick={() => void handleSubmitClarification()}
                                         disabled={isSubmittingClarification || !clarificationInput.trim()}
                                         aria-label={isSubmittingClarification ? t('chat.submitting') : t('chat.submit')}
@@ -1231,12 +1231,12 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 {attachedFiles.length > 0 && (
                     <ul className="m-0 mb-2 flex list-none flex-wrap gap-1.5 p-0" aria-label={t('chat.attachedFiles')}>
                         {attachedFiles.map((file) => (
-                            <li key={file} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border border-[var(--border-light)] bg-white py-1 pr-2 pl-2.5 text-[0.8rem] text-[var(--text-secondary)] [&>span]:min-w-0 [&>span]:truncate" title={file}>
+                            <li key={file} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border border-border bg-white py-1 pr-2 pl-2.5 text-[0.8rem] text-body [&>span]:min-w-0 [&>span]:truncate" title={file}>
                                 <FileIcon filename={file} size={14} />
                                 <span>{file}</span>
                                 <button
                                     type="button"
-                                    className="grid size-[18px] shrink-0 cursor-pointer place-items-center rounded-[5px] border-0 bg-transparent text-[var(--text-tertiary)] transition-colors hover:bg-[#f3f4f6] hover:text-[var(--text-primary)]"
+                                    className="grid size-[18px] shrink-0 cursor-pointer place-items-center rounded-[5px] border-0 bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                     onClick={() => setAttachedFiles(attachedFiles.filter((item) => item !== file))}
                                     aria-label={t('chat.removeAttachment').replace('{name}', file)}
                                     title={t('chat.removeAttachment').replace('{name}', file)}
@@ -1247,13 +1247,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         ))}
                     </ul>
                 )}
-                <div className="mb-2 flex items-center justify-between gap-4 text-[0.75rem] text-[#7c6b5e] max-[480px]:flex-col max-[480px]:items-start max-[480px]:gap-1">
+                <div className="mb-2 flex items-center justify-between gap-4 text-[0.75rem] text-muted-foreground max-[480px]:flex-col max-[480px]:items-start max-[480px]:gap-1">
                     {uploadError
-                        ? <span className="text-[var(--status-error)]" role="alert">{t('chat.uploadFailed')}</span>
+                        ? <span className="text-destructive" role="alert">{t('chat.uploadFailed')}</span>
                         : <span>{isStreaming ? t('chat.steerHint') : null}</span>}
                     {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : runReason === 'interrupted' || runReason === 'rejected' ? t('chat.interrupted') : t('tools.statusError')}</span>}
                 </div>
-                <div className="relative flex min-h-14 items-end gap-2 rounded-[20px] border border-[var(--hairline)] bg-[var(--surface-bg)] px-3 py-2 shadow-none transition-[border-color,box-shadow,transform] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
+                <div className="relative flex min-h-14 items-end gap-2 rounded-[20px] border border-border bg-background px-3 py-2 shadow-none transition-[border-color,box-shadow,transform] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                     <input
                         ref={fileInputRef}
                         type="file"
@@ -1263,7 +1263,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     />
                     <button
                         type="button"
-                        className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-transparent text-[#6b7280] transition-[background-color,color,box-shadow,transform] disabled:cursor-not-allowed disabled:opacity-58 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 pointer-fine:enabled:hover:bg-[rgba(120,53,15,0.07)] pointer-fine:enabled:hover:text-[#1f2937]"
+                        className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground transition-[background-color,color,box-shadow,transform] disabled:cursor-not-allowed disabled:opacity-58 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 pointer-fine:enabled:hover:bg-[rgba(120,53,15,0.07)] pointer-fine:enabled:hover:text-foreground"
                         onClick={handleUploadClick}
                         disabled={isUploading || isStreaming}
                         title={t('chat.uploadTooltip')}
@@ -1273,7 +1273,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     </button>
                     <textarea
                         ref={textareaRef}
-                        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 text-[15px] leading-normal wrap-anywhere whitespace-pre-wrap text-[var(--text-primary)] outline-none placeholder:text-[var(--text-placeholder)]"
+                        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 text-[15px] leading-normal wrap-anywhere whitespace-pre-wrap text-foreground outline-none placeholder:text-muted-foreground"
                         placeholder={isStreaming ? (t('chat.steerPlaceholder') || '执行中补充说明...') : t('chat.placeholder')}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
@@ -1299,10 +1299,10 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
 /** The send / stop button: grey while empty, ink when there is something to send, red while a run can be stopped. */
 function sendButton(state: 'idle' | 'ready' | 'stop', size = 'size-9 rounded-xl'): string {
     const tone = state === 'ready'
-        ? 'bg-[#1f2937] text-white shadow-[0_12px_26px_-16px_rgba(17,24,39,0.8)] pointer-fine:enabled:hover:-translate-y-px pointer-fine:enabled:hover:bg-[#111827]'
+        ? 'bg-foreground text-white shadow-[0_12px_26px_-16px_rgba(28,25,23,0.8)] pointer-fine:enabled:hover:-translate-y-px pointer-fine:enabled:hover:bg-foreground'
         : state === 'stop'
-            ? 'bg-[#fee2e2] text-[#b91c1c] pointer-fine:enabled:hover:bg-[#fecaca]'
-            : 'bg-[#f3f4f6] text-[#d1d5db]';
+            ? 'bg-destructive-soft text-destructive pointer-fine:enabled:hover:bg-destructive-border'
+            : 'bg-muted text-border-strong';
     return `inline-flex ${size} shrink-0 cursor-pointer items-center justify-center border-0 transition-[background-color,color,box-shadow,transform] disabled:cursor-not-allowed disabled:opacity-58 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 ${tone}`;
 }
 
@@ -1316,24 +1316,24 @@ const ChatArea: React.FC<ChatAreaProps> = (props) => {
 
     return (
         <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
-            <header className="flex h-14 items-center justify-between gap-3 border-b border-[var(--hairline)] bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-[var(--text-secondary)] max-[720px]:px-3">
+            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:px-3">
                 <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
                 <div className="flex min-w-0 flex-auto items-center gap-2 overflow-hidden max-[480px]:gap-[5px]">
-                    <span className="-ml-1 inline-flex items-center justify-center p-1 text-[var(--text-secondary)]" aria-hidden="true">
-                        <AgentOrbitIcon size={32} className="shrink-0 text-[#9ca3af]" animated={false} />
+                    <span className="-ml-1 inline-flex items-center justify-center p-1 text-body" aria-hidden="true">
+                        <AgentOrbitIcon size={32} className="shrink-0 text-faint" animated={false} />
                     </span>
-                    <span className="shrink-0 font-bold tracking-[-0.02em] whitespace-nowrap text-[#1f2937]">{t('chat.breadcrumbRoot')}</span>
+                    <span className="shrink-0 font-bold tracking-[-0.02em] whitespace-nowrap text-foreground">{t('chat.breadcrumbRoot')}</span>
                     {currentTask && (
                         <>
-                            <span className="mx-1 shrink-0 text-[var(--border-medium)]">/</span>
-                            <span className="max-w-[180px] truncate text-[#475569] max-[480px]:max-w-[76px]">{currentTask.name}</span>
+                            <span className="mx-1 shrink-0 text-border-strong">/</span>
+                            <span className="max-w-[180px] truncate text-body max-[480px]:max-w-[76px]">{currentTask.name}</span>
                         </>
                     )}
                 </div>
             </header>
-            <div className="mt-[88px] flex w-[min(520px,100%)] flex-col items-center gap-3.5 self-center rounded-3xl border border-[rgba(120,53,15,0.1)] bg-white/58 px-[26px] py-[22px] text-center text-[#8a7a6d] shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
+            <div className="mt-[88px] flex w-[min(520px,100%)] flex-col items-center gap-3.5 self-center rounded-3xl border border-[rgba(120,53,15,0.1)] bg-white/58 px-[26px] py-[22px] text-center text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
                 <div>{currentTask ? t('session.emptyPrompt') : t('task.emptyPrompt')}</div>
-                <button type="button" className="inline-flex cursor-pointer items-center gap-[7px] rounded-[9px] [font:inherit] border border-[rgba(120,53,15,0.14)] bg-white px-[13px] py-2 text-[#475569] hover:border-[rgba(120,53,15,0.28)] hover:text-[#1f2937]" onClick={() => (currentTask ? createSession(currentTask.id) : createTask())}>
+                <button type="button" className="inline-flex cursor-pointer items-center gap-[7px] rounded-md [font:inherit] border border-[rgba(120,53,15,0.14)] bg-white px-[13px] py-2 text-body hover:border-[rgba(120,53,15,0.28)] hover:text-foreground" onClick={() => (currentTask ? createSession(currentTask.id) : createTask())}>
                     <Plus size={14} />
                     <span>{currentTask ? t('session.create') : t('task.startAsking')}</span>
                 </button>

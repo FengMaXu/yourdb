@@ -8,7 +8,7 @@ export const USER_ROW = 'ml-auto flex max-w-[80%] items-start justify-end gap-3 
 
 /** The agent's orbit mark beside its content; accent while it works. */
 export const agentIcon = (running: boolean) =>
-    `mt-1 flex size-8 items-center justify-center self-start bg-transparent transition-colors ${running ? 'text-[var(--accent-color)]' : 'text-[#9ca3af]'}`;
+    `mt-1 flex size-8 items-center justify-center self-start bg-transparent transition-colors ${running ? 'text-brand' : 'text-faint'}`;
 
 /** The orbit drawn slightly larger than its 32px box. */
 export const AGENT_ICON_SVG = 'origin-center scale-[1.18]';
@@ -17,4 +17,4 @@ export const AGENT_ICON_SVG = 'origin-center scale-[1.18]';
 export const MESSAGE_COLUMN = 'min-w-0 flex-1';
 
 /** An agent's answer text; Chinese reads a little looser. */
-export const AGENT_BODY = 'mt-0.5 py-1 text-[0.95rem] leading-[1.66] text-[#374151] in-[:lang(zh-CN)]:leading-[1.75]';
+export const AGENT_BODY = 'mt-0.5 py-1 text-[0.95rem] leading-[1.66] text-foreground in-[:lang(zh-CN)]:leading-[1.75]';

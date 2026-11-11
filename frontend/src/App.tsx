@@ -46,7 +46,7 @@ const SIDEBAR_PEEK_OPEN_DELAY = 80;
 const SIDEBAR_PEEK_CLOSE_DELAY = 180;
 
 /** The full-window screen shown while the app starts or when it could not. */
-const APP_LOADING = 'grid min-h-screen place-items-center bg-[radial-gradient(circle_at_18%_20%,rgba(240,68,56,0.14),transparent_28%),radial-gradient(circle_at_82%_14%,rgba(17,24,39,0.1),transparent_26%),linear-gradient(135deg,#fff7ed_0%,#f8fafc_52%,#eef2ff_100%)] font-bold tracking-[0.02em] text-[#1f2937]';
+const APP_LOADING = 'grid min-h-screen place-items-center bg-paper font-semibold tracking-[0.02em] text-body';
 
 /** The "N steps left" strip; it also re-checks setup on the way back from settings, which save without notifying the shell. */
 const SetupBanner: React.FC<{ isChatView: boolean; hidden: boolean }> = ({ isChatView, hidden }) => {
@@ -244,12 +244,12 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
       <div className="flex h-full min-h-0 w-full flex-col bg-transparent">
         <SkipLink href="#main-content">{t('accessibility.skipToContent')}</SkipLink>
         {isDesktop && (
-          <div className="flex h-[34px] shrink-0 items-center gap-0.5 border-b border-[rgba(120,53,15,0.08)] bg-[rgba(255,250,242,0.66)] px-2.5 text-[#111827] backdrop-blur-[18px] max-[720px]:hidden" role="menubar" aria-label={t('desktop.menu')}>
+          <div className="flex h-[34px] shrink-0 items-center gap-0.5 border-b border-[rgba(120,53,15,0.08)] bg-[rgba(255,250,242,0.66)] px-2.5 text-foreground backdrop-blur-[18px] max-[720px]:hidden" role="menubar" aria-label={t('desktop.menu')}>
             {DESKTOP_MENU_ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className="h-7 cursor-pointer rounded-[7px] border-0 bg-transparent px-2.5 text-[0.86rem] text-inherit transition-[background-color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 pointer-fine:hover:bg-white/64"
+                className="h-7 cursor-pointer rounded-md border-0 bg-transparent px-2.5 text-[0.86rem] text-inherit transition-[background-color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 pointer-fine:hover:bg-white/64"
                 role="menuitem"
                 onClick={(event) => {
                   const rect = event.currentTarget.getBoundingClientRect();
@@ -268,10 +268,10 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
         <SetupBanner isChatView={activeView.kind === 'chat'} hidden={activeView.kind === 'settings'} />
 
         {/* The framed workspace: inset on a wide window, edge to edge on a phone. */}
-        <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-[var(--hairline)] bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:min-h-dvh max-[720px]:rounded-none max-[720px]:border-0">
+        <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-border bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:min-h-dvh max-[720px]:rounded-none max-[720px]:border-0">
           <div
             className={cn(
-              'relative z-20 flex min-w-0 flex-none self-stretch border-r border-[var(--hairline)] bg-[var(--frame-rail)] transition-[width] motion-reduce:transition-none',
+              'relative z-20 flex min-w-0 flex-none self-stretch border-r border-border bg-[var(--frame-rail)] transition-[width] motion-reduce:transition-none',
               isSidebarOpen || isSidebarPeeking ? 'w-[var(--sidebar-width)]' : 'w-[var(--sidebar-rail-width)]',
               isSidebarOpen && 'max-[720px]:w-[112px]',
             )}
@@ -303,10 +303,10 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
               {isToolPanelOpen && (
                 <div
                   className={cn(
-                    'group/resize absolute top-[18px] right-0 z-[12] flex h-[calc(100%-36px)] w-4 cursor-ew-resize items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]',
+                    'group/resize absolute top-[18px] right-0 z-[12] flex h-[calc(100%-36px)] w-4 cursor-ew-resize items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
                     'after:h-14 after:w-[3px] after:rounded-full after:bg-[rgba(120,53,15,0.18)] after:opacity-0 after:transition-[opacity,background-color,transform] motion-reduce:after:transition-none',
-                    'hover:after:scale-y-[1.08] hover:after:bg-[rgba(240,68,56,0.42)] hover:after:opacity-100',
-                    isResizingChat && 'after:scale-y-[1.08] after:bg-[rgba(240,68,56,0.42)] after:opacity-100',
+                    'hover:after:scale-y-[1.08] hover:after:bg-[rgba(194,65,12,0.42)] hover:after:opacity-100',
+                    isResizingChat && 'after:scale-y-[1.08] after:bg-[rgba(194,65,12,0.42)] after:opacity-100',
                   )}
                   role="separator"
                   aria-orientation="vertical"

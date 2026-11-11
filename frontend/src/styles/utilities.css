@@ -14,6 +14,6 @@
   }
 
   &:hover::-webkit-scrollbar-thumb {
-    background: var(--border-medium);
+    background: var(--border-strong);
   }
 }

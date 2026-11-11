@@ -51,9 +51,9 @@ const getToolIcon = (name: string) => {
 };
 
 /** Monospace text on the section's soft surface: JSON, plain results, unparsed arguments. */
-const MONO = 'm-0 px-3 py-2.5 font-[family-name:var(--font-code)] text-[0.72rem] leading-[1.65] break-words whitespace-pre-wrap text-[#292524]';
+const MONO = 'm-0 px-3 py-2.5 font-[family-name:var(--font-code)] text-[0.72rem] leading-[1.65] break-words whitespace-pre-wrap text-primary-hover';
 /** A small square icon action in the panel (close, copy). */
-const ICON_ACTION = 'flex items-center justify-center rounded-md border-0 bg-transparent transition-[background-color,color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]';
+const ICON_ACTION = 'flex items-center justify-center rounded-md border-0 bg-transparent transition-[background-color,color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 const JsonHighlight: React.FC<{ data: any }> = ({ data }) => {
     const jsonStr = typeof data === 'string' ? data : JSON.stringify(data, null, 2);
@@ -64,13 +64,13 @@ const JsonHighlight: React.FC<{ data: any }> = ({ data }) => {
 const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
     const lines = code.split('\n');
     return (
-        <div className="overflow-x-auto rounded-b-lg bg-[#1e1e2e] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-white/20">
+        <div className="overflow-x-auto rounded-b-lg bg-ink-panel [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-white/20">
             <table className="w-full border-collapse font-[family-name:var(--font-code)] text-[0.72rem] leading-[1.6]">
                 <tbody>
                     {lines.map((line, i) => (
                         <tr key={i}>
-                            <td className="w-10 min-w-10 bg-black/10 pr-2.5 pl-3 text-right align-top text-[#6b7280] select-none">{i + 1}</td>
-                            <td className="px-3.5 whitespace-pre text-[#d4d4d8]">{line || ' '}</td>
+                            <td className="w-10 min-w-10 bg-black/10 pr-2.5 pl-3 text-right align-top text-muted-foreground select-none">{i + 1}</td>
+                            <td className="px-3.5 whitespace-pre text-border-strong">{line || ' '}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -96,8 +96,8 @@ const ArgsRenderer: React.FC<{ args: any }> = ({ args }) => {
                 <div className="grid grid-cols-[fit-content(40%)_minmax(0,1fr)] gap-x-3.5 gap-y-1.5 px-3 py-2.5">
                     {Object.entries(rest).map(([key, value]) => (
                         <div className="contents" key={key}>
-                            <span className="min-w-0 text-[0.72rem] font-medium wrap-anywhere text-[#b45309]">{key}</span>
-                            <span className="min-w-0 font-[family-name:var(--font-code)] text-[0.72rem] wrap-anywhere text-[var(--text-primary)]">
+                            <span className="min-w-0 text-[0.72rem] font-medium wrap-anywhere text-warning">{key}</span>
+                            <span className="min-w-0 font-[family-name:var(--font-code)] text-[0.72rem] wrap-anywhere text-foreground">
                                 {typeof value === 'string' ? value : JSON.stringify(value)}
                             </span>
                         </div>
@@ -122,8 +122,8 @@ const ResultRenderer: React.FC<{ result?: string }> = ({ result }) => {
     const { t } = useLanguage();
     if (!result) {
         return (
-            <span className="flex items-center gap-2 p-3 font-[family-name:var(--font-code)] text-[0.72rem] text-[var(--text-tertiary)]">
-                <span className="size-2 flex-none animate-dot-breathe rounded-full bg-[#3b82f6] motion-reduce:animate-none" aria-hidden="true" />
+            <span className="flex items-center gap-2 p-3 font-[family-name:var(--font-code)] text-[0.72rem] text-muted-foreground">
+                <span className="size-2 flex-none animate-dot-breathe rounded-full bg-link motion-reduce:animate-none" aria-hidden="true" />
                 {t('tools.processing')}
             </span>
         );
@@ -162,12 +162,12 @@ const ThreadSection: React.FC<ThreadSectionProps> = ({ label, copyText, copyKey,
                 {copyText && (
                     <button
                         type="button"
-                        className={cn(ICON_ACTION, 'ml-auto min-h-6 min-w-6 rounded-[4px] p-1 text-[var(--text-tertiary)] hover:bg-[rgba(120,53,15,0.08)] hover:text-[#111827]')}
+                        className={cn(ICON_ACTION, 'ml-auto min-h-6 min-w-6 rounded-sm p-1 text-muted-foreground hover:bg-[rgba(120,53,15,0.08)] hover:text-foreground')}
                         onClick={() => onCopy(copyText, copyKey)}
                         title={t('tools.copy')}
                         aria-label={t('tools.copy')}
                     >
-                        {copiedKey === copyKey ? <Check className="size-3" color="#10b981" /> : <Copy className="size-3" />}
+                        {copiedKey === copyKey ? <Check className="size-3 text-success" /> : <Copy className="size-3" />}
                     </button>
                 )}
             </div>
@@ -198,24 +198,24 @@ const ThreadItem: React.FC<ThreadItemProps> = ({ tool, index, open, onToggle, co
         <li className="relative pl-6 before:absolute before:top-0 before:bottom-0 before:left-1.5 before:w-px before:bg-[var(--thread-line)] first:before:top-[19px] last:before:bottom-[calc(100%-19px)]">
             <span
                 className={cn(
-                    'absolute top-[15px] left-0.5 size-[9px] rounded-full bg-[#57534e] shadow-[0_0_0_3px_var(--frame-surface)]',
-                    tone === 'running' && 'animate-node-pulse border-[1.5px] border-[var(--accent-strong)] bg-white motion-reduce:animate-none',
-                    tone === 'error' && 'bg-[var(--status-error)]',
+                    'absolute top-[15px] left-0.5 size-[9px] rounded-full bg-body shadow-[0_0_0_3px_var(--frame-surface)]',
+                    tone === 'running' && 'animate-node-pulse border-[1.5px] border-brand bg-white motion-reduce:animate-none',
+                    tone === 'error' && 'bg-destructive',
                 )}
                 aria-hidden="true"
             />
             <button
                 type="button"
-                className="group/head flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent py-[9px] pr-1 pl-0 text-left font-[family-name:var(--font-code)] text-[0.78rem] text-[var(--text-primary)] select-none focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]"
+                className="group/head flex w-full cursor-pointer items-center gap-2 border-0 bg-transparent py-[9px] pr-1 pl-0 text-left font-[family-name:var(--font-code)] text-[0.78rem] text-foreground select-none focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                 aria-expanded={open}
                 aria-controls={contentId}
                 onClick={onToggle}
             >
                 <span className="flex-none text-[0.7rem] text-[var(--thread-muted)] tabular-nums">{String(index + 1).padStart(2, '0')}</span>
-                <span className="inline-flex flex-none text-[var(--text-tertiary)]" aria-hidden="true">{getToolIcon(tool.name)}</span>
-                <span className="min-w-0 flex-auto truncate font-medium transition-colors pointer-fine:group-hover/head:text-[var(--accent-strong)]" title={tool.name}>{tool.name}</span>
-                <span className={cn('flex-none text-[0.68rem]', tone === 'running' ? 'text-[var(--accent-strong)]' : tone === 'error' ? 'text-[var(--status-error)]' : 'text-[var(--thread-muted)]')}>{statusLabel}</span>
-                <span className="inline-flex flex-none text-[var(--thread-muted)] pointer-fine:group-hover/head:text-[var(--text-secondary)]" aria-hidden="true">
+                <span className="inline-flex flex-none text-muted-foreground" aria-hidden="true">{getToolIcon(tool.name)}</span>
+                <span className="min-w-0 flex-auto truncate font-medium transition-colors pointer-fine:group-hover/head:text-brand" title={tool.name}>{tool.name}</span>
+                <span className={cn('flex-none text-[0.68rem]', tone === 'running' ? 'text-brand' : tone === 'error' ? 'text-destructive' : 'text-[var(--thread-muted)]')}>{statusLabel}</span>
+                <span className="inline-flex flex-none text-[var(--thread-muted)] pointer-fine:group-hover/head:text-body" aria-hidden="true">
                     {open ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
                 </span>
             </button>
@@ -269,24 +269,24 @@ const ToolPanel: React.FC<ToolPanelProps> = ({ tools = [], onClose }) => {
         // Beside the chat on a wide window; over it, from the right, below 1100px; full width below 720px.
         <aside
             className={cn(
-                'relative m-0 flex max-w-none min-w-[300px] flex-auto flex-col overflow-hidden border-0 border-l border-[var(--hairline)] bg-[var(--frame-surface)]',
-                'max-[1100px]:absolute max-[1100px]:inset-y-0 max-[1100px]:right-0 max-[1100px]:z-20 max-[1100px]:w-[min(var(--tool-panel-width),calc(100%-12px))] max-[1100px]:min-w-0 max-[1100px]:shadow-[-18px_0_34px_-28px_rgba(17,24,39,0.64)] max-[720px]:w-full',
+                'relative m-0 flex max-w-none min-w-[300px] flex-auto flex-col overflow-hidden border-0 border-l border-border bg-[var(--frame-surface)]',
+                'max-[1100px]:absolute max-[1100px]:inset-y-0 max-[1100px]:right-0 max-[1100px]:z-20 max-[1100px]:w-[min(var(--tool-panel-width),calc(100%-12px))] max-[1100px]:min-w-0 max-[1100px]:shadow-[-18px_0_34px_-28px_rgba(28,25,23,0.64)] max-[720px]:w-full',
             )}
         >
-            <div className="box-border flex h-14 min-h-14 items-center justify-between border-b border-[var(--hairline)] bg-[var(--frame-surface)] pr-3.5 pl-[22px]">
+            <div className="box-border flex h-14 min-h-14 items-center justify-between border-b border-border bg-[var(--frame-surface)] pr-3.5 pl-[22px]">
                 <div className="flex items-center gap-2.5">
-                    <span className="text-[0.94rem] font-bold tracking-[-0.01em] text-[#1f2937]">{t('tools.details')}</span>
-                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[rgba(120,53,15,0.08)] px-2 font-[family-name:var(--font-code)] text-[0.76rem] font-medium text-[#7c6b5e]">{tools.length}</span>
+                    <span className="text-[0.94rem] font-bold tracking-[-0.01em] text-foreground">{t('tools.details')}</span>
+                    <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[rgba(120,53,15,0.08)] px-2 font-[family-name:var(--font-code)] text-[0.76rem] font-medium text-muted-foreground">{tools.length}</span>
                 </div>
-                <button type="button" className={cn(ICON_ACTION, 'size-8 min-h-8 min-w-8 p-0 text-[#78716c] hover:text-[#1f2937]')} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
+                <button type="button" className={cn(ICON_ACTION, 'size-8 min-h-8 min-w-8 p-0 text-muted-foreground hover:text-foreground')} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
                     <X className="size-4" aria-hidden="true" />
                 </button>
             </div>
 
             <div ref={contentRef} className="scrollable-area flex-1 pt-3.5 pr-3.5 pb-7 pl-4">
                 {tools.length === 0 ? (
-                    <div className="flex flex-col gap-1.5 px-3 py-6 text-center text-[length:var(--font-size-caption)] leading-[1.45] text-[var(--text-secondary)]">
-                        <strong className="text-[length:var(--font-size-body-sm)] text-[var(--text-primary)]">{t('tools.noCalls')}</strong>
+                    <div className="flex flex-col gap-1.5 px-3 py-6 text-center text-[length:var(--font-size-caption)] leading-[1.45] text-body">
+                        <strong className="text-[length:var(--font-size-body-sm)] text-foreground">{t('tools.noCalls')}</strong>
                         <span>{t('tools.noCallsHint')}</span>
                     </div>
                 ) : (

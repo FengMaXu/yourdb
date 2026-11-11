@@ -8,15 +8,15 @@ const depthStyle = (depth: number): DepthStyle => ({ '--depth': depth });
 
 /** A sidebar entry: icon and label on the rail's ground; collapses to an icon tile on the rail. */
 export const NAV_ITEM = cn(
-    'relative flex w-full cursor-pointer items-center gap-2.5 overflow-hidden rounded-xl border-0 bg-transparent px-2.5 py-2 text-left text-[0.86rem] font-medium whitespace-nowrap text-[var(--text-secondary)]',
+    'relative flex w-full cursor-pointer items-center gap-2.5 overflow-hidden rounded-xl border-0 bg-transparent px-2.5 py-2 text-left text-[0.86rem] font-medium whitespace-nowrap text-body',
     'transition-[background-color,color,transform,box-shadow] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100',
-    'pointer-fine:hover:translate-x-0.5 pointer-fine:hover:bg-white/70 pointer-fine:hover:text-[#111827] motion-reduce:pointer-fine:hover:translate-x-0',
+    'pointer-fine:hover:translate-x-0.5 pointer-fine:hover:bg-white/70 pointer-fine:hover:text-foreground motion-reduce:pointer-fine:hover:translate-x-0',
     'group-data-[rail=true]/sidebar:h-10 group-data-[rail=true]/sidebar:w-10 group-data-[rail=true]/sidebar:justify-center group-data-[rail=true]/sidebar:gap-0 group-data-[rail=true]/sidebar:p-0 pointer-fine:group-data-[rail=true]/sidebar:hover:translate-x-0',
 );
 /** The text beside a nav item's icon; hidden on the rail. */
 export const NAV_TEXT = 'flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-ellipsis group-data-[rail=true]/sidebar:hidden';
 /** A nav item whose section is open. */
-export const NAV_EXPANDED = 'font-semibold text-[var(--accent-strong)]';
+export const NAV_EXPANDED = 'font-semibold text-brand';
 
 interface SectionHeaderProps {
     icon: React.ReactNode;
@@ -58,8 +58,8 @@ export const TreeAction: React.FC<TreeActionProps> = ({ label, onClick, children
     <button
         type="button"
         className={cn(
-            'inline-flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-[#78716c] transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-strong)]',
-            tone === 'danger' ? 'hover:text-[var(--status-error)]' : 'hover:text-[var(--text-primary)]',
+            'inline-flex size-6 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent p-0 text-muted-foreground transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand',
+            tone === 'danger' ? 'hover:text-destructive' : 'hover:text-foreground',
         )}
         title={label}
         aria-label={label}
@@ -111,7 +111,7 @@ export const TreeRow: React.FC<TreeRowProps> = ({
             {expandable && <ChevronRight className="size-3.5" />}
         </span>
     );
-    const iconSpan = <span className={cn('inline-flex flex-none', active ? 'text-[var(--accent-strong)]' : 'text-[#78716c]')} aria-hidden="true">{icon}</span>;
+    const iconSpan = <span className={cn('inline-flex flex-none', active ? 'text-brand' : 'text-muted-foreground')} aria-hidden="true">{icon}</span>;
 
     return (
         // --row-bg is the row's current ground, so the actions' fade matches it.
@@ -125,7 +125,7 @@ export const TreeRow: React.FC<TreeRowProps> = ({
             style={depthStyle(depth)}
         >
             {editor ? (
-                <div className={cn(ROW_MAIN, 'text-[var(--text-secondary)]')}>
+                <div className={cn(ROW_MAIN, 'text-body')}>
                     {chevron}
                     {iconSpan}
                     {editor}
@@ -135,8 +135,8 @@ export const TreeRow: React.FC<TreeRowProps> = ({
                     type="button"
                     className={cn(
                         ROW_MAIN,
-                        'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--accent-strong)]',
-                        active ? 'font-semibold text-[var(--text-primary)]' : 'font-medium text-[var(--text-secondary)] group-hover/row:text-[var(--text-primary)]',
+                        'cursor-pointer focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand',
+                        active ? 'font-semibold text-foreground' : 'font-medium text-body group-hover/row:text-foreground',
                     )}
                     title={title}
                     aria-expanded={expandable ? expanded : undefined}

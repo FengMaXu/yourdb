@@ -23,7 +23,7 @@ body {
   min-height: 100%;
   overflow: hidden;
   background: var(--frame-backdrop);
-  color: var(--text-primary);
+  color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -40,7 +40,7 @@ body {
 }
 
 :is(a, button, input, select, textarea):focus-visible {
-  outline: 2px solid var(--accent-strong);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 

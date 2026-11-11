@@ -75,7 +75,7 @@ const knowledgeLabel = (file: KnowledgeFile): string => (
 );
 
 /** Footer entries sit a little tighter than the main ones, and keep their height on the rail. */
-const FOOTER_ITEM = 'min-h-9 justify-start rounded-[10px] group-data-[rail=true]/sidebar:h-auto group-data-[rail=true]/sidebar:min-h-9';
+const FOOTER_ITEM = 'min-h-9 justify-start rounded-lg group-data-[rail=true]/sidebar:h-auto group-data-[rail=true]/sidebar:min-h-9';
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = false, pinned = true, onExpand, onTogglePinned }) => {
     const {
@@ -332,15 +332,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                 className="group/sidebar relative m-0 flex h-full w-full max-w-none min-w-0 shrink-0 flex-col justify-between overflow-hidden rounded-none border-0 bg-transparent p-0 pb-3 shadow-none"
                 aria-label={t('sidebar.navigation')}
             >
-                <div className={cn('flex h-14 flex-none items-center border-b border-[var(--hairline)]', collapsed ? 'justify-center p-0' : 'justify-between gap-2 pr-3 pl-5')}>
+                <div className={cn('flex h-14 flex-none items-center border-b border-border', collapsed ? 'justify-center p-0' : 'justify-between gap-2 pr-3 pl-5')}>
                     {collapsed ? (
-                        <div className="flex items-center text-[0.82rem] leading-none font-bold tracking-[-0.02em] text-[#1f2937] [&_.brand-wordmark]:h-[13px]"><BrandWordmark title="yourdb" /></div>
+                        <div className="flex items-center text-[0.82rem] leading-none font-bold tracking-[-0.02em] text-foreground [&_.brand-wordmark]:h-[13px]"><BrandWordmark title="yourdb" /></div>
                     ) : (
                         <>
-                            <div className="flex items-center text-xl leading-none font-bold tracking-[-0.04em] text-[#1f2937] max-[720px]:text-base max-[480px]:text-[0.95rem] [&_.brand-wordmark]:h-[22px]"><BrandWordmark title="yourdb" /></div>
+                            <div className="flex items-center text-xl leading-none font-bold tracking-[-0.04em] text-foreground max-[720px]:text-base max-[480px]:text-[0.95rem] [&_.brand-wordmark]:h-[22px]"><BrandWordmark title="yourdb" /></div>
                             <button
                                 type="button"
-                                className="inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-[#78716c] transition-colors active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] pointer-fine:hover:bg-[var(--tree-row-hover)] pointer-fine:hover:text-[var(--text-primary)]"
+                                className="inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground transition-colors active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand pointer-fine:hover:bg-[var(--tree-row-hover)] pointer-fine:hover:text-foreground"
                                 onClick={onTogglePinned}
                                 aria-expanded={pinned}
                                 aria-controls="workspace-sidebar"
@@ -392,7 +392,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                 }}
                                                 editor={editing ? (
                                                     <input
-                                                        className="mr-[30px] h-6 min-w-0 flex-auto rounded-md border border-[var(--hairline)] bg-[var(--frame-surface)] px-1.5 text-[0.82rem] text-[var(--text-primary)] outline-none focus:border-[rgba(194,65,12,0.45)]"
+                                                        className="mr-[30px] h-6 min-w-0 flex-auto rounded-md border border-border bg-[var(--frame-surface)] px-1.5 text-[0.82rem] text-foreground outline-none focus:border-[rgba(194,65,12,0.45)]"
                                                         value={editTaskName}
                                                         onChange={(event) => setEditTaskName(event.target.value)}
                                                         onKeyDown={(event) => {
@@ -561,14 +561,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                     <DialogContent
                         showCloseButton={false}
                         overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[6px] supports-backdrop-filter:backdrop-blur-[6px] motion-reduce:animate-none"
-                        className="z-[2000] flex h-full max-h-none w-[calc(100vw-32px)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl bg-[var(--surface-bg)] p-0 text-[length:inherit] shadow-[0_34px_90px_-42px_rgba(17,24,39,0.7)] ring-0 motion-reduce:animate-none sm:max-w-none min-[421px]:h-[calc(100%-16px)] min-[721px]:h-[80vh] min-[721px]:max-h-[90vh] min-[721px]:w-[800px] min-[721px]:max-w-[calc(100vw-32px)] min-[721px]:rounded-3xl"
+                        className="z-[2000] flex h-full max-h-none w-[calc(100vw-32px)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl bg-background p-0 text-[length:inherit] shadow-[0_34px_90px_-42px_rgba(28,25,23,0.7)] ring-0 motion-reduce:animate-none sm:max-w-none min-[421px]:h-[calc(100%-16px)] min-[721px]:h-[80vh] min-[721px]:max-h-[90vh] min-[721px]:w-[800px] min-[721px]:max-w-[calc(100vw-32px)] min-[721px]:rounded-3xl"
                     >
-                        <div className="flex items-center justify-between border-b border-[var(--border-light)] bg-[#fafafa] px-5 py-4">
+                        <div className="flex items-center justify-between border-b border-border bg-paper px-5 py-4">
                             <DialogTitle className="flex items-center gap-2 text-[0.9rem] font-medium text-foreground"><FileText size={16} aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></DialogTitle>
                             <div className="flex gap-1">
-                                {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[#f3f4f6] hover:text-foreground" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
-                                {isEditing && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[#ecfdf5] hover:text-[#10b981]" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
-                                <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-[var(--text-secondary)] transition-colors hover:bg-[#f3f4f6] hover:text-foreground" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
+                                {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-muted hover:text-foreground" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
+                                {isEditing && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-success-soft hover:text-success" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
+                                <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-muted hover:text-foreground" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
                             </div>
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -579,7 +579,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                             ) : (
                                 <textarea
                                     aria-label={knowledgeLabel(selectedFile)}
-                                    className="min-h-0 w-full flex-1 resize-none overflow-auto border-0 bg-[var(--surface-bg)] p-4 font-mono text-[0.85rem] leading-relaxed text-foreground outline-none"
+                                    className="min-h-0 w-full flex-1 resize-none overflow-auto border-0 bg-background p-4 font-mono text-[0.85rem] leading-relaxed text-foreground outline-none"
                                     value={fileContent}
                                     onChange={(event) => setFileContent(event.target.value)}
                                 />

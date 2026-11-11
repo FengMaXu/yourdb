@@ -1,14 +1,16 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { FILE_ACTION_BUTTON, FILE_ACTIONS } from '../file-actions';
 import { formatFieldValue, type ChartDataset, type SemanticsCheck } from '@data-agent/charts';
 import type { FieldMeta } from '@data-agent/contracts';
-import ChartSpecWidget from './ChartSpecWidget';
 import { useLanguage } from '../../context/LanguageContext';
 import { usePreview } from '../../context/PreviewContext';
 import { resolveWorkspaceDownloadUrl, resolveWorkspacePreviewUrl } from '../../utils/resolveInternalUrl';
 import { Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from 'lucide-react';
 
 export type WidgetKind = 'kpi' | 'metric_cards' | 'table' | 'chart' | 'steps' | 'rich_text' | 'echarts' | 'file_link';
+
+/** ECharts is large: it downloads only when a chart is first drawn, not with every page that shows widgets. */
+const ChartSpecWidget = lazy(() => import('./ChartSpecWidget'));
 
 const PREVIEWABLE_FILE_TYPES = new Set(['csv', 'gif', 'htm', 'html', 'jpeg', 'jpg', 'json', 'md', 'markdown', 'png', 'svg', 'txt', 'webp']);
 
@@ -259,11 +261,11 @@ const renderMetricCards = (widget: WidgetSpec, t: (key: string) => string) => {
     return (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
             {items.map((item, index) => (
-                <div key={index} className="rounded-xl border border-[#e5e7eb] bg-[#f9fafb] p-3">
-                    <div className="text-[12px] text-[#6b7280]">{toDisplayText(item.label ?? item.name, `${t('widgets.metric')} ${index + 1}`)}</div>
-                    <div className="mt-1.5 text-[24px] font-bold text-[#111827]">{toDisplayText(item.value, '--')}</div>
+                <div key={index} className="rounded-xl border border-border bg-paper p-3">
+                    <div className="text-[12px] text-muted-foreground">{toDisplayText(item.label ?? item.name, `${t('widgets.metric')} ${index + 1}`)}</div>
+                    <div className="mt-1.5 text-[24px] font-bold text-foreground">{toDisplayText(item.value, '--')}</div>
                     {(item.change ?? item.description) && (
-                        <div className="mt-1.5 text-[12px] text-[#4b5563]">{toDisplayText(item.change ?? item.description)}</div>
+                        <div className="mt-1.5 text-[12px] text-body">{toDisplayText(item.change ?? item.description)}</div>
                     )}
                 </div>
             ))}
@@ -284,7 +286,7 @@ const renderTable = (widget: WidgetSpec, t: (key: string) => string) => {
                 <thead>
                     <tr>
                         {columns.map((column: any, index: number) => (
-                            <th key={index} className="border-b border-[#e5e7eb] px-2.5 py-2 text-left font-semibold text-[#6b7280]">
+                            <th key={index} className="border-b border-border px-2.5 py-2 text-left font-semibold text-muted-foreground">
                                 {column.label ?? column.key ?? `${t('widgets.column')} ${index + 1}`}
                             </th>
                         ))}
@@ -294,7 +296,7 @@ const renderTable = (widget: WidgetSpec, t: (key: string) => string) => {
                     {rows.map((row, rowIndex) => (
                         <tr key={rowIndex}>
                             {columns.map((column: any, colIndex: number) => (
-                                <td key={colIndex} className="border-b border-[#f3f4f6] px-2.5 py-2 text-[#111827]">
+                                <td key={colIndex} className="border-b border-muted px-2.5 py-2 text-foreground">
                                     {cell(row[column.key], column)}
                                 </td>
                             ))}
@@ -348,12 +350,12 @@ const renderChart = (widget: WidgetSpec, t: (key: string) => string) => {
                 const width = `${Math.max(8, (value / maxValue) * 100)}%`;
                 return (
                     <div key={index} className="grid gap-1">
-                        <div className="flex justify-between text-[12px] text-[#4b5563]">
+                        <div className="flex justify-between text-[12px] text-body">
                             <span>{toDisplayText(point.label ?? point.x ?? point.name, `${t('widgets.dataPoint')} ${index + 1}`)}</span>
                             <span>{Number.isFinite(value) ? value : toDisplayText(point.value ?? point.y, '--')}</span>
                         </div>
-                        <div className="h-2.5 overflow-hidden rounded-full bg-[#f3f4f6]">
-                            <div className="h-full rounded-full bg-[#2563eb]" style={{ width }} />
+                        <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                            <div className="h-full rounded-full bg-link" style={{ width }} />
                         </div>
                     </div>
                 );
@@ -367,10 +369,10 @@ const renderSteps = (widget: WidgetSpec, t: (key: string) => string) => {
     return (
         <ol className="m-0 grid list-decimal gap-2.5 pl-5">
             {steps.map((step, index) => (
-                <li key={index} className="text-[#111827]">
+                <li key={index} className="text-foreground">
                     <div className="font-semibold">{toDisplayText(step.title ?? step.label, `${t('widgets.step')} ${index + 1}`)}</div>
                     {(step.description ?? step.content) && (
-                        <div className="mt-1 text-[13px] text-[#4b5563]">{toDisplayText(step.description ?? step.content)}</div>
+                        <div className="mt-1 text-[13px] text-body">{toDisplayText(step.description ?? step.content)}</div>
                     )}
                 </li>
             ))}
@@ -382,15 +384,15 @@ const renderRichTextBlock = (block: any, t: (key: string) => string) => {
     if (typeof block === 'string') return block;
     if (!block || typeof block !== 'object') return String(block ?? '');
     if (block.type === 'notice') {
-        return <div className="text-[12px] text-[#64748b]">{block.text || t('widgets.preview')}</div>;
+        return <div className="text-[12px] text-muted-foreground">{block.text || t('widgets.preview')}</div>;
     }
     if (block.type === 'table' && Array.isArray(block.headers) && Array.isArray(block.rows)) {
         const rows = block.rows.slice(0, 12).map((row: any) => (Array.isArray(row) ? row : Object.values(row || {})));
         return (
             <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-[13px]">
-                    <thead><tr>{block.headers.map((header: any, index: number) => <th key={index} className="border-b border-[#e5e7eb] px-[9px] py-[7px] text-left text-[#6b7280]">{String(header)}</th>)}</tr></thead>
-                    <tbody>{rows.map((row: any[], rowIndex: number) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border-b border-[#f3f4f6] px-[9px] py-[7px]">{String(cell ?? '')}</td>)}</tr>)}</tbody>
+                    <thead><tr>{block.headers.map((header: any, index: number) => <th key={index} className="border-b border-border px-[9px] py-[7px] text-left text-muted-foreground">{String(header)}</th>)}</tr></thead>
+                    <tbody>{rows.map((row: any[], rowIndex: number) => <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex} className="border-b border-muted px-[9px] py-[7px]">{String(cell ?? '')}</td>)}</tr>)}</tbody>
                 </table>
             </div>
         );
@@ -414,9 +416,9 @@ const renderRichText = (widget: WidgetSpec, t: (key: string) => string) => {
     }
     const truncated = visibleBlocks.length < blocks.length;
     return (
-        <div className="grid gap-2 text-[14px] leading-[1.6] text-[#111827]">
+        <div className="grid gap-2 text-[14px] leading-[1.6] text-foreground">
             {visibleBlocks.map((block, index) => <div key={index}>{renderRichTextBlock(block, t)}</div>)}
-            {truncated && <div className="text-[12px] text-[#64748b]">内容较长，完整报告请打开文件链接预览。</div>}
+            {truncated && <div className="text-[12px] text-muted-foreground">内容较长，完整报告请打开文件链接预览。</div>}
         </div>
     );
 };
@@ -472,15 +474,15 @@ const FileLinkWidget: React.FC<FileLinkWidgetProps> = ({ widget, t, currentSessi
     })();
 
     return (
-        <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-white">
-            <div className="flex items-center gap-4 bg-[#f9fafb] px-5 py-4">
-                <div className="flex items-center text-[#4b5563]"><FileIcon size={30} /></div>
+        <div className="overflow-hidden rounded-lg border border-border bg-white">
+            <div className="flex items-center gap-4 bg-paper px-5 py-4">
+                <div className="flex items-center text-body"><FileIcon size={30} /></div>
                 <div className="flex-1">
-                    <div className="mb-1 text-[16px] font-semibold text-[#1f2937]">
+                    <div className="mb-1 text-[16px] font-semibold text-foreground">
                         {title}
                     </div>
                     {subtitle && (
-                        <div className="text-[13px] text-[#6b7280]">
+                        <div className="text-[13px] text-muted-foreground">
                             {subtitle}
                         </div>
                     )}
@@ -523,7 +525,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
 
     const body = (() => {
         if (widget.status === 'error') {
-            return <div className="text-[13px] text-[#b91c1c]">{widget.error || t('widgets.renderFail')}</div>;
+            return <div className="text-[13px] text-destructive">{widget.error || t('widgets.renderFail')}</div>;
         }
 
         switch (widget.kind) {
@@ -535,7 +537,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
             case 'chart':
                 // Runtime-built ChartSpec widgets; charts replayed from earlier sessions keep the legacy renderer.
                 return widget.contractVersion === CURRENT_WIDGET_CONTRACT && widget.chartSpec && widget.dataset
-                    ? <ChartSpecWidget widget={{ chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} />
+                    ? <Suspense fallback={<div style={{ height: 360 }} />}><ChartSpecWidget widget={{ chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} /></Suspense>
                     : renderChart(widget, t);
             case 'steps':
                 return renderSteps(widget, t);
@@ -543,7 +545,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
                 return renderRichText(widget, t);
             case 'echarts':
                 // A raw ECharts option from an earlier Runtime; its contents were never checked, so it is not drawn (ADR-0008 decision 11).
-                return <div role="note" className="text-[13px] text-[#64748b]">{t('widgets.legacyEcharts')}</div>;
+                return <div role="note" className="text-[13px] text-muted-foreground">{t('widgets.legacyEcharts')}</div>;
             case 'file_link':
                 return <FileLinkWidget widget={widget} t={t} currentSessionId={currentSessionId} />;
             default:
@@ -552,9 +554,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
     })();
 
     return (
-        <div className="mt-2.5 rounded-[14px] border border-[#e5e7eb] bg-white p-3.5">
-            <div className="text-[15px] font-semibold text-[#111827]">{widget.title}</div>
-            {widget.subtitle && <div className="mt-1 text-[12px] text-[#6b7280]">{widget.subtitle}</div>}
+        <div className="mt-2.5 rounded-xl border border-border bg-white p-3.5">
+            <div className="text-[15px] font-semibold text-foreground">{widget.title}</div>
+            {widget.subtitle && <div className="mt-1 text-[12px] text-muted-foreground">{widget.subtitle}</div>}
             <div className="mt-3">{body}</div>
         </div>
     );

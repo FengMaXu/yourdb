@@ -34,14 +34,14 @@ interface AgentTurnProps<A extends TurnAgentMessage> {
 }
 
 /** A step of the process: a small dot, a label, sometimes a chevron. */
-const ROW = 'group/row flex w-fit max-w-full cursor-default list-none items-center gap-2 rounded-[7px] border-0 bg-transparent px-2 py-[3px] text-left text-[0.84rem] leading-[1.5] text-[#78716c] [font-family:inherit] transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent-strong)] motion-reduce:transition-none [&::-webkit-details-marker]:hidden';
+const ROW = 'group/row flex w-fit max-w-full cursor-default list-none items-center gap-2 rounded-md border-0 bg-transparent px-2 py-[3px] text-left text-[0.84rem] leading-[1.5] text-muted-foreground [font-family:inherit] transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none [&::-webkit-details-marker]:hidden';
 /** A step that opens something: a pointer and a hover ground. */
-const ROW_ACTION = 'cursor-pointer hover:bg-[#f5f5f4] hover:text-[#1c1917]';
+const ROW_ACTION = 'cursor-pointer hover:bg-muted hover:text-foreground';
 const LABEL = 'min-w-0 truncate';
-const ROW_CHEVRON = 'flex-none text-[#a8a29e] opacity-0 transition-[opacity,transform] group-hover/row:opacity-100 group-focus-visible/row:opacity-100 motion-reduce:transition-none';
+const ROW_CHEVRON = 'flex-none text-faint opacity-0 transition-[opacity,transform] group-hover/row:opacity-100 group-focus-visible/row:opacity-100 motion-reduce:transition-none';
 const STEP = 'min-w-0 animate-trace-in motion-reduce:animate-none';
 /** Live text: a light sweeps across it; plain under reduced motion. */
-const SHIMMER = 'animate-trace-shimmer bg-[linear-gradient(90deg,#78716c_0%,#78716c_40%,#d6d3d1_50%,#78716c_60%,#78716c_100%)] bg-[length:250%_100%] bg-clip-text text-transparent motion-reduce:animate-none motion-reduce:bg-none motion-reduce:text-[#78716c]';
+const SHIMMER = 'animate-trace-shimmer bg-[linear-gradient(90deg,var(--muted-foreground)_0%,var(--muted-foreground)_40%,var(--border-strong)_50%,var(--muted-foreground)_60%,var(--muted-foreground)_100%)] bg-[length:250%_100%] bg-clip-text text-transparent motion-reduce:animate-none motion-reduce:bg-none motion-reduce:text-muted-foreground';
 
 /** A step's dot; a live one is accent and sends out a ring. */
 function Dot({ live }: { live: boolean }) {
@@ -49,7 +49,7 @@ function Dot({ live }: { live: boolean }) {
         <span
             className={cn(
                 'relative size-[5px] flex-none rounded-full bg-current',
-                live ? "bg-[var(--accent-strong)] opacity-100 after:absolute after:inset-0 after:animate-trace-pulse after:rounded-[inherit] after:bg-inherit after:content-[''] motion-reduce:after:animate-none" : 'opacity-55',
+                live ? "bg-brand opacity-100 after:absolute after:inset-0 after:animate-trace-pulse after:rounded-[inherit] after:bg-inherit after:content-[''] motion-reduce:after:animate-none" : 'opacity-55',
             )}
             aria-hidden="true"
         />
@@ -116,7 +116,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                             <span className={cn(LABEL, live && SHIMMER)}>{live ? t('trace.thinking') : t('trace.thought')}</span>
                             <ChevronRight size={13} className={cn(ROW_CHEVRON, 'group-open/thought:rotate-90 group-open/thought:opacity-100')} aria-hidden="true" />
                         </summary>
-                        <div className="mt-0.5 mr-0 mb-1.5 ml-[21px] max-h-[260px] overflow-y-auto rounded-[9px] bg-[#fafaf9] px-3 py-2 text-[0.82rem] leading-[1.65] wrap-anywhere whitespace-pre-wrap text-[#57534e]">{step.text}</div>
+                        <div className="mt-0.5 mr-0 mb-1.5 ml-[21px] max-h-[260px] overflow-y-auto rounded-md bg-paper px-3 py-2 text-[0.82rem] leading-[1.65] wrap-anywhere whitespace-pre-wrap text-body">{step.text}</div>
                     </details>
                 </li>
             );
@@ -125,7 +125,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
             return (
                 <li key={step.key} className={STEP}>
                     {/* The note's own tight spacing outranks the document spacing ([&&…] doubles the class). */}
-                    <div className={`py-0.5 pr-2 pl-[21px] text-[0.86rem] leading-[1.65] text-[#57534e] [&&_:is(ol,p,ul)]:mt-0 [&&_:is(ol,p,ul)]:mb-1 ${MARKDOWN_DOCUMENT}`}>
+                    <div className={`py-0.5 pr-2 pl-[21px] text-[0.86rem] leading-[1.65] text-body [&&_:is(ol,p,ul)]:mt-0 [&&_:is(ol,p,ul)]:mb-1 ${MARKDOWN_DOCUMENT}`}>
                         <AgentMarkdown currentSessionId={currentSessionId}>{step.text}</AgentMarkdown>
                     </div>
                 </li>
@@ -138,7 +138,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 <li key={step.key} className={STEP}>
                     <button
                         type="button"
-                        className={cn(ROW, onOpenToolPanel && ROW_ACTION, step.tool.status === 'error' && 'text-[var(--status-error,#dc2626)]')}
+                        className={cn(ROW, onOpenToolPanel && ROW_ACTION, step.tool.status === 'error' && 'text-destructive')}
                         onClick={onOpenToolPanel}
                         disabled={!onOpenToolPanel}
                         aria-label={label}
@@ -171,14 +171,14 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                     <Trace className="mb-1.5 gap-0">
                         <TraceCollapsible open={open} onOpenChange={(next) => setUserOpen(next)}>
                             <TraceCollapsibleTrigger
-                                className="-ml-2 gap-2 rounded-lg border-0 bg-transparent px-2 py-[5px] text-[0.85rem] leading-[1.4] text-[#78716c] [font-family:inherit] hover:bg-[#f5f5f4] hover:text-[#1c1917] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--accent-strong)] motion-reduce:transition-none [&_[data-slot=trace-icon]]:ml-0 [&_[data-slot=trace-icon]]:size-3.5 [&_[data-slot=trace-icon]]:text-[#a8a29e] motion-reduce:[&_[data-slot=trace-icon]]:transition-none"
+                                className="-ml-2 gap-2 rounded-lg border-0 bg-transparent px-2 py-[5px] text-[0.85rem] leading-[1.4] text-muted-foreground [font-family:inherit] hover:bg-muted hover:text-foreground focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none [&_[data-slot=trace-icon]]:ml-0 [&_[data-slot=trace-icon]]:size-3.5 [&_[data-slot=trace-icon]]:text-faint motion-reduce:[&_[data-slot=trace-icon]]:transition-none"
                             >
                                 <TraceTitle className={cn('overflow-visible font-[550] whitespace-nowrap', running && SHIMMER)}>{headline}</TraceTitle>
-                                {summaryParts.length > 0 && <span className={cn('truncate', failed ? 'text-[#dc2626]' : 'text-[#a8a29e]')}>{summaryParts.join(' · ')}</span>}
+                                {summaryParts.length > 0 && <span className={cn('truncate', failed ? 'text-destructive' : 'text-faint')}>{summaryParts.join(' · ')}</span>}
                             </TraceCollapsibleTrigger>
                             <TraceCollapsibleContent id={bodyId} className="m-0 border-l-0 p-0 leading-normal text-inherit motion-reduce:transition-none">
                                 {steps.length > 0 ? (
-                                    <ol className="mt-1 mr-0 mb-1.5 ml-[3px] grid list-none gap-px border-l border-[var(--hairline)] py-0 pr-0 pl-2.5">{steps.map(renderStep)}</ol>
+                                    <ol className="mt-1 mr-0 mb-1.5 ml-[3px] grid list-none gap-px border-l border-border py-0 pr-0 pl-2.5">{steps.map(renderStep)}</ol>
                                 ) : (
                                     <div className={ROW}><Dot live /><span className={cn(LABEL, SHIMMER)}>{t('trace.thinking')}</span></div>
                                 )}
@@ -198,13 +198,13 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 ))}
 
                 {lastAgent?.retryNotice && (
-                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{lastAgent.retryNotice}</span></div>
+                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-body"><span>{lastAgent.retryNotice}</span></div>
                 )}
                 {connectionNotice && (
-                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{connectionNotice}</span></div>
+                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-body"><span>{connectionNotice}</span></div>
                 )}
                 {result === undefined && !running && !hasProcess && lastAgent?.statusNotice && (
-                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-[var(--text-secondary)]"><span>{lastAgent.statusNotice}</span></div>
+                    <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-body"><span>{lastAgent.statusNotice}</span></div>
                 )}
             </div>
         </div>

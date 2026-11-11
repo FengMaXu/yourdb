@@ -23,7 +23,7 @@ const SubagentProgressLines: React.FC<{ progress: SubagentChildProgress[] }> = (
                 return (
                     <div
                         key={child.key}
-                        className={`flex min-w-0 items-center gap-2 border-0 bg-transparent p-0 pl-[21px] text-left text-[length:var(--agent-detail-font-size)] leading-[1.58] [font-family:inherit] ${child.output === 'none' ? 'text-[var(--status-error)]' : 'text-[var(--text-tertiary)]'}`}
+                        className={`flex min-w-0 items-center gap-2 border-0 bg-transparent p-0 pl-[21px] text-left text-[length:var(--agent-detail-font-size)] leading-[1.58] [font-family:inherit] ${child.output === 'none' ? 'text-destructive' : 'text-muted-foreground'}`}
                         title={line}
                     >
                         <span className={`size-[5px] shrink-0 rounded-full bg-current ${child.output === 'none' ? 'opacity-100' : 'opacity-60'}`} aria-hidden="true" />

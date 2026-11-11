@@ -410,7 +410,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
     return (
         <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="settings-page-title">
-            <header className="flex h-14 flex-none items-center border-b border-[var(--hairline)] px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-[var(--text-primary)]">
+            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
                 <h1 id="settings-page-title">{t(`settings.${section}`)}</h1>
             </header>
 
@@ -419,10 +419,10 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                 {activeMenu === '模型' && (
                     <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
                         {/* Internal Sidebar for Model */}
-                        <nav className="flex w-[216px] flex-[0_0_216px] flex-col gap-px overflow-y-auto border-r border-border bg-[#fafaf9] px-3 py-4 max-[720px]:max-h-40 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-row max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label={t('settings.providers')}>
+                        <nav className="flex w-[216px] flex-[0_0_216px] flex-col gap-px overflow-y-auto border-r border-border bg-paper px-3 py-4 max-[720px]:max-h-40 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-row max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label={t('settings.providers')}>
                             <button
                                 type="button"
-                                className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-[#f2f1ef] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap mb-3.5 max-[720px]:mb-0', modelProvider === '模型设置' && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
+                                className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap mb-3.5 max-[720px]:mb-0', modelProvider === '模型设置' && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
                                 aria-current={modelProvider === '模型设置' ? 'page' : undefined}
                                 onClick={() => setModelProvider('模型设置')}
                             >
@@ -430,16 +430,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                 <span>{t('settings.modelSettings')}</span>
                             </button>
 
-                            <div className="px-2.5 pb-1.5 font-mono text-[0.7rem] text-[#a8a29e] before:content-['--_'] max-[720px]:hidden">{t('settings.providers')}</div>
+                            <div className="px-2.5 pb-1.5 font-mono text-[0.7rem] text-faint before:content-['--_'] max-[720px]:hidden">{t('settings.providers')}</div>
                             {providers.map(p => (
                                 <button
                                     key={p.id}
                                     type="button"
-                                    className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-[#f2f1ef] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap', modelProvider === p.id && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
+                                    className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap', modelProvider === p.id && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
                                     aria-current={modelProvider === p.id ? 'page' : undefined}
                                     onClick={() => setModelProvider(p.id)}
                                 >
-                                    <span className="size-1.5 flex-none rounded-full bg-[#d6d3d1] transition-colors data-[on=true]:bg-[#047857] data-[on=true]:shadow-[0_0_0_3px_rgba(4,120,87,0.12)]" data-on={providerConfigs[p.id]?.enabled ? 'true' : undefined} aria-hidden="true" />
+                                    <span className="size-1.5 flex-none rounded-full bg-border-strong transition-colors data-[on=true]:bg-success data-[on=true]:shadow-[0_0_0_3px_rgba(4,120,87,0.12)]" data-on={providerConfigs[p.id]?.enabled ? 'true' : undefined} aria-hidden="true" />
                                     <span>{p.label}</span>
                                 </button>
                             ))}
@@ -491,7 +491,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                                 </span>
                                             </h3>
                                             {saveFeedback && providerConfigs[modelProvider]?.enabled && (
-                                                <span role="status" aria-live="polite" className={cn('mt-1.5 block text-[0.8rem]', saveFeedback.startsWith('✗') ? 'text-destructive' : 'text-[#047857]')}>
+                                                <span role="status" aria-live="polite" className={cn('mt-1.5 block text-[0.8rem]', saveFeedback.startsWith('✗') ? 'text-destructive' : 'text-success')}>
                                                     {saveFeedback}
                                                 </span>
                                             )}
@@ -565,7 +565,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                         />
                                     </div>
 
-                                    <div className={cn(UI.alert, '[&_span]:inline-flex [&_span]:items-start [&_span]:gap-2 [&_svg]:mt-1 [&_svg]:flex-none [&_svg]:text-[#a8a29e]')}>
+                                    <div className={cn(UI.alert, '[&_span]:inline-flex [&_span]:items-start [&_span]:gap-2 [&_svg]:mt-1 [&_svg]:flex-none [&_svg]:text-faint')}>
                                         <span><SettingsIcon size={14} aria-hidden="true" /> {t('settings.configLocalHint')}</span>
                                     </div>
                                 </div>

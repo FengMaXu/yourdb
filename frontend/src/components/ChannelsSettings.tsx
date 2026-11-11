@@ -24,6 +24,7 @@ const POLL_MS = 2000;
 const PLATFORM: Record<string, { name: string; color: string; glyph: string; pitch: string; running: string; scan: string }> = {
     weixin: {
         name: '微信',
+        // eslint-disable-next-line no-restricted-syntax -- WeChat's own brand colour, not ours.
         color: '#07C160',
         glyph: '微',
         pitch: '扫码登录，自动绑定。在微信里和机器人私聊提问。',
@@ -32,6 +33,7 @@ const PLATFORM: Record<string, { name: string; color: string; glyph: string; pit
     },
     feishu: {
         name: '飞书',
+        // eslint-disable-next-line no-restricted-syntax -- Feishu's own brand colour, not ours.
         color: '#3370FF',
         glyph: '飞',
         pitch: '扫码创建飞书应用。私聊提问，或在群里 @ 机器人。',
@@ -39,14 +41,14 @@ const PLATFORM: Record<string, { name: string; color: string; glyph: string; pit
         scan: '用手机飞书扫码，按页面提示创建机器人并确认授权。',
     },
 };
-const platformOf = (channel: Pick<ChannelStatusView, 'id' | 'label'>) => PLATFORM[channel.id] ?? { name: channel.label, color: '#78716c', glyph: channel.label.slice(0, 1), pitch: `扫码接入${channel.label}。`, running: '运行中。', scan: `用手机${channel.label}扫码接入。` };
+const platformOf = (channel: Pick<ChannelStatusView, 'id' | 'label'>) => PLATFORM[channel.id] ?? { name: channel.label, color: 'var(--muted-foreground)', glyph: channel.label.slice(0, 1), pitch: `扫码接入${channel.label}。`, running: '运行中。', scan: `用手机${channel.label}扫码接入。` };
 
 const DOT: Record<ChannelStatusView['state'], string> = {
-    connected: 'bg-[#16a34a]',
-    paused: 'bg-[#a8a29e]',
-    provisioning: 'bg-[#f59e0b]',
-    failed: 'bg-[#dc2626]',
-    unconfigured: 'bg-[#d6d3d1]',
+    connected: 'bg-success',
+    paused: 'bg-faint',
+    provisioning: 'bg-warning',
+    failed: 'bg-destructive',
+    unconfigured: 'bg-border-strong',
 };
 const STATE_TEXT: Record<ChannelStatusView['state'], string> = {
     connected: '运行中',
@@ -75,7 +77,7 @@ const isBot = (channel: ChannelStatusView) => channel.state !== 'unconfigured';
 const Mark: React.FC<{ channel: Pick<ChannelStatusView, 'id' | 'label'>; size?: number }> = ({ channel, size = 36 }) => {
     const platform = platformOf(channel);
     return (
-        <span aria-hidden="true" className="grid flex-none place-items-center rounded-[10px] font-semibold text-white" style={{ width: size, height: size, background: platform.color, fontSize: size * 0.42 }}>
+        <span aria-hidden="true" className="grid flex-none place-items-center rounded-lg font-semibold text-white" style={{ width: size, height: size, background: platform.color, fontSize: size * 0.42 }}>
             {platform.glyph}
         </span>
     );
@@ -96,9 +98,9 @@ const QrLink: React.FC<{ channel: ChannelStatusView; url: string; expiresAt: num
     }, []);
     const seconds = Math.max(0, Math.round((expiresAt - now) / 1000));
     return (
-        <div className="flex items-center gap-6 rounded-xl bg-[#fafaf9] p-4 max-[720px]:flex-col max-[720px]:items-start [&_img]:flex-none [&_img]:rounded-[10px] [&_img]:bg-white [&_img]:shadow-[0_0_0_1px_var(--border),0_8px_24px_-16px_rgba(28,25,23,0.3)]">
+        <div className="flex items-center gap-6 rounded-xl bg-paper p-4 max-[720px]:flex-col max-[720px]:items-start [&_img]:flex-none [&_img]:rounded-lg [&_img]:bg-white [&_img]:shadow-[0_0_0_1px_var(--border),0_8px_24px_-16px_rgba(28,25,23,0.3)]">
             {image ? <img src={image} width={168} height={168} alt={`用${platform.name}扫码接入`} /> : <Loader2 size={24} className="animate-spin" />}
-            <div className="grid gap-1 text-[0.875rem] leading-[1.7] text-[#44403c] [&_a]:text-brand">
+            <div className="grid gap-1 text-[0.875rem] leading-[1.7] text-body-strong [&_a]:text-brand">
                 <div>{platform.scan}</div>
                 {channel.id === 'feishu' && <div>也可以 <a href={url} target="_blank" rel="noreferrer">在本机飞书中打开</a>。</div>}
                 <div className="text-[0.8rem] text-muted-foreground">{seconds > 0 ? `二维码 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒后过期` : '二维码已过期，请重新扫码'}</div>
@@ -119,7 +121,7 @@ const Row: React.FC<{ title: string; desc: React.ReactNode; children?: React.Rea
 );
 
 const Panel: React.FC<{ label: string; children: React.ReactNode; className?: string }> = ({ label, children, className }) => (
-    <section aria-label={label} className={cn('overflow-hidden rounded-[14px] border border-border bg-white', className)}>{children}</section>
+    <section aria-label={label} className={cn('overflow-hidden rounded-xl border border-border bg-white', className)}>{children}</section>
 );
 
 /**
@@ -151,7 +153,7 @@ const LinkAccount: React.FC = () => {
             {(link || failed) && (
                 <div className="basis-full max-[720px]:basis-auto">
                     {link && seconds > 0 && (
-                        <div className="grid gap-1.5 rounded-xl bg-[#fafaf9] px-4 py-3.5 text-[0.9rem] leading-[1.7] text-[#44403c]">
+                        <div className="grid gap-1.5 rounded-xl bg-paper px-4 py-3.5 text-[0.9rem] leading-[1.7] text-body-strong">
                             <div>在与机器人的<strong>私聊</strong>中发送：<code className={cn(UI.code, 'text-[1.05rem] font-semibold tracking-[0.02em]')}>/bind {link.code}</code></div>
                             <div className="text-[0.8rem] text-muted-foreground">绑定码只能用一次，{Math.floor(seconds / 60)} 分 {seconds % 60} 秒后过期。不要发到群里。</div>
                         </div>
@@ -186,8 +188,8 @@ const AccessList: React.FC<{ channelId: string; access: ChannelAccessView | unde
                             {requests.length === 0 ? <p className={UI.empty}>没有待处理的申请。</p> : (
                                 <div className="grid gap-2">
                                     {requests.map((request) => (
-                                        <div key={request.id} role="group" aria-label={`申请 ${shortId(request.requester.externalUserId)}`} className="flex items-center gap-2.5 rounded-xl border border-[#fde68a] bg-[#fffbeb] px-3.5 py-3 max-[720px]:flex-wrap">
-                                            <div className="min-w-0 flex-1 text-[0.85rem] text-[#44403c]">
+                                        <div key={request.id} role="group" aria-label={`申请 ${shortId(request.requester.externalUserId)}`} className="flex items-center gap-2.5 rounded-xl border border-warning-border bg-warning-soft px-3.5 py-3 max-[720px]:flex-wrap">
+                                            <div className="min-w-0 flex-1 text-[0.85rem] text-body-strong">
                                                 <div>{shortId(request.requester.externalUserId)} · {request.audience === 'group' ? '群聊' : '私聊'} · {when(request.at)}</div>
                                                 {request.text && <div className="mt-1 break-all text-muted-foreground">“{request.text}”</div>}
                                             </div>
@@ -243,7 +245,7 @@ const Picker: React.FC<{ channels: ChannelStatusView[]; busy: string | undefined
                         type="button"
                         disabled={exists || busy === channel.id}
                         onClick={() => onPick(channel.id)}
-                        className="flex cursor-pointer items-center gap-4 rounded-[14px] border border-border bg-white px-5 py-4 text-left [font:inherit] transition-[border-color,box-shadow] enabled:hover:border-[#d6d3d1] enabled:hover:shadow-[0_8px_24px_-18px_rgba(28,25,23,0.35)] disabled:cursor-default disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                        className="flex cursor-pointer items-center gap-4 rounded-xl border border-border bg-white px-5 py-4 text-left [font:inherit] transition-[border-color,box-shadow] enabled:hover:border-border-strong enabled:hover:shadow-[0_8px_24px_-18px_rgba(28,25,23,0.35)] disabled:cursor-default disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                     >
                         <Mark channel={channel} size={40} />
                         <span className="min-w-0 flex-1">
@@ -319,7 +321,7 @@ const BotDetail: React.FC<{
                 <div className="grid gap-2.5 border-t border-border px-5 py-4">
                     {channel.provisioning && channel.state === 'provisioning' && <QrLink channel={channel} url={channel.provisioning.url} expiresAt={channel.provisioning.expiresAt} />}
                     {channel.state !== 'provisioning' && (
-                        <div className="rounded-xl bg-[#fafaf9] px-4 py-3 text-[0.85rem] leading-[1.7] text-[#44403c]">
+                        <div className="rounded-xl bg-paper px-4 py-3 text-[0.85rem] leading-[1.7] text-body-strong">
                             请在{platform.name}里向机器人发送任意消息；第一条消息会收到欢迎和命令说明。
                         </div>
                     )}
@@ -361,7 +363,7 @@ const BotDetail: React.FC<{
 
             <Panel label="删除机器人">
                 <Row title="删除机器人" desc="删除凭据并清空授权名单。之后要用，需要重新扫码。">
-                    <button type="button" className={cn(UI.btn, 'border-[#fecaca] bg-[#fef2f2] text-destructive enabled:hover:border-[#fca5a5] enabled:hover:bg-[#fee2e2]')} disabled={busy} onClick={onDelete}>
+                    <button type="button" className={cn(UI.btn, 'border-destructive-border bg-destructive-soft text-destructive enabled:hover:border-destructive-border enabled:hover:bg-destructive-soft')} disabled={busy} onClick={onDelete}>
                         <Trash2 size={15} aria-hidden="true" />
                         删除机器人
                     </button>
@@ -435,10 +437,10 @@ const ChannelsSettings: React.FC = () => {
         <div className="flex max-w-[1040px] flex-col gap-4">
             <p className={UI.lead}>把飞书、微信接入数据智能体：在手机上直接提问，接收查询结果和看板。</p>
             <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-4 max-[900px]:grid-cols-1">
-                <nav aria-label="机器人列表" className="grid gap-1.5 rounded-[14px] border border-border bg-[#fafaf9] p-2">
+                <nav aria-label="机器人列表" className="grid gap-1.5 rounded-xl border border-border bg-paper p-2">
                     <button
                         type="button"
-                        className={cn(UI.btn, 'w-full justify-start', !current && 'border-[#d6d3d1] bg-white')}
+                        className={cn(UI.btn, 'w-full justify-start', !current && 'border-border-strong bg-white')}
                         aria-current={!current ? 'page' : undefined}
                         onClick={() => setSelected('new')}
                     >
@@ -455,7 +457,7 @@ const ChannelsSettings: React.FC = () => {
                                 aria-current={active ? 'page' : undefined}
                                 onClick={() => setSelected(bot.id)}
                                 className={cn(
-                                    'flex w-full cursor-pointer items-center gap-3 rounded-[11px] border border-transparent bg-transparent px-2.5 py-2.5 text-left [font:inherit] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
+                                    'flex w-full cursor-pointer items-center gap-3 rounded-lg border border-transparent bg-transparent px-2.5 py-2.5 text-left [font:inherit] transition-colors hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand',
                                     active && 'border-border bg-white shadow-[0_1px_2px_rgba(28,25,23,0.05)]',
                                 )}
                             >

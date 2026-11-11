@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 /** Inputs on the MCP pages: 40px, the stone hairline, the brand focus ring. */
-export const MCP_INPUT = 'h-10 rounded-[10px] border-input bg-white px-3 text-sm text-foreground md:text-sm placeholder:text-[#a8a29e] hover:border-[#d6d3d1] focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/15';
+export const MCP_INPUT = 'h-10 rounded-lg border-input bg-white px-3 text-sm text-foreground md:text-sm placeholder:text-faint hover:border-border-strong focus-visible:border-brand focus-visible:ring-4 focus-visible:ring-brand/15';
 export const MCP_CODE = 'font-mono text-[0.8rem] md:text-[0.8rem]';
 const FOCUS = 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand focus-visible:ring-0 focus-visible:border-transparent';
 
@@ -14,10 +14,10 @@ export function McpButton({ primary = false, busy = false, className, children, 
         <Button
             variant={primary ? 'default' : 'outline'}
             className={cn(
-                'h-[34px] gap-1.5 rounded-[9px] px-4 text-[0.85rem] font-semibold active:not-disabled:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55',
+                'h-[34px] gap-1.5 rounded-md px-4 text-[0.85rem] font-semibold active:not-disabled:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-55',
                 primary
-                    ? 'border-foreground bg-foreground text-white shadow-[0_1px_2px_rgba(28,25,23,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[#292524] hover:bg-[#292524]'
-                    : 'border-input bg-white text-foreground shadow-[0_1px_1px_rgba(28,25,23,0.03)] hover:border-[#d6d3d1] hover:bg-[#fafaf9]',
+                    ? 'border-foreground bg-foreground text-white shadow-[0_1px_2px_rgba(28,25,23,0.2),inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-primary-hover hover:bg-primary-hover'
+                    : 'border-input bg-white text-foreground shadow-[0_1px_1px_rgba(28,25,23,0.03)] hover:border-border-strong hover:bg-paper',
                 FOCUS,
                 className,
             )}
@@ -41,7 +41,7 @@ export function McpStatus({ label, fg, bg, live }: { label: string; fg: string; 
 
 /** A neutral pill, such as "preset". */
 export function McpBadge({ children }: { children: React.ReactNode }) {
-    return <span className="inline-flex h-5 items-center rounded-full bg-[#f5f5f4] px-2 text-[0.72rem] leading-none font-[550] whitespace-nowrap text-body">{children}</span>;
+    return <span className="inline-flex h-5 items-center rounded-full bg-muted px-2 text-[0.72rem] leading-none font-[550] whitespace-nowrap text-body">{children}</span>;
 }
 
 /** A small coloured dot; a live one sends out a fading copy of itself. */
@@ -58,8 +58,8 @@ export function McpIconTile({ off = false, children }: { off?: boolean; children
     return (
         <span
             className={cn(
-                'grid size-10 flex-none place-items-center rounded-[11px] transition-colors [&_svg]:size-[18px]',
-                off ? 'bg-[#f5f5f4] text-[#a8a29e] shadow-[inset_0_0_0_1px_var(--border)]' : 'bg-brand-soft text-brand shadow-[inset_0_0_0_1px_rgba(194,65,12,0.08)]',
+                'grid size-10 flex-none place-items-center rounded-lg transition-colors [&_svg]:size-[18px]',
+                off ? 'bg-muted text-faint shadow-[inset_0_0_0_1px_var(--border)]' : 'bg-brand-soft text-brand shadow-[inset_0_0_0_1px_rgba(194,65,12,0.08)]',
             )}
             aria-hidden="true"
         >

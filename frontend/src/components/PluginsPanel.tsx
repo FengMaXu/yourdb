@@ -37,7 +37,7 @@ function PaneTabs({ label, value, onChange, items }: { label: string; value: str
                     <TabsTrigger
                         key={item.value}
                         value={item.value}
-                        className="h-auto flex-none rounded-none border-0 px-0 pt-0 pb-3 text-[0.9rem] font-medium text-muted-foreground hover:text-foreground focus-visible:rounded-[4px] focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand data-active:font-semibold data-active:text-foreground group-data-horizontal/tabs:after:-bottom-px group-data-horizontal/tabs:after:rounded-t-[2px]"
+                        className="h-auto flex-none rounded-none border-0 px-0 pt-0 pb-3 text-[0.9rem] font-medium text-muted-foreground hover:text-foreground focus-visible:rounded-sm focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand data-active:font-semibold data-active:text-foreground group-data-horizontal/tabs:after:-bottom-px group-data-horizontal/tabs:after:rounded-t-[2px]"
                     >
                         {item.label}
                     </TabsTrigger>
@@ -52,7 +52,7 @@ function RevealButton({ label, onClick, disabled, children }: { label: string; o
     return (
         <button
             type="button"
-            className="group/reveal inline-flex h-[34px] cursor-pointer items-center border-0 bg-transparent px-2 whitespace-nowrap text-[#78716c] [font:inherit] transition-colors enabled:hover:text-[#1f2937] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]"
+            className="group/reveal inline-flex h-[34px] cursor-pointer items-center border-0 bg-transparent px-2 whitespace-nowrap text-muted-foreground [font:inherit] transition-colors enabled:hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
             onClick={onClick}
             disabled={disabled}
             aria-label={label}
@@ -350,27 +350,27 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
 
     const getServerStatusMeta = (server: MCPServerStatus) => {
         if (isHostManaged(server) && !server.enabled) {
-            return { label: t('plugins.notConfigured'), fg: '#6b7280', bg: '#f3f4f6' };
+            return { label: t('plugins.notConfigured'), fg: 'var(--muted-foreground)', bg: 'var(--muted)' };
         }
         const status = !server.enabled ? 'disabled' : (server.status || (server.connected ? 'connected' : 'disconnected'));
         if (status === 'connected') {
-            return { label: t('plugins.connected'), fg: '#047857', bg: '#ecfdf5', live: true };
+            return { label: t('plugins.connected'), fg: 'var(--success)', bg: 'var(--success-soft)', live: true };
         }
         if (status === 'connecting') {
-            return { label: t('plugins.connecting'), fg: '#1d4ed8', bg: '#eff6ff' };
+            return { label: t('plugins.connecting'), fg: 'var(--link)', bg: 'var(--link-soft)' };
         }
         if (status === 'error') {
-            return { label: t('plugins.error'), fg: '#b91c1c', bg: '#fef2f2' };
+            return { label: t('plugins.error'), fg: 'var(--destructive)', bg: 'var(--destructive-soft)' };
         }
         if (status === 'disabled') {
-            return { label: t('plugins.disabled'), fg: '#6b7280', bg: '#f3f4f6' };
+            return { label: t('plugins.disabled'), fg: 'var(--muted-foreground)', bg: 'var(--muted)' };
         }
-        return { label: t('plugins.disconnected'), fg: '#b45309', bg: '#fffbeb' };
+        return { label: t('plugins.disconnected'), fg: 'var(--warning)', bg: 'var(--warning-soft)' };
     };
 
     return (
         <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="plugins-page-title">
-            <header className="flex h-14 flex-none items-center border-b border-[var(--hairline)] px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-[var(--text-primary)]">
+            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
                 <h1 id="plugins-page-title">{tab === 'MCP' ? t('plugins.mcp') : t('plugins.skills')}</h1>
             </header>
 
@@ -410,14 +410,14 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                     const isToggling = pendingToggleServer === server.name;
                                     const isRestarting = pendingRestartServer === server.name;
                                     const statusMeta = !statusesLoaded && server.enabled
-                                        ? { label: t('plugins.connecting'), fg: '#1d4ed8', bg: '#eff6ff' }
+                                        ? { label: t('plugins.connecting'), fg: 'var(--link)', bg: 'var(--link-soft)' }
                                         : getServerStatusMeta(server);
                                     const live = statusesLoaded && server.connected;
                                     const CardIcon = isHostManaged(server) ? Database : server.preset ? PlugZap : Server;
                                     return (
                                         <li
                                             key={server.key}
-                                            className="grid animate-rise-sm grid-cols-[auto_minmax(0,1fr)] items-start gap-4 rounded-[14px] border border-border bg-white p-4 transition-[border-color,box-shadow] [animation-delay:calc(var(--i)*60ms)] hover:border-input hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-16px_rgba(28,25,23,0.18)] min-[761px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[761px]:items-center min-[761px]:px-5 min-[761px]:py-[18px]"
+                                            className="grid animate-rise-sm grid-cols-[auto_minmax(0,1fr)] items-start gap-4 rounded-xl border border-border bg-white p-4 transition-[border-color,box-shadow] [animation-delay:calc(var(--i)*60ms)] hover:border-input hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-16px_rgba(28,25,23,0.18)] min-[761px]:grid-cols-[auto_minmax(0,1fr)_auto] min-[761px]:items-center min-[761px]:px-5 min-[761px]:py-[18px]"
                                             style={{ '--i': index } as React.CSSProperties}
                                         >
                                             <McpIconTile off={!server.enabled}><CardIcon /></McpIconTile>
@@ -487,7 +487,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         <PaneTabs label={t('plugins.skills')} value={skillsTab} onChange={setSkillsTab} items={[{ value: '已安装', label: t('plugins.installed') }, { value: '设置', label: t('plugins.settings') }]} />
 
                         <div className="mb-6 flex flex-wrap items-start justify-between gap-3 min-[721px]:flex-nowrap min-[721px]:items-center min-[721px]:gap-4">
-                            <div className="relative w-[min(320px,100%)] [&_input]:pl-9 [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-3 [&_svg]:-translate-y-1/2 [&_svg]:text-[#a8a29e]">
+                            <div className="relative w-[min(320px,100%)] [&_input]:pl-9 [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-3 [&_svg]:-translate-y-1/2 [&_svg]:text-faint">
                                 <Search className="size-[15px]" aria-hidden="true" />
                                 <input className={UI.input} type="search" placeholder={t('plugins.searchSkill') || "搜索 Skill"} value={skillQuery} onChange={e => setSkillQuery(e.target.value)} aria-label={t('plugins.searchSkill') || '搜索 Skill'} />
                             </div>
@@ -512,7 +512,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                         ) : (
                             <ul className="m-0 grid list-none gap-2.5 p-0">
                                 {filteredSkills.map((skill, index) => (
-                                    <li key={skill.name} className="grid animate-rise-sm grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-4 rounded-[14px] border border-border bg-white px-5 py-[18px] transition-[border-color,box-shadow] [animation-delay:calc(var(--i)*50ms)] hover:border-input hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-16px_rgba(28,25,23,0.18)] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:grid-cols-[auto_minmax(0,1fr)] max-[720px]:[&>:last-child]:col-start-2" style={{ '--i': index } as React.CSSProperties}>
+                                    <li key={skill.name} className="grid animate-rise-sm grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-4 rounded-xl border border-border bg-white px-5 py-[18px] transition-[border-color,box-shadow] [animation-delay:calc(var(--i)*50ms)] hover:border-input hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-16px_rgba(28,25,23,0.18)] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:grid-cols-[auto_minmax(0,1fr)] max-[720px]:[&>:last-child]:col-start-2" style={{ '--i': index } as React.CSSProperties}>
                                         <span className={UI.cardIcon} aria-hidden="true"><Sparkles className="size-[18px]" /></span>
                                         <div>
                                             <div className="font-mono text-[0.9rem] font-[650] text-foreground">{skill.name}</div>
