@@ -1,31 +1,32 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-// Chinese text face for the workspace app only; the landing page never loads it.
-import '@fontsource-variable/noto-serif-sc';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
 import ToolPanel, { type ToolData } from './components/ToolPanel';
 import SettingsPanel from './components/SettingsPanel';
 import PluginsPanel from './components/PluginsPanel';
 import { CHAT_VIEW, type WorkspaceView } from './components/workspace-view';
-import { ModelSetupPrompt } from './components/ModelSetupPrompt';
+import { SetupPrompt } from './components/ModelSetupPrompt';
+import { ReadinessProvider, useReadiness } from './hooks/useReadiness';
+import type { SettingsSection } from './components/SettingsPanel';
 import { SessionProvider } from './hooks/useSession';
+import { NARROW_QUERY, useMediaQuery } from './hooks/useMediaQuery';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { useLanguage } from './context/LanguageContext';
 import { PreviewProvider } from './context/PreviewContext';
 import { getConfigViaRuntime } from './api/runtime-client';
 import LoginView from './components/LoginView';
 import GlobalPreviewModal from './components/common/GlobalPreviewModal';
-import { SemanticStartupStatus } from './components/SemanticStartupStatus';
-import { useSemanticStartupStatus } from './hooks/useSemanticStartupStatus';
+import { Toaster } from '@/components/ui/sonner';
+import { cn } from '@/lib/utils';
+import { SkipLink } from './components/SkipLink';
 
 type StartupState = 'checking' | 'ready' | 'error';
 
 interface AppShellProps {
   startupState: StartupState;
   onRetryStartup: () => void;
-  /** null until the startup check reads the configuration. */
-  modelConfigured: boolean | null;
-  onRecheckModel: () => void;
+  /** Bumped when a chat is refused for lack of a model. */
+  modelMissingSignal: number;
   onModelMissing: () => void;
 }
 
@@ -44,27 +45,46 @@ const CHAT_PANEL_MIN_WIDTH = 560;
 const SIDEBAR_PEEK_OPEN_DELAY = 80;
 const SIDEBAR_PEEK_CLOSE_DELAY = 180;
 
-const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelConfigured, onRecheckModel, onModelMissing }) => {
+/** The full-window screen shown while the app starts or when it could not. */
+const APP_LOADING = 'grid min-h-screen place-items-center bg-paper font-semibold tracking-[0.02em] text-body';
+
+/** The "N steps left" strip; it also re-checks setup on the way back from settings, which save without notifying the shell. */
+const SetupBanner: React.FC<{ isChatView: boolean; hidden: boolean }> = ({ isChatView, hidden }) => {
+  const readiness = useReadiness();
+  const readyRef = useRef(readiness.ready);
+  readyRef.current = readiness.ready;
+  const { recheck } = readiness;
+  useEffect(() => {
+    if (isChatView && !readyRef.current) recheck();
+  }, [isChatView, recheck]);
+  if (hidden || readiness.remaining === 0) return null;
+  const next = readiness.model === 'missing' ? 'model' : 'database';
+  return <SetupPrompt remaining={readiness.remaining} next={next} onConfigure={() => readiness.openSettings(next)} />;
+};
+
+const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, modelMissingSignal, onModelMissing }) => {
   const { t } = useLanguage();
   const [tools, setTools] = useState<ToolData[]>([]);
   const [isToolPanelOpen, setIsToolPanelOpen] = useState(false);
   // The sidebar follows the tool panel (closed while it is open, open otherwise).
   // A manual toggle overrides that only until the tool panel next opens or closes.
   const [sidebarOverride, setSidebarOverride] = useState<boolean | null>(null);
-  const isSidebarOpen = sidebarOverride ?? !isToolPanelOpen;
+  // On a narrow window the full sidebar would squeeze the page, so it starts as the rail.
+  const isNarrow = useMediaQuery(NARROW_QUERY);
+  const isSidebarOpen = sidebarOverride ?? (!isToolPanelOpen && !isNarrow);
   const [isSidebarPeeking, setIsSidebarPeeking] = useState(false);
   const [activeView, setActiveView] = useState<WorkspaceView>(CHAT_VIEW);
   const sidebarPeekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { status: semanticStatus, retrying: semanticRetrying, retry: retrySemantic } = useSemanticStartupStatus();
 
   const previousToolsRef = useRef<ToolData[]>([]);
   const chatPanelShellRef = useRef<HTMLDivElement>(null);
   const chatMainPaneRef = useRef<HTMLDivElement>(null);
   const chatResizeStartRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const chatPaneRatioRef = useRef<number | null>(null);
+  // While the chat pane is resized, a full-window layer carries the cursor and keeps text from being selected.
+  const [isResizingChat, setIsResizingChat] = useState(false);
   const [chatPaneWidth, setChatPaneWidth] = useState<number | null>(null);
   const isDesktop = typeof window !== 'undefined' && Boolean(window.dataAgent);
-  const semanticBlocked = !semanticStatus || ['checking', 'ingesting', 'failed'].includes(semanticStatus.status);
 
   const scheduleSidebarPeek = useCallback((peek: boolean) => {
     if (sidebarPeekTimerRef.current) clearTimeout(sidebarPeekTimerRef.current);
@@ -85,11 +105,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
     if (sidebarPeekTimerRef.current) clearTimeout(sidebarPeekTimerRef.current);
   }, []);
 
-  // Settings saves the key without notifying the shell, so re-read it on the way back to chat.
-  const isChatView = activeView.kind === 'chat';
-  useEffect(() => {
-    if (isChatView && modelConfigured === false) onRecheckModel();
-  }, [isChatView, modelConfigured, onRecheckModel]);
+  const openSettings = useCallback((section: SettingsSection) => setActiveView({ kind: 'settings', section }), []);
 
   const handleUpdateTools = useCallback((newTools: ToolData[]) => {
     setTools(newTools);
@@ -147,7 +163,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
       startX: event.clientX,
       startWidth: currentWidth,
     };
-    document.body.classList.add('chat-panel-resizing');
+    setIsResizingChat(true);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!chatResizeStartRef.current) return;
@@ -162,7 +178,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
 
     const handleMouseUp = () => {
       chatResizeStartRef.current = null;
-      document.body.classList.remove('chat-panel-resizing');
+      setIsResizingChat(false);
       window.removeEventListener('mousemove', handleMouseMove);
     };
 
@@ -210,12 +226,12 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   }, [chatPaneWidth, getMaxChatPaneWidth, isSidebarOpen]);
 
   if (startupState === 'checking') {
-    return <div className="app-loading">{t('app.preparing')}</div>;
+    return <div className={APP_LOADING}>{t('app.preparing')}</div>;
   }
 
   if (startupState === 'error') {
     return (
-      <div className="app-loading" role="alert">
+      <div className={APP_LOADING} role="alert">
         <p>{t('app.startupError')}</p>
         <button type="button" onClick={onRetryStartup}>{t('app.retry')}</button>
       </div>
@@ -223,16 +239,17 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   }
 
   return (
+    <ReadinessProvider onOpenSettings={openSettings} modelMissingSignal={modelMissingSignal}>
     <SessionProvider>
-      <div className="desktop-shell">
-        <a className="skip-link" href="#main-content">{t('accessibility.skipToContent')}</a>
+      <div className="flex h-full min-h-0 w-full flex-col bg-transparent">
+        <SkipLink href="#main-content">{t('accessibility.skipToContent')}</SkipLink>
         {isDesktop && (
-          <div className="desktop-menu-strip" role="menubar" aria-label={t('desktop.menu')}>
+          <div className="flex h-[34px] shrink-0 items-center gap-0.5 border-b border-[rgba(120,53,15,0.08)] bg-[rgba(255,250,242,0.66)] px-2.5 text-foreground backdrop-blur-[18px] max-[720px]:hidden" role="menubar" aria-label={t('desktop.menu')}>
             {DESKTOP_MENU_ITEMS.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                className="desktop-menu-item"
+                className="h-7 cursor-pointer rounded-md border-0 bg-transparent px-2.5 text-[0.86rem] text-inherit transition-[background-color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 pointer-fine:hover:bg-white/64"
                 role="menuitem"
                 onClick={(event) => {
                   const rect = event.currentTarget.getBoundingClientRect();
@@ -248,14 +265,16 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           </div>
         )}
 
-        {modelConfigured === false && activeView.kind !== 'settings' && (
-          <ModelSetupPrompt onConfigure={() => setActiveView({ kind: 'settings', section: 'model' })} />
-        )}
-        <SemanticStartupStatus status={semanticStatus} retrying={semanticRetrying} onRetry={retrySemantic} />
+        <SetupBanner isChatView={activeView.kind === 'chat'} hidden={activeView.kind === 'settings'} />
 
-        <div className="app-container">
+        {/* The framed workspace: inset on a wide window, edge to edge on a phone. */}
+        <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-border bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:min-h-dvh max-[720px]:rounded-none max-[720px]:border-0">
           <div
-            className={`sidebar-shell ${isSidebarOpen ? '' : 'is-collapsed'} ${!isSidebarOpen && isSidebarPeeking ? 'is-peeking' : ''}`}
+            className={cn(
+              'relative z-20 flex min-w-0 flex-none self-stretch border-r border-border bg-[var(--frame-rail)] transition-[width] motion-reduce:transition-none',
+              isSidebarOpen || isSidebarPeeking ? 'w-[var(--sidebar-width)]' : 'w-[var(--sidebar-rail-width)]',
+              isSidebarOpen && 'max-[720px]:w-[112px]',
+            )}
             // Tracked while open too, so the hover state is never stale when the sidebar auto-collapses.
             onMouseEnter={() => scheduleSidebarPeek(true)}
             onMouseLeave={() => scheduleSidebarPeek(false)}
@@ -273,17 +292,22 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
           {/* The chat stays mounted behind settings pages so a running turn keeps streaming. */}
           <div
             ref={chatPanelShellRef}
-            className={`chat-panel-shell ${isToolPanelOpen ? 'has-tool-panel' : ''}`}
+            className="relative flex h-auto w-auto min-w-0 flex-auto items-stretch overflow-hidden rounded-none border-0 bg-[var(--frame-surface)] [&[hidden]]:hidden"
             hidden={activeView.kind !== 'chat'}
           >
             <div
               ref={chatMainPaneRef}
-              className="chat-main-pane"
+              className="relative flex min-h-0 min-w-[560px] flex-auto overflow-hidden max-[1100px]:min-w-0"
               style={isToolPanelOpen && chatPaneWidth ? { flex: `0 0 ${chatPaneWidth}px`, width: chatPaneWidth } : undefined}
             >
               {isToolPanelOpen && (
                 <div
-                  className="chat-panel-resize-handle"
+                  className={cn(
+                    'group/resize absolute top-[18px] right-0 z-[12] flex h-[calc(100%-36px)] w-4 cursor-ew-resize items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+                    'after:h-14 after:w-[3px] after:rounded-full after:bg-[rgba(120,53,15,0.18)] after:opacity-0 after:transition-[opacity,background-color,transform] motion-reduce:after:transition-none',
+                    'hover:after:scale-y-[1.08] hover:after:bg-[rgba(194,65,12,0.42)] hover:after:opacity-100',
+                    isResizingChat && 'after:scale-y-[1.08] after:bg-[rgba(194,65,12,0.42)] after:opacity-100',
+                  )}
                   role="separator"
                   aria-orientation="vertical"
                   aria-valuemin={CHAT_PANEL_MIN_WIDTH}
@@ -303,44 +327,32 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
                 onToggleToolPanel={toggleToolPanel}
                 isToolPanelOpen={isToolPanelOpen}
                 hasTools={tools.length > 0}
-                semanticBlocked={semanticBlocked}
                 onModelNotConfigured={onModelMissing}
               />
             </div>
 
             {isToolPanelOpen && <ToolPanel tools={tools} onClose={closeToolPanel} />}
           </div>
+          {isResizingChat && <div className="fixed inset-0 z-[3000] cursor-ew-resize select-none" aria-hidden="true" />}
 
           {activeView.kind !== 'chat' && (
-            <div className="workspace-page-shell">
+            <div className="flex min-w-0 flex-auto overflow-hidden bg-[var(--frame-surface)]">
               {activeView.kind === 'plugins'
-                ? <PluginsPanel tab={activeView.tab} />
+                ? <PluginsPanel tab={activeView.tab} onOpenDatabaseSettings={() => setActiveView({ kind: 'settings', section: 'database' })} />
                 : <SettingsPanel section={activeView.section} />}
             </div>
           )}
         </div>
       </div>
     </SessionProvider>
+    </ReadinessProvider>
   );
 };
-
-/** Whether a usable model key is stored; the runtime makes the final call when a chat starts. */
-async function readModelConfigured(): Promise<boolean> {
-  const config = await getConfigViaRuntime() as Record<string, unknown>;
-  const storedSecrets = await window.dataAgent?.getStoredSecrets();
-  return config.llm_enabled !== false && [
-    config.api_key,
-    config.openai_api_key,
-    config.anthropic_api_key,
-    storedSecrets?.openai_api_key,
-    storedSecrets?.anthropic_api_key,
-  ].some((value) => typeof value === 'string' && value.trim().length > 0);
-}
 
 const App: React.FC = () => {
   const [startupState, setStartupState] = useState<StartupState>('checking');
   const [startupAttempt, setStartupAttempt] = useState(0);
-  const [modelConfigured, setModelConfigured] = useState<boolean | null>(null);
+  const [modelMissingSignal, setModelMissingSignal] = useState(0);
   const { status } = useAuth();
   const { t } = useLanguage();
 
@@ -354,9 +366,9 @@ const App: React.FC = () => {
 
     const completeStartupCheck = async () => {
       try {
-        const configured = await readModelConfigured();
+        // Reading the settings proves the runtime answers; what is set up is the checklist's business.
+        await getConfigViaRuntime();
         if (cancelled) return;
-        setModelConfigured(configured);
         setStartupState('ready');
       } catch (error) {
         console.error('Startup config check failed:', error);
@@ -370,15 +382,10 @@ const App: React.FC = () => {
     };
   }, [status, startupAttempt]);
 
-  const recheckModel = useCallback(() => {
-    readModelConfigured()
-      .then(setModelConfigured)
-      .catch((error) => console.error('Model config check failed:', error));
-  }, []);
-  const markModelMissing = useCallback(() => setModelConfigured(false), []);
+  const markModelMissing = useCallback(() => setModelMissingSignal((signal) => signal + 1), []);
 
   if (status === 'checking') {
-    return <div className="app-loading">{t('app.preparing')}</div>;
+    return <div className={APP_LOADING}>{t('app.preparing')}</div>;
   }
 
   if (status === 'anonymous') {
@@ -390,11 +397,12 @@ const App: React.FC = () => {
       <AppShell
         startupState={startupState}
         onRetryStartup={() => setStartupAttempt((attempt) => attempt + 1)}
-        modelConfigured={modelConfigured}
-        onRecheckModel={recheckModel}
+        modelMissingSignal={modelMissingSignal}
         onModelMissing={markModelMissing}
       />
       <GlobalPreviewModal />
+      {/* Short confirmations and errors from the sidebar; it used to draw its own toast at the same spot. */}
+      <Toaster position="bottom-center" offset={112} />
     </PreviewProvider>
   );
 };

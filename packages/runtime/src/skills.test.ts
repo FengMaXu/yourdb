@@ -7,9 +7,9 @@ import { loadSkillsFromRoots, resolveSkillRoots } from "./skills.js";
 describe("Skills", () => {
   it("loads migrated skills and flags unknown tools", async () => {
     const root = await mkdtemp(join(tmpdir(), "data-agent-skills-"));
-    const skillDir = join(root, "analysis");
+    const skillDir = join(root, "chart");
     await mkdir(skillDir, { recursive: true });
-    await writeFile(join(skillDir, "SKILL.md"), `---\nname: analysis\ndescription: charting\nallowed-tools:\n  - query_database\n  - legacy_tool\n---\n# body`, "utf8");
+    await writeFile(join(skillDir, "SKILL.md"), `---\nname: chart\ndescription: charting\nallowed-tools:\n  - query_database\n  - legacy_tool\n---\n# body`, "utf8");
     const { skills, diagnostics } = await loadSkillsFromRoots([root]);
     expect(skills).toHaveLength(1);
     expect(skills[0].allowedTools).toEqual(["query_database", "legacy_tool"]);

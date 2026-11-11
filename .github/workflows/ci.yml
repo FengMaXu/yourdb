@@ -70,3 +70,47 @@ jobs:
       - name: Chart browser smoke
         if: github.base_ref == 'master' || github.ref == 'refs/heads/master'
         run: node scripts/smoke-charts-browser.mjs
+
+  postgres:
+    # Statement time limits and cancellation need a real PostgreSQL server.
+    # Service containers run on Linux runners only, so this job is separate.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      DATA_AGENT_TEST_PG: "1"
+      DATA_AGENT_PG_HOST: 127.0.0.1
+      DATA_AGENT_PG_PORT: "5432"
+      DATA_AGENT_PG_USER: postgres
+      DATA_AGENT_PG_PASSWORD: postgres
+      DATA_AGENT_PG_DATABASE: postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # The integration test starts the built PostgreSQL MCP server CLI.
+      - name: Build
+        run: npm run build --workspace=@data-agent/mcp-pg --workspace=@data-agent/database
+
+      - name: PostgreSQL integration
+        run: npx vitest run src/postgres.integration.test.ts
+        working-directory: packages/database

@@ -91,6 +91,12 @@ export const NoticeCodeSchema = Type.Union([
   Type.Literal("ACCESS_GRANTED"),
   /** What became of a decision a member made. */
   Type.Literal("ACCESS_DECIDED"),
+  /** The commands, sent on /help and when the owner first writes. */
+  Type.Literal("HELP"),
+  /** Where the bot and the speaker stand, sent on /status. */
+  Type.Literal("STATUS"),
+  /** A bot setting changed from the chat, such as the reply detail. */
+  Type.Literal("SETTING_CHANGED"),
 ]);
 export type NoticeCode = Static<typeof NoticeCodeSchema>;
 
@@ -125,8 +131,18 @@ export const ProgressViewSchema = Type.Object({
   state: Type.Union([Type.Literal("running"), Type.Literal("completed")]),
   text: Type.String(),
   activeTool: Type.Optional(Type.String()),
+  /** On a completed run at full detail: what the agent did, in order, in words people read. */
+  steps: Type.Optional(Type.Array(Type.String())),
 }, { additionalProperties: false });
 export type ProgressView = Static<typeof ProgressViewSchema>;
+
+/**
+ * How much of a run a bot sends. `summary`: the final answer only, once done.
+ * `standard`: the answer as it is written, with the step in progress. `full`:
+ * standard, plus the steps taken listed under the answer.
+ */
+export const ReplyDetailSchema = Type.Union([Type.Literal("summary"), Type.Literal("standard"), Type.Literal("full")]);
+export type ReplyDetail = Static<typeof ReplyDetailSchema>;
 
 export interface ChannelCapabilities {
   /** A sent message can be edited in place, so progress can stream into it. */
@@ -184,7 +200,8 @@ export type ChannelAccess = Static<typeof ChannelAccessSchema>;
 export const ChannelStatusSchema = Type.Object({
   id: Id,
   label: Type.String(),
-  state: Type.Union([Type.Literal("unconfigured"), Type.Literal("provisioning"), Type.Literal("connected"), Type.Literal("failed")]),
+  /** `paused`: set up, but switched off by the user; it keeps its credentials and its members. */
+  state: Type.Union([Type.Literal("unconfigured"), Type.Literal("provisioning"), Type.Literal("connected"), Type.Literal("failed"), Type.Literal("paused")]),
   /** The platform supports scan-to-connect. */
   provisionable: Type.Boolean(),
   /** While provisioning: the link to scan or open in the platform's app. */
@@ -192,6 +209,8 @@ export const ChannelStatusSchema = Type.Object({
   message: Type.Optional(Type.String()),
   /** Steps left for the user after connecting, such as settings the platform refused to change for us. */
   warnings: Type.Optional(Type.Array(Type.String())),
+  /** The bot's own settings; absent until it is set up. */
+  settings: Type.Optional(Type.Object({ enabled: Type.Boolean(), replyDetail: ReplyDetailSchema }, { additionalProperties: false })),
 }, { additionalProperties: false });
 export type ChannelStatus = Static<typeof ChannelStatusSchema>;
 
@@ -201,8 +220,11 @@ export type ChannelConfig = Readonly<Record<string, unknown>>;
 export interface ChannelProvisioning {
   /** Opened in the platform's app (shown as a QR code), it creates and authorizes the bot. */
   readonly ready: Promise<{ readonly url: string; readonly expiresAt: number }>;
-  /** The configuration to save, and anything the user still has to do by hand. */
-  readonly done: Promise<{ readonly config: ChannelConfig; readonly warnings: readonly string[] }>;
+  /**
+   * The configuration to save, anything the user still has to do by hand, and
+   * who scanned, as the new bot sees them: that person owns the bot.
+   */
+  readonly done: Promise<{ readonly config: ChannelConfig; readonly warnings: readonly string[]; readonly owner?: { readonly externalUserId: string } }>;
 }
 
 /** One platform, as the core manages it: build a Channel from saved configuration, and optionally obtain that configuration by scanning. */

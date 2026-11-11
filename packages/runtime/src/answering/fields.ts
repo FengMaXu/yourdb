@@ -39,7 +39,7 @@ export function isSpecPath(value: string): value is SpecPath {
   return isFieldPath(value) || MEASURE_DEFINITION.test(value);
 }
 
-/** The top-level nodes of the tree; SpecFeedback assesses one section at a time. */
+/** The top-level nodes of the tree. */
 export const FIELD_SECTIONS = ["population", "measure", "grouping", "selection", "output"] as const;
 export type FieldSection = typeof FIELD_SECTIONS[number];
 
@@ -272,7 +272,22 @@ function parseSelection(value: unknown): SelectionValue {
   const body = record(value) ?? fail("selection value must be {n, orderBy}");
   onlyKeys(body, ["n", "orderBy"], "selection value");
   if (!Number.isSafeInteger(body.n) || Number(body.n) < 1) fail("selection.n must be a positive integer; argmax/argmin is n = 1");
-  return { n: Number(body.n), orderBy: text(body.orderBy) ?? fail("selection.orderBy is required (column and direction)") };
+  return { n: Number(body.n), orderBy: orderByText(body.orderBy) ?? fail('selection.orderBy is required: the column and direction, e.g. "revenue desc"') };
+}
+
+/** "revenue desc", or the same as {column, direction}. */
+function orderByText(value: unknown): string | undefined {
+  const written = text(value);
+  if (written) return written;
+  const body = record(value);
+  if (!body) return undefined;
+  onlyKeys(body, ["column", "direction"], "selection.orderBy");
+  const column = text(body.column) ?? fail('selection.orderBy.column is required, e.g. {"column": "revenue", "direction": "desc"}');
+  if (body.direction === undefined) return column;
+  // A direction that is there but unusable must not quietly become ascending.
+  const direction = typeof body.direction === "string" ? body.direction.trim().toLowerCase() : "";
+  if (direction !== "asc" && direction !== "desc") fail('selection.orderBy.direction must be "asc" or "desc"');
+  return `${column} ${direction}`;
 }
 
 function parseTies(value: unknown): TiesValue {
@@ -357,6 +372,10 @@ export function layersOf(expression: MeasureExpression): readonly MeasureExpress
  * the output grouping, so its "per" may be left out.
  */
 function parseFormula(value: unknown, label: string): MeasureExpression {
+  // {ref} is a form of the field, like {value} or {open}: as a formula it would read as one with an unknown key.
+  if (record(value)?.ref !== undefined) {
+    fail(`${label}: a formula cannot be a ref. Only a chart query (parentTaskId) references a Report Task measure, and it writes the ref as the field itself, "measure.formula": {"ref": "<measure name>"}, never inside "value" or "open"; a measure definition states its own formula`);
+  }
   const expression = parseExpression(value, label);
   const inner = layersOf(expression).slice(1);
   if (inner.some((layer) => !layer.per)) {

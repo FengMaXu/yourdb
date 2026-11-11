@@ -19,7 +19,7 @@ describe("PostgreSQL Reference MCP Server contract", () => {
     const port = Number(serverSocket.getServerConn().split(":")[1]);
     await db.exec("CREATE TABLE contract_sales (id INT PRIMARY KEY, region TEXT, amount NUMERIC); INSERT INTO contract_sales VALUES (1,'north',10),(2,'south',20);");
 
-    const { Pool } = await import("pg");
+    const { Pool, Client: PgClient } = await import("pg");
     const pool = new Pool({ host: "127.0.0.1", port, user: "postgres", database: "postgres", connectionTimeoutMillis: 5000 });
     await pool.query("SELECT 1");
 
@@ -35,7 +35,8 @@ describe("PostgreSQL Reference MCP Server contract", () => {
     expect(payload.contractVersion).toBe(1);
     expect(payload.columns).toEqual(["id", "region", "amount"]);
 
-    const querySpy = vi.spyOn(pool, "query");
+    // Result and preview statements run on a pooled client inside a read-only transaction.
+    const querySpy = vi.spyOn(PgClient.prototype, "query");
     const exportResult = await client.callTool({ name: "execute_query_export", arguments: { sql: "SELECT * FROM contract_sales ORDER BY id" } });
     const exportPayload = JSON.parse((exportResult.content as any)[0].text);
     expect(exportPayload.columns).toEqual(["id", "region", "amount"]);
@@ -58,6 +59,18 @@ describe("PostgreSQL Reference MCP Server contract", () => {
       const calendar = await client.callTool({ name, arguments: { sql: calendarSql } });
       expect(JSON.parse((calendar.content as any)[0].text).rows[0]).toEqual({ d: "2025-12-01", ts: "2025-12-01 08:30:00", t: "08:30:00" });
     }
+
+    // The read-only transaction is enforced by PostgreSQL, past what the keyword filter sees.
+    await db.exec("CREATE SEQUENCE contract_seq");
+    const write = await client.callTool({ name: "execute_query_preview", arguments: { sql: "SELECT nextval('contract_seq') AS n" } });
+    const writePayload = JSON.parse((write.content as any)[0].text);
+    expect(writePayload.error.code).toBe("QUERY_FAILED");
+    expect(writePayload.error.message).toMatch(/read-only transaction/);
+
+    // The statement time limit reaches PostgreSQL as statement_timeout for that statement only.
+    querySpy.mockClear();
+    await client.callTool({ name: "execute_query_export", arguments: { sql: "SELECT 1 AS n", timeoutMs: 1234 } });
+    expect(querySpy.mock.calls.map(([query]) => queryText(query))).toContain("SET LOCAL statement_timeout = 1234");
 
     await client.close();
     await close();

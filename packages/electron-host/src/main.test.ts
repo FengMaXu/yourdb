@@ -88,8 +88,6 @@ describe("resolveRuntimePaths", () => {
       const context = { protocolVersion: 1, requestId: "desktop-test", command: { type: "llm.test", profile: {} } };
       const tested = await command?.({}, context) as { response?: { type?: string; success?: boolean } };
       expect(tested.response).toMatchObject({ type: "test.result", success: false });
-      const ingestStatus = await command?.({}, { protocolVersion: 1, requestId: "ingest-status", command: { type: "semantic.ingest.status" } }) as { response?: { type?: string; status?: string } };
-      expect(ingestStatus.response).toMatchObject({ type: "semantic.ingest.status.result", status: "skipped" });
       await command?.({}, { protocolVersion: 1, requestId: "workspace-test", command: { type: "workspace.write", path: "upload.txt", content: "desktop" } });
       expect(await readFile(path.join(root, "workspace", "upload.txt"), "utf8")).toBe("desktop");
       const protocolResponse = await protocolHandler?.({ url: "data-agent://workspace/workspace/files/preview?path=upload.txt" });

@@ -25,7 +25,7 @@ test("a leaf change checks only that workspace", () => {
 
 test("docs alone check nothing; skills count as runtime", () => {
   assert.deepEqual(checked(planChecks(workspaces, ["docs/adr/0008.md", "README.md"])), []);
-  assert.ok(checked(planChecks(workspaces, [".agents/skills/analysis/SKILL.md"])).includes("@data-agent/runtime"));
+  assert.ok(checked(planChecks(workspaces, [".agents/skills/chart/SKILL.md"])).includes("@data-agent/runtime"));
 });
 
 test("root manifests and unknown paths fall back to a full run", () => {

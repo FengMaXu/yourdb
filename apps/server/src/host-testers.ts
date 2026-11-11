@@ -1,37 +1,11 @@
 /**
  * Host-injected tester ports shared by the Web Host.
- * Database probes are routed through the MySQL MCP child process; this module
+ * Database probes are routed through the connection's MCP child process; this module
  * never imports a database driver or opens a business-database connection.
  */
-import { createMcpQueryExecutor, type McpQueryExecutorOptions } from "./mcp-query-executor.js";
+import { testDatabaseConnection, type DatabaseServers } from "@data-agent/database";
 
 export interface ProbeResult { success: boolean; message: string; details?: unknown }
-
-function mysqlMcpEnv(connection: Record<string, unknown>, baseEnv: Record<string, string> = {}): Record<string, string> {
-  const env = { ...baseEnv };
-  for (const [key, envName] of [["host", "DATA_AGENT_MYSQL_HOST"], ["port", "DATA_AGENT_MYSQL_PORT"], ["user", "DATA_AGENT_MYSQL_USER"], ["password", "DATA_AGENT_MYSQL_PASSWORD"], ["database", "DATA_AGENT_MYSQL_DATABASE"]] as const) {
-    if (connection[key] !== undefined && connection[key] !== null) env[envName] = String(connection[key]);
-  }
-  return env;
-}
-
-export async function testMySqlConnection(
-  connection: Record<string, unknown>,
-  mcp: McpQueryExecutorOptions,
-): Promise<ProbeResult> {
-  const host = String(connection.host ?? "127.0.0.1");
-  const port = Number(connection.port ?? 3306);
-  const database = connection.database ? String(connection.database) : undefined;
-  const executor = createMcpQueryExecutor({ ...mcp, env: mysqlMcpEnv(connection, mcp.env) });
-  try {
-    await executor.run("SELECT 1 AS connection_ok", 1);
-    return { success: true, message: `MySQL 连接成功（${host}:${port}${database ? `/ ${database}` : ""}）` };
-  } catch (error) {
-    return { success: false, message: `MySQL 连接失败: ${error instanceof Error ? error.message : String(error)}` };
-  } finally {
-    await executor.close().catch(() => undefined);
-  }
-}
 
 export async function testLlmProfile(profile: Record<string, unknown>): Promise<ProbeResult> {
   const provider = String(profile.provider ?? "openai");
@@ -72,9 +46,9 @@ export async function testLlmProfile(profile: Record<string, unknown>): Promise<
   }
 }
 
-export function createHostTesters(options: { dbMcp: McpQueryExecutorOptions }) {
+export function createHostTesters(options: { databaseServers: DatabaseServers }) {
   return {
-    dbTester: { test: (connection: Record<string, unknown>) => testMySqlConnection(connection, options.dbMcp) },
+    dbTester: { test: (connection: Record<string, unknown>) => testDatabaseConnection(connection, options.databaseServers) },
     llmTester: { test: testLlmProfile },
   };
 }

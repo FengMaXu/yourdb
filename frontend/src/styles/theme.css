@@ -1,0 +1,285 @@
+/*
+ * Design tokens, the single source for colour, radius and motion. See DESIGN.md.
+ * Names follow shadcn/ui's semantic variables (baseColor stone), mapped to yourdb's
+ * existing values. --accent keeps shadcn's meaning, a quiet hover surface; the brand
+ * orange is --brand. --primary is ink, as the primary buttons are.
+ * Components use these through utilities (text-body, bg-success-soft, …), never a raw hex.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #1c1917;
+  --primary-foreground: #fafaf9;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #1c1917;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #f5f5f4;
+  --accent-foreground: #1c1917;
+  --destructive: #b91c1c;
+  --border: #ecebe8;
+  --input: #e2e0dc;
+  --ring: #c2410c;
+  --brand: #c2410c;
+  --brand-soft: #fff7ed;
+  /* The brand on the ink panel, where #c2410c is too dark to read. */
+  --brand-bright: #fb923c;
+
+  /* Text on paper, darkest to lightest: foreground, body-strong, body, muted-foreground, faint. */
+  --body-strong: #44403c;
+  --body: #57534e;
+  --faint: #a8a29e;
+  --border-strong: #d6d3d1;
+  /* The off-white of rails, table heads and quiet panels. */
+  --paper: #fafaf9;
+  --hover: #f2f1ef;
+  --primary-hover: #292524;
+
+  /* Status: text colour, a soft fill, a border for the fill. */
+  --success: #047857;
+  --success-soft: #ecfdf5;
+  --success-border: #a7f3d0;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --warning-border: #fde68a;
+  --destructive-soft: #fef2f2;
+  --destructive-border: #fecaca;
+  --link: #1d4ed8;
+  --link-soft: #eff6ff;
+  --link-border: #bfdbfe;
+
+  /* The ink panel: sign-in, the landing page's dark bands, code blocks. */
+  --ink-panel: #1c1917;
+  --ink-panel-foreground: #e7e5e4;
+  --radius: 10px;
+  --radius-card: 14px;
+  --chart-1: #c2410c;
+  --chart-2: #0f766e;
+  --chart-3: #1d4ed8;
+  --chart-4: #a16207;
+  --chart-5: #7c3aed;
+  --sidebar: #fafaf9;
+  --sidebar-foreground: #1c1917;
+  --sidebar-primary: #1c1917;
+  --sidebar-primary-foreground: #fafaf9;
+  --sidebar-accent: #f5f5f4;
+  --sidebar-accent-foreground: #1c1917;
+  --sidebar-border: #ecebe8;
+  --sidebar-ring: #c2410c;
+  /* The chevron drawn inside a native <select>. */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none' stroke='%2378716c' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+}
+
+/* App tokens beyond shadcn's: surfaces, text, motion, layout sizes, the sidebar tree. */
+:root {
+  --bubble-bg: #f5f5f4;
+  --bubble-radius: 10px;
+  --frame-backdrop: #ebeae7;
+  --frame-surface: #ffffff;
+  --frame-rail: #fafaf9;
+  --font-code: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', monospace;
+  --font-mono: var(--font-code);
+  --sidebar-width: 184px;
+  --sidebar-rail-width: 64px;
+  --thread-line: rgba(120, 53, 15, 0.14);
+  --thread-muted: #a8a29e;
+  --tool-panel-width: 410px;
+  --font-size-caption: 0.75rem;
+  --font-size-body-sm: 0.875rem;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --agent-detail-font-size: 0.86rem;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', 'Helvetica Neue', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  --tree-indent: 16px;
+  --tree-inset: 12px;
+  --tree-row-bg: var(--frame-rail);
+  --tree-row-hover: var(--hover);
+  --tree-row-active: #ecebe8;
+  --tree-guide: #d6d3ce;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-bright: var(--brand-bright);
+  --color-body-strong: var(--body-strong);
+  --color-body: var(--body);
+  --color-faint: var(--faint);
+  --color-border-strong: var(--border-strong);
+  --color-paper: var(--paper);
+  --color-hover: var(--hover);
+  --color-primary-hover: var(--primary-hover);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-border: var(--success-border);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-border: var(--warning-border);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-border: var(--destructive-border);
+  --color-link: var(--link);
+  --color-link-soft: var(--link-soft);
+  --color-link-border: var(--link-border);
+  --color-ink-panel: var(--ink-panel);
+  --color-ink-panel-foreground: var(--ink-panel-foreground);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius-card);
+}
+
+/* Motion tokens (animate-*). The curve is --ease-out from the legacy root until phase 4. */
+@theme {
+  --animate-rise: rise 520ms var(--ease-out) both;
+  --animate-rise-quick: rise 260ms var(--ease-out) both;
+  --animate-type-in: type-in 520ms var(--ease-out) both;
+  --animate-blink: blink 1.1s steps(1) 900ms infinite both;
+  --animate-rise-sm: rise-sm 420ms var(--ease-out) both;
+  --animate-fade: fade 260ms var(--ease-out) both;
+  --animate-dot-pulse: dot-pulse 2.4s var(--ease-out) infinite;
+  --animate-ring-pulse: ring-pulse 2.4s var(--ease-out) infinite;
+  --animate-pop: pop 260ms var(--ease-out);
+  --animate-node-pulse: node-pulse 1.6s var(--ease-out) infinite;
+  --animate-dot-breathe: dot-breathe 1.2s ease-in-out infinite;
+  --animate-orbit-nucleus: orbit-nucleus 2.4s ease-in-out infinite;
+  --animate-trace-shimmer: trace-shimmer 2.2s linear infinite;
+  --animate-trace-pulse: trace-pulse 1.6s var(--ease-out) infinite;
+  --animate-trace-in: trace-in 260ms var(--ease-out) both;
+  --animate-electron-float-1: electron-float-1 3.8s ease-in-out infinite;
+  --animate-electron-float-2: electron-float-2 4.4s ease-in-out infinite;
+  --animate-electron-float-3: electron-float-3 5.1s ease-in-out infinite;
+  --animate-electron-phase-1: electron-phase-1 3.8s ease-in-out infinite;
+  --animate-electron-phase-2: electron-phase-2 4.4s ease-in-out infinite;
+  --animate-electron-phase-3: electron-phase-3 5.1s ease-in-out infinite;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+
+  @keyframes type-in {
+    from {
+      opacity: 0;
+      transform: translateX(-6px);
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+
+  @keyframes rise-sm {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+
+  @keyframes fade {
+    from { opacity: 0; }
+  }
+
+  /* A live status dot: a copy of it grows and fades. */
+  @keyframes dot-pulse {
+    0% { transform: scale(1); opacity: 0.45; }
+    70%, 100% { transform: scale(2.6); opacity: 0; }
+  }
+
+  /* A live status pill's dot: a ring in its own colour spreads and fades. */
+  @keyframes ring-pulse {
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 45%, transparent); }
+    70%, 100% { box-shadow: 0 0 0 5px color-mix(in srgb, currentColor 0%, transparent); }
+  }
+
+  @keyframes pop {
+    0% { transform: scale(0.6); }
+    60% { transform: scale(1.12); }
+  }
+
+  /* A running step's node on the tool thread: a ring spreads past the surface gap and fades. */
+  @keyframes node-pulse {
+    0% { box-shadow: 0 0 0 3px var(--frame-surface), 0 0 0 3px rgba(194, 65, 12, 0.32); }
+    100% { box-shadow: 0 0 0 3px var(--frame-surface), 0 0 0 9px rgba(194, 65, 12, 0); }
+  }
+
+  @keyframes dot-breathe {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* The answer process: a light sweeps across live text, a live dot sends out a ring, steps rise in. */
+  @keyframes trace-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+  @keyframes trace-pulse { 0% { transform: scale(1); opacity: 0.5; } 70%, 100% { transform: scale(2.8); opacity: 0; } }
+  @keyframes trace-in { from { opacity: 0; transform: translateY(3px); } }
+
+  /* The agent's orbit mark while it works: the nucleus breathes, each electron drifts and blinks in and out. */
+  @keyframes orbit-nucleus {
+    0%, 100% { transform: scale(1); opacity: 0.9; }
+    50% { transform: scale(1.14); opacity: 1; }
+  }
+  @keyframes electron-float-1 { 0%, 100% { transform: translate(0px, 0px); } 50% { transform: translate(-2px, -3px); } }
+  @keyframes electron-float-2 { 0%, 100% { transform: translate(0px, 0px); } 50% { transform: translate(2.6px, -1.8px); } }
+  @keyframes electron-float-3 { 0%, 100% { transform: translate(0px, 0px); } 50% { transform: translate(-2.2px, 2.4px); } }
+  @keyframes electron-phase-1 {
+    0%, 18%, 100% { opacity: 0; transform: scale(0.2); }
+    28%, 56% { opacity: 1; transform: scale(1.12); }
+    70% { opacity: 0.18; transform: scale(0.62); }
+  }
+  @keyframes electron-phase-2 {
+    0%, 12%, 100% { opacity: 0; transform: scale(0.12); }
+    26%, 44% { opacity: 0.95; transform: scale(1); }
+    58% { opacity: 0.08; transform: scale(0.28); }
+    72%, 84% { opacity: 1; transform: scale(1.08); }
+  }
+  @keyframes electron-phase-3 {
+    0%, 8%, 100% { opacity: 0.9; transform: scale(1); }
+    18%, 32% { opacity: 0.08; transform: scale(0.1); }
+    46%, 74% { opacity: 1; transform: scale(1.08); }
+    86% { opacity: 0.12; transform: scale(0.24); }
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    50.01%, 100% { opacity: 0; }
+  }
+}

@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { AGENT_ICON_SVG, AGENT_ROW, MESSAGE_COLUMN, USER_ROW, agentIcon } from './chat-styles';
 import {
     Loader2,
     Send,
@@ -6,30 +7,32 @@ import {
     Paperclip,
     Plus,
     X,
-} from './icons/Typicons';
+    ChevronRight,
+} from 'lucide-react';
 import { FileIcon } from './FileIcons';
 import {
     uploadWorkspaceFile,
     type SSEEvent,
     type WidgetSpec,
     type SessionSnapshotMessage,
-    type ClarificationRequest,
     type AgentProgressStage,
     type AgentTerminalReason,
 } from '../api/client';
-import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime } from '../api/runtime-client';
+import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeResyncReason, type RuntimeSessionState } from '../api/runtime-client';
 import { attachRunViaRuntime, sendChatViaRuntime, type ChatStreamOptions, type RuntimeChatHandle } from '../api/chat-events';
 import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData } from './ToolPanel';
 import { useSession, type Session, type Task } from '../hooks/useSession';
 import { useLanguage } from '../context/LanguageContext';
-import WidgetRenderer from './widgets/WidgetRenderer';
 import AgentOrbitIcon from './AgentOrbitIcon';
-import { RiInfoCard } from './icons/RemixIcons';
-import AgentMarkdown from './AgentMarkdown';
-import { isAgentMessageEmpty, visibleAgentContent } from '../utils/agent-message';
-import { mergeToolResultState, subagentChildrenOf, type ToolCallState } from './tool-event-state';
-import SubagentProgressLines from './SubagentProgressLines';
+import { IdCard } from 'lucide-react';
+import { isAgentMessageEmpty } from '../utils/agent-message';
+import { groupIntoTurns } from '../utils/agent-turns';
+import AgentTurn from './AgentTurn';
+import { SetupChecklist } from './SetupChecklist';
+import { useReadiness } from '../hooks/useReadiness';
+import { mergeToolResultState, type ToolCallState } from './tool-event-state';
+import { chatRunReducer, initialChatRunState, isRunActive, runConnection, runReason as selectRunReason, type ChatRunReason } from './chat-run-state';
 
 interface SkillActivation {
     name: string;
@@ -60,6 +63,7 @@ interface AgentMessage {
     terminalReason: AgentTerminalReason;
     retryNotice?: string;
     statusNotice?: string;
+    timestamp?: number;
 }
 
 interface UserMessage {
@@ -67,6 +71,7 @@ interface UserMessage {
     role: 'user';
     content: string;
     attachments?: string[];
+    timestamp?: number;
 }
 
 type ChatMessage = AgentMessage | UserMessage;
@@ -77,10 +82,12 @@ interface ChatAreaProps {
     onToggleToolPanel?: () => void;
     isToolPanelOpen?: boolean;
     hasTools?: boolean;
-    semanticBlocked?: boolean;
     /** Called when the runtime refuses a turn because no model is configured. */
     onModelNotConfigured?: () => void;
 }
+
+/** Starter questions an empty session offers; a click puts one in the input to edit before sending. */
+const STARTER_PROMPTS = ['query', 'trend', 'dashboard', 'report'] as const;
 
 const STAGE_ORDER: AgentProgressStage[] = [
     'sent',
@@ -104,6 +111,10 @@ const advanceStage = (message: AgentMessage, stage: AgentProgressStage): AgentMe
     };
 };
 
+/** A resync reads the session state up to this many times, waiting 1, 2, 4… s between tries. */
+const RESYNC_ATTEMPTS = 4;
+const RESYNC_RETRY_MS = 1_000;
+
 const setTerminalReason = (message: AgentMessage, reason: AgentTerminalReason): AgentMessage => ({
     ...message,
     terminalReason: reason,
@@ -112,6 +123,7 @@ const setTerminalReason = (message: AgentMessage, reason: AgentTerminalReason): 
 const createLocalAgentMessage = (messageId: string): AgentMessage => ({
     id: `local-${messageId}`,
     role: 'agent',
+    timestamp: Date.now(),
     content: '',
     transientContent: '',
     reasoningContent: '',
@@ -150,8 +162,11 @@ const toSnapshotMessage = (message: ChatMessage): SessionSnapshotMessage => {
 };
 
 const fromSnapshotMessage = (message: SessionSnapshotMessage): ChatMessage => {
+    const { timestamp } = message as { timestamp?: unknown };
+    const stamp = typeof timestamp === 'number' && Number.isFinite(timestamp) ? { timestamp } : {};
     if (message.role === 'user') {
         return {
+            ...stamp,
             id: message.id,
             role: 'user',
             content: message.content,
@@ -160,6 +175,7 @@ const fromSnapshotMessage = (message: SessionSnapshotMessage): ChatMessage => {
     }
 
     return {
+        ...stamp,
         id: message.id,
         role: 'agent',
         content: message.content,
@@ -213,8 +229,6 @@ export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string
 
 const getSkillHintLabel = (skill: SkillActivation, t: (key: string) => string) => t('chat.skillActivated').replace('{name}', skill.name);
 
-const THINKING_STATUS_TEXT = '思考中';
-const REASONING_DONE_TEXT = '思考内容';
 
 interface ActiveChatAreaProps extends ChatAreaProps {
     activeTask: Task;
@@ -229,7 +243,6 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     onToggleToolPanel,
     isToolPanelOpen = false,
     hasTools = false,
-    semanticBlocked = false,
     onModelNotConfigured,
 }) => {
     const {
@@ -241,18 +254,23 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     } = useSession();
 
     const { t } = useLanguage();
+    // Until a model and a database are both set up, the empty page walks the user through them first.
+    const { ready: setupDone } = useReadiness();
 
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>(() => currentTranscript.map(fromSnapshotMessage));
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [isStreamReconnecting, setIsStreamReconnecting] = useState(false);
+    const [runState, dispatchRun] = useReducer(chatRunReducer, initialChatRunState);
+    const isStreaming = isRunActive(runState);
+    const streamConnection = runConnection(runState);
+    // interrupted: the run ended with a server that went away; nothing reported how.
+    // rejected: the server refused to stream the session's events (signed out, no access).
+    const runReason = selectRunReason(runState);
+    const pendingClarification = runState.clarification?.request ?? null;
+    const isSubmittingClarification = runState.clarification?.submitting ?? false;
     const [isUploading, setIsUploading] = useState(false);
     const [uploadError, setUploadError] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
-    const [runReason, setRunReason] = useState<'completed' | 'stopped' | 'error' | null>(null);
-    const [pendingClarification, setPendingClarification] = useState<ClarificationRequest | null>(null);
     const [clarificationInput, setClarificationInput] = useState('');
-    const [isSubmittingClarification, setIsSubmittingClarification] = useState(false);
 
     const currentSessionIdRef = useRef(currentSession.id);
     const activeAgentMessageIdRef = useRef<string | null>(null);
@@ -312,12 +330,8 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         isRestoringRef.current = true;
         currentSessionIdRef.current = currentSession.id;
         replaceWithSnapshot(currentTranscript);
-        setIsStreaming(false);
-        setIsStreamReconnecting(false);
-        setRunReason(null);
-        setPendingClarification(null);
+        dispatchRun({ type: 'session_reset' });
         setClarificationInput('');
-        setIsSubmittingClarification(false);
         onUpdateToolsRef.current?.([]);
 
         // A run may still be going (or waiting on a clarification): resume following it.
@@ -325,19 +339,21 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         let superseded = false;
         void getSessionStateViaRuntime(sessionId).then((state) => {
             if (superseded || currentSessionIdRef.current !== sessionId || streamHandleRef.current) return;
-            if (state.pendingClarification) {
-                setPendingClarification({
-                    clarification_id: state.pendingClarification.clarificationId,
-                    question: state.pendingClarification.question,
-                    options: state.pendingClarification.options,
-                });
+            const clarification = state.pendingClarification ? {
+                clarification_id: state.pendingClarification.clarificationId,
+                question: state.pendingClarification.question,
+                options: state.pendingClarification.options,
+            } : undefined;
+            if (!state.inProgressRun) {
+                if (clarification) dispatchRun({ type: 'clarification_requested', request: clarification });
+                return;
             }
-            if (!state.inProgressRun) return;
             const runId = state.inProgressRun.runId;
             replaceWithSnapshot(state.messages);
-            setIsStreaming(true);
+            dispatchRun({ type: 'run_started' });
+            if (clarification) dispatchRun({ type: 'clarification_requested', request: clarification });
             followRun(sessionId, (onEvent, onError, onFinish, streamSessionId, stream) => (
-                attachRunViaRuntime(runId, state.eventSequence, onEvent, onError, onFinish, streamSessionId, stream)
+                attachRunViaRuntime(runId, { sequence: state.eventSequence, ...(state.eventInstance ? { instance: state.eventInstance } : {}) }, onEvent, onError, onFinish, streamSessionId, stream)
             ), true);
         }).catch((error) => console.error('Failed to read the session state', error));
         return () => { superseded = true; };
@@ -514,6 +530,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const userMsg: UserMessage = {
             id: `user-${Date.now()}`,
             role: 'user',
+            timestamp: Date.now(),
             content,
             ...(attachments.length > 0 ? { attachments } : {}),
         };
@@ -532,9 +549,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             return;
         }
 
-        setIsStreaming(true);
-        setRunReason(null);
-        setPendingClarification(null);
+        dispatchRun({ type: 'run_started' });
         setClarificationInput('');
         activeAgentMessageIdRef.current = null;
         pendingAgentMessageIdRef.current = `pending-${Date.now()}`;
@@ -576,9 +591,11 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         let streamLostEvents = lostEvents;
-        streamHandleRef.current = start(
+        let handle!: RuntimeChatHandle;
+        const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === runSessionId;
+        handle = start(
             (event: SSEEvent) => {
-                if (event.session_id && event.session_id !== currentSessionIdRef.current) {
+                if (!current() || (event.session_id && event.session_id !== currentSessionIdRef.current)) {
                     return;
                 }
 
@@ -588,10 +605,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'clarification_request') {
-                    setPendingClarification({
-                        clarification_id: event.clarification_id,
-                        question: event.question,
-                        options: event.options || [],
+                    dispatchRun({
+                        type: 'clarification_requested',
+                        request: {
+                            clarification_id: event.clarification_id,
+                            question: event.question,
+                            options: event.options || [],
+                        },
                     });
                     setClarificationInput('');
                     setShouldAutoScroll(true);
@@ -599,9 +619,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'clarification_settled') {
-                    setPendingClarification((current) => (
-                        current?.clarification_id === event.clarification_id ? null : current
-                    ));
+                    dispatchRun({ type: 'clarification_settled', clarificationId: event.clarification_id });
                     setClarificationInput('');
                     return;
                 }
@@ -633,8 +651,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'done') {
-                    setRunReason(event.reason);
-                    setPendingClarification(null);
+                    dispatchRun({ type: 'terminal_reported', reason: event.reason });
                     setClarificationInput('');
                     markTerminalReason(event.reason);
                     flushAllBuffers();
@@ -642,7 +659,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
 
                 if (event.type === 'error') {
-                    setRunReason('error');
+                    dispatchRun({ type: 'terminal_reported', reason: 'error' });
                     const targetId = activeAgentMessageIdRef.current ?? pendingAgentMessageIdRef.current ?? `error-${Date.now()}`;
                     activeAgentMessageIdRef.current = targetId;
                     const message = ensureBufferedAgentMessage(targetId);
@@ -874,35 +891,98 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 }
             },
             (err) => {
+                if (!current()) return;
                 console.error('Chat error:', err);
                 if (isModelNotConfiguredError(err)) onModelNotConfigured?.();
-                setRunReason('error');
-                setPendingClarification(null);
-                setIsStreaming(false);
+                // endRun stops following, so the onFinish that follows returns early: reload the lost events here.
+                if (!endRun('error', true)) return;
+                if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             () => {
-                if (flushTimer) {
-                    clearTimeout(flushTimer);
-                    flushTimer = null;
-                }
-                flushAllBuffers();
-                setIsStreaming(false);
-                setIsSubmittingClarification(false);
-                activeAgentMessageIdRef.current = null;
-                pendingAgentMessageIdRef.current = null;
-                streamHandleRef.current = null;
-                setIsStreamReconnecting(false);
+                if (!endRun()) return;
                 if (streamLostEvents) void resyncFromServer(runSessionId);
             },
             runSessionId,
             {
-                onResync: () => {
+                // Callbacks run after start() returned (the stream connects asynchronously), so `handle` is set.
+                onResync: (reason) => {
                     streamLostEvents = true;
-                    void resyncFromServer(runSessionId);
+                    void resyncRun(runSessionId, handle, reason, endRun);
                 },
-                onConnectionChange: (state) => setIsStreamReconnecting(state === 'reconnecting'),
+                onConnectionChange: (state) => {
+                    if (!current()) return;
+                    if (state !== 'rejected') {
+                        dispatchRun({ type: 'connection_changed', connection: state });
+                        return;
+                    }
+                    // Retrying cannot help: stop following, and say why.
+                    handle.detach();
+                    endRun('rejected');
+                },
             },
         );
+        /** Every way a followed run ends locally: flush what was buffered and stop following. */
+        function endRun(reason?: ChatRunReason | null, clearClarification = false): boolean {
+            if (!current()) return false;
+            if (flushTimer) {
+                clearTimeout(flushTimer);
+                flushTimer = null;
+            }
+            flushAllBuffers();
+            dispatchRun({ type: 'run_ended', ...(reason !== undefined ? { reason } : {}), ...(clearClarification ? { clearClarification: true } : {}) });
+            activeAgentMessageIdRef.current = null;
+            pendingAgentMessageIdRef.current = null;
+            streamHandleRef.current = null;
+            return true;
+        }
+        streamHandleRef.current = handle;
+    };
+
+    /**
+     * After a resync, one session state read tells what became of the run
+     * being followed. Still in progress: reload the conversation from that
+     * state and follow on. Over (no run, or another one): the run ended while
+     * its events were not followed, so the conversation is reloaded from the
+     * server and the turn closes. Only a server restart makes that ending an
+     * interruption; evicted events mean it finished normally. A run whose id
+     * is not known yet (its prompt is still being dispatched) is left to the
+     * dispatch.
+     */
+    const resyncRun = async (
+        sessionId: string,
+        handle: RuntimeChatHandle,
+        reason: RuntimeResyncReason,
+        endRun: (reason?: ChatRunReason | null, clearClarification?: boolean) => boolean,
+    ) => {
+        const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === sessionId;
+        let state: RuntimeSessionState | undefined;
+        for (let attempt = 0; attempt < RESYNC_ATTEMPTS && current(); attempt += 1) {
+            try {
+                state = await getSessionStateViaRuntime(sessionId);
+                break;
+            } catch (error) {
+                console.error('Failed to read the session state for a resync', error);
+                if (attempt < RESYNC_ATTEMPTS - 1) await new Promise((resolve) => setTimeout(resolve, RESYNC_RETRY_MS * 2 ** attempt));
+            }
+        }
+        if (!current()) return;
+        const followed = handle.runId();
+        if (state) {
+            if (followed === undefined) return;
+            if (state.inProgressRun?.runId === followed) {
+                replaceWithSnapshot(state.messages);
+                return;
+            }
+        } else if (reason !== 'restarted') {
+            // Unreadable after every attempt: only a restart is reason enough to stop following.
+            return;
+        }
+        handle.detach();
+        if (state) replaceWithSnapshot(state.messages);
+        // After a restart the run was cut off. Otherwise it ended unseen: the server's
+        // transcript tells a failure; how else it ended is not known, so no status is claimed.
+        const lastAgent = state?.messages.filter((message) => message.role === 'agent').at(-1);
+        endRun(reason === 'restarted' ? 'interrupted' : lastAgent?.terminalReason === 'error' ? 'error' : null, true);
     };
 
     const handlePrimaryAction = async () => {
@@ -918,18 +998,16 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         const answer = (answerText ?? clarificationInput).trim();
         if (!answer) return;
 
-        setIsSubmittingClarification(true);
+        dispatchRun({ type: 'clarification_submitting', submitting: true });
         try {
             // The answer reaches the agent as the tool result; it is not a chat turn.
             await answerClarificationViaRuntime(pendingClarification.clarification_id, answer, currentSession.id);
-            setPendingClarification((current) => (
-                current?.clarification_id === pendingClarification.clarification_id ? null : current
-            ));
+            dispatchRun({ type: 'clarification_answered', clarificationId: pendingClarification.clarification_id });
             setClarificationInput('');
         } catch (err) {
             console.error('Failed to answer clarification:', err);
         } finally {
-            setIsSubmittingClarification(false);
+            dispatchRun({ type: 'clarification_submitting', submitting: false });
         }
     };
 
@@ -950,188 +1028,153 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         }
     };
 
-    const isAgentMessageAnimating = (messageId: string, terminalReason: AgentTerminalReason | null) => (
-        isStreaming &&
-        !terminalReason &&
-        (messageId === activeAgentMessageIdRef.current || messageId === pendingAgentMessageIdRef.current)
-    );
 
-    const shouldShowThinking = (message: AgentMessage) => (
-        isAgentMessageAnimating(message.messageId, message.terminalReason) &&
-        isAgentMessageEmpty(message)
-    );
     const latestAgentMessage = [...messages].reverse().find((message): message is AgentMessage => message.role === 'agent');
+    const chatItems = (() => {
+        const items = groupIntoTurns<UserMessage, AgentMessage>(messages);
+        // A run that has not produced a step yet still shows that it is working.
+        const last = items[items.length - 1];
+        if ((isStreaming || runReason === 'interrupted' || runReason === 'rejected') && last?.kind === 'user') {
+            items.push({ kind: 'turn', key: `turn-${last.message.id}`, ...(last.message.timestamp !== undefined ? { startedAt: last.message.timestamp } : {}), agents: [] });
+        }
+        return items;
+    })();
+    // One notice for the latest turn: the run was interrupted, or its event stream is down.
+    const turnNotice = runReason === 'interrupted'
+        ? t('chat.runInterrupted')
+        : runReason === 'rejected'
+            ? t('chat.streamRejected')
+            : !isStreaming || streamConnection === 'connected'
+                ? ''
+                : t(streamConnection === 'disconnected' ? 'chat.streamDisconnected' : 'chat.streamReconnecting');
     const liveStatus = runReason === 'error'
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
-        : (isStreaming && isStreamReconnecting ? t('chat.streamReconnecting') : '') || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice || (semanticBlocked && messages.length === 0 ? t('chat.semanticWaiting') : '');
+        : turnNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
 
     return (
-        <main id="main-content" className="chat-area" data-semantic-blocked={semanticBlocked || undefined} aria-labelledby="chat-page-title">
-            <header className="breadcrumb-header">
+        <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
+            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:px-3">
                 <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
-                <div className="breadcrumb-main">
-                    <span className="breadcrumb-mark" aria-hidden="true">
+                <div className="flex min-w-0 flex-auto items-center gap-2 overflow-hidden max-[480px]:gap-[5px]">
+                    <span className="-ml-1 inline-flex items-center justify-center p-1 text-body" aria-hidden="true">
                         <AgentOrbitIcon
                             size={32}
-                            className={`breadcrumb-icon ${isStreaming ? 'is-running' : 'is-idle'}`}
+                            className={`shrink-0 transition-colors ${isStreaming ? 'text-brand' : 'text-faint'}`}
                             animated={isStreaming}
                         />
                     </span>
-                    <span className="breadcrumb-title">{t('chat.agents')}</span>
-                    <span className="breadcrumb-separator">/</span>
-                    <span className="breadcrumb-task">{currentTask.name}</span>
-                    <span className="breadcrumb-separator">/</span>
-                    <span className="breadcrumb-session">{currentSession.name}</span>
+                    <span className="shrink-0 font-bold tracking-[-0.02em] whitespace-nowrap text-foreground">{t('chat.breadcrumbRoot')}</span>
+                    <span className="mx-1 shrink-0 text-border-strong">/</span>
+                    <span className="max-w-[180px] truncate text-body max-[480px]:max-w-[76px]">{currentTask.name}</span>
+                    <span className="mx-1 shrink-0 text-border-strong">/</span>
+                    <span className="max-w-[340px] min-w-0 shrink truncate font-medium max-[480px]:max-w-[76px]">{currentSession.name}</span>
                 </div>
 
-                <div className="breadcrumb-actions">
+                <div className="flex shrink-0 items-center gap-1">
                     <button
                         type="button"
-                        className={`tool-panel-header-btn ${isToolPanelOpen ? 'is-active' : ''}`}
+                        className={`group/details inline-flex h-[34px] shrink-0 cursor-pointer items-center gap-0 rounded-none border-0 bg-transparent px-2 whitespace-nowrap transition-[background-color,border-color,color,transform] focus-visible:rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-45 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 ${isToolPanelOpen ? 'text-brand' : 'text-muted-foreground pointer-fine:enabled:hover:text-foreground'}`}
                         onClick={onToggleToolPanel}
                         aria-pressed={isToolPanelOpen}
                         disabled={!hasTools && !isToolPanelOpen}
                         aria-label={isToolPanelOpen ? t('chat.closeDetails') : t('chat.openDetails')}
                     >
-                        <RiInfoCard size={17} aria-hidden="true" />
-                        <span className="header-icon-label" aria-hidden="true">{t('chat.details')}</span>
+                        <IdCard size={17} aria-hidden="true" />
+                        <span className="inline-block max-w-0 overflow-hidden text-[0.82rem] whitespace-nowrap opacity-0 transition-[max-width,opacity,margin] group-focus-visible/details:ml-1.5 group-focus-visible/details:max-w-[8em] group-focus-visible/details:opacity-100 group-enabled/details:group-hover/details:ml-1.5 group-enabled/details:group-hover/details:max-w-[8em] group-enabled/details:group-hover/details:opacity-100 motion-reduce:transition-none max-[720px]:hidden" aria-hidden="true">{t('chat.details')}</span>
                     </button>
                 </div>
             </header>
-            <div className="chat-live-region" role={runReason === 'error' ? 'alert' : 'status'} aria-live={runReason === 'error' ? 'assertive' : 'polite'} aria-atomic="true">
+            <div className="sr-only" role={runReason === 'error' ? 'alert' : 'status'} aria-live={runReason === 'error' ? 'assertive' : 'polite'} aria-atomic="true">
                 {liveStatus}
             </div>
 
             <div
                 ref={chatContainerRef}
                 onScroll={handleScroll}
-                className="chat-message-list scrollable-area flex flex-col gap-6 p-6"
+                className="scrollable-area flex min-h-0 flex-1 flex-col gap-8 bg-[var(--frame-surface)] py-6 pr-7 pl-6 [scrollbar-gutter:stable] max-[720px]:gap-5 max-[720px]:py-4 max-[720px]:pr-4 max-[720px]:pl-3"
             >
                 {messages.length === 0 && (
-                    <div className="empty-chat-state">
-                        {t('chat.placeholder')}
+                    <div className={`${setupDone ? 'mt-[clamp(40px,9vh,96px)]' : 'mt-[clamp(8px,3vh,32px)]'} flex w-[min(720px,100%)] flex-col gap-2.5 self-center`}>
+                        {setupDone ? (<>
+                        <span className="animate-rise-sm font-mono text-[0.75rem] text-faint motion-reduce:animate-none" aria-hidden="true">-- {t('chat.starterCaption')}</span>
+                        <h2 className="m-0 animate-rise-sm text-[clamp(1.5rem,2.4vw,1.95rem)] leading-[1.2] font-[650] tracking-[-0.02em] text-balance text-foreground [animation-delay:40ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterTitle')}</h2>
+                        <p className="m-0 animate-rise-sm text-[length:var(--font-size-body-sm)] leading-[1.65] text-pretty text-muted-foreground [animation-delay:80ms] [animation-duration:480ms] motion-reduce:animate-none">{t('chat.starterHint')}</p>
+                        </>) : (<>
+                        <SetupChecklist />
+                        <p className="m-0 mt-5 text-[0.8rem] text-faint">{t('setup.examplesLocked')}</p>
+                        </>)}
+                        <div className={`grid grid-cols-2 gap-2.5 max-[720px]:grid-cols-1 ${setupDone ? 'mt-[22px]' : 'opacity-50'}`}>
+                            {STARTER_PROMPTS.map((kind, index) => (
+                                <button
+                                    key={kind}
+                                    type="button"
+                                    className="group/starter relative flex min-h-[92px] [font:inherit] animate-rise-sm cursor-pointer flex-col disabled:pointer-events-none items-start gap-2 rounded-xl border border-border bg-white py-4 pr-11 pl-[18px] text-left text-foreground transition-[border-color,box-shadow,transform,background-color] [animation-delay:calc(140ms+var(--i)*60ms)] [animation-duration:480ms] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand active:scale-[0.985] motion-reduce:animate-none motion-reduce:transition-none max-[720px]:min-h-0 pointer-fine:hover:-translate-y-0.5 pointer-fine:hover:border-input pointer-fine:hover:bg-paper pointer-fine:hover:shadow-[0_1px_2px_rgba(28,25,23,0.04),0_12px_32px_-20px_rgba(28,25,23,0.28)]"
+                                    style={{ '--i': index } as React.CSSProperties}
+                                    disabled={!setupDone}
+                                    onClick={() => {
+                                        // Examples are generic; the user adapts one to their own data before sending.
+                                        setInputValue(t(`chat.starter.${kind}.prompt`));
+                                        textareaRef.current?.focus();
+                                    }}
+                                >
+                                    <span className="inline-flex items-baseline gap-2 text-[0.75rem] font-semibold text-muted-foreground">
+                                        <span className="font-mono text-[0.7rem] font-medium text-brand" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                                        {t(`chat.starter.${kind}.label`)}
+                                    </span>
+                                    <span className="text-[0.925rem] leading-[1.55] text-foreground">{t(`chat.starter.${kind}.prompt`)}</span>
+                                    <ChevronRight size={16} className="absolute right-4 bottom-4 -translate-x-1.5 text-faint opacity-0 transition-[opacity,transform,color] group-focus-visible/starter:translate-x-0 group-focus-visible/starter:opacity-100 motion-reduce:transition-none max-[720px]:top-1/2 max-[720px]:bottom-auto max-[720px]:-mt-[7px] max-[720px]:translate-x-0 max-[720px]:opacity-100 pointer-fine:group-hover/starter:translate-x-0 pointer-fine:group-hover/starter:text-brand pointer-fine:group-hover/starter:opacity-100" aria-hidden="true" />
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 )}
 
-                {messages.filter((msg) => msg.role === 'user' || !isAgentMessageEmpty(msg)).map((msg) => (
-                    <React.Fragment key={msg.id}>
-                        {msg.role === 'user' ? (
-                            <div className="message user">
-                                <div className="user-message-stack">
-                                    <div className="message-content user-message-body">
-                                        {msg.content}
-                                    </div>
-                                    {msg.attachments && msg.attachments.length > 0 && (
-                                        <ul className="message-attachments" aria-label={t('chat.attachedFiles')}>
-                                            {msg.attachments.map((file) => (
-                                                <li key={file} className="attachment-chip" title={file}>
-                                                    <FileIcon filename={file} size={14} />
-                                                    <span>{file}</span>
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
+                {chatItems.map((item, index) => (
+                    item.kind === 'user' ? (
+                        <div key={item.message.id} className={USER_ROW} data-message-role="user">
+                            <div className="flex min-w-0 flex-col items-end gap-1.5">
+                                <div className="rounded-[var(--bubble-radius)] border-0 bg-[var(--bubble-bg)] px-4 py-3 text-[0.95rem] leading-[1.6] wrap-anywhere whitespace-pre-wrap text-foreground shadow-none in-[:lang(zh-CN)]:leading-[1.75]">
+                                    {item.message.content}
                                 </div>
-                                <div className="message-avatar user-avatar">U</div>
+                                {item.message.attachments && item.message.attachments.length > 0 && (
+                                    <ul className="m-0 flex list-none flex-wrap justify-end gap-1.5 p-0" aria-label={t('chat.attachedFiles')}>
+                                        {item.message.attachments.map((file) => (
+                                            <li key={file} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border border-border bg-white py-1 pr-2 pl-2.5 text-[0.8rem] text-body [&>span]:min-w-0 [&>span]:truncate" title={file}>
+                                                <FileIcon filename={file} size={14} />
+                                                <span>{file}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
                             </div>
-                        ) : (
-                            <div className="message agent">
-                                <div className={`agent-icon-red flex-shrink-0 flex items-center justify-center ${isAgentMessageAnimating(msg.messageId, msg.terminalReason) ? 'is-running' : 'is-idle'}`}>
-                                    <AgentOrbitIcon
-                                        size={32}
-                                        animated={isAgentMessageAnimating(msg.messageId, msg.terminalReason)}
-                                        className="agent-message-icon"
-                                    />
-                                </div>
-                                <div className="message-content-wrapper">
-                                    {(msg.reasoningContent.trim().length > 0 || shouldShowThinking(msg)) && (
-                                        <details
-                                            className={`agent-reasoning-block ${isAgentMessageAnimating(msg.messageId, msg.terminalReason) ? 'is-streaming' : ''}`}
-                                            open={isAgentMessageAnimating(msg.messageId, msg.terminalReason)}
-                                        >
-                                            <summary className="agent-reasoning-title">
-                                                {isAgentMessageAnimating(msg.messageId, msg.terminalReason) ? THINKING_STATUS_TEXT : REASONING_DONE_TEXT}
-                                            </summary>
-                                            <div className="agent-reasoning-content">
-                                                {msg.reasoningContent || t('tools.processing')}
-                                            </div>
-                                        </details>
-                                    )}
-
-                                    {visibleAgentContent(msg) && (
-                                        <div className="message-content prose prose-sm max-w-none agent-message-body markdown-content">
-                                            <AgentMarkdown currentSessionId={currentSession.id}>
-                                                {visibleAgentContent(msg)}
-                                            </AgentMarkdown>
-                                        </div>
-                                    )}
-
-                                    {msg.retryNotice && (
-                                        <div className="agent-thinking-line">
-                                            <span>{msg.retryNotice}</span>
-                                        </div>
-                                    )}
-
-                                    {isStreaming && isStreamReconnecting && msg === latestAgentMessage && (
-                                        <div className="agent-thinking-line">
-                                            <span>{t('chat.streamReconnecting')}</span>
-                                        </div>
-                                    )}
-
-                                    {Object.values(msg.widgetsById).map((widget) => (
-                                        <WidgetRenderer
-                                            key={widget.tool_call_id || widget.widget_id}
-                                            widget={widget}
-                                            currentSessionId={currentSession.id}
-                                        />
-                                    ))}
-
-                                    {(Object.values(msg.toolCallsById).length > 0 || msg.skillActivations.length > 0) && (
-                                        <div className="agent-hint-list">
-                                            {Object.values(msg.toolCallsById).map((tool) => (
-                                                <React.Fragment key={tool.toolCallId}>
-                                                    <button
-                                                        type="button"
-                                                        className={`agent-hint-line ${tool.status === 'error' ? 'is-error' : ''}`}
-                                                        onClick={onOpenToolPanel}
-                                                        disabled={!onOpenToolPanel}
-                                                        aria-label={getToolHintLabel(tool, t)}
-                                                        style={{ cursor: onOpenToolPanel ? 'pointer' : 'default', background: 'none', border: 'none', padding: 0, textAlign: 'left' }}
-                                                    >
-                                                        <span className="agent-hint-dot" aria-hidden="true" />
-                                                        <span>{getToolHintLabel(tool, t)}</span>
-                                                    </button>
-                                                    <SubagentProgressLines progress={subagentChildrenOf(tool)} />
-                                                </React.Fragment>
-                                            ))}
-                                            {msg.skillActivations.map((skill) => (
-                                                <div
-                                                    key={[skill.name, skill.source, skill.command_text, skill.location].join('|')}
-                                                    className="agent-hint-line"
-                                                >
-                                                    <span className="agent-hint-dot" aria-hidden="true" />
-                                                    <span>{getSkillHintLabel(skill, t)}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                    </React.Fragment>
+                            <div className="mt-[7.5px] flex size-8 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,var(--foreground),var(--body-strong))] text-sm font-semibold text-white shadow-[0_12px_24px_-18px_rgba(28,25,23,0.9)]">U</div>
+                        </div>
+                    ) : (
+                        <AgentTurn
+                            key={item.key}
+                            agents={item.agents}
+                            running={isStreaming && index === chatItems.length - 1}
+                            startedAt={item.startedAt}
+                            currentSessionId={currentSession.id}
+                            connectionNotice={index === chatItems.length - 1 ? turnNotice : ''}
+                            toolLabel={(tool) => getToolHintLabel(tool, t)}
+                            skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
+                            onOpenToolPanel={onOpenToolPanel}
+                        />
+                    )
                 ))}
 
                 {pendingClarification && (
-                    <div className="message agent clarification-message" role="alert" aria-live="assertive">
-                        <div className="agent-icon-red is-idle flex-shrink-0 flex items-center justify-center">
-                            <AgentOrbitIcon size={32} animated={false} className="agent-message-icon" />
+                    <div className={AGENT_ROW} role="alert" aria-live="assertive">
+                        <div className={agentIcon(false)}>
+                            <AgentOrbitIcon size={32} animated={false} className={AGENT_ICON_SVG} />
                         </div>
-                        <div className="message-content-wrapper">
-                            <div className="clarification-card">
-                                <div className="clarification-title">{t('chat.clarificationTitle')}</div>
-                                <div className="clarification-question">{pendingClarification.question}</div>
+                        <div className={MESSAGE_COLUMN}>
+                            <div className="rounded-[var(--bubble-radius)] bg-[var(--bubble-bg)] px-3.5 py-3">
+                                <div className="mb-1 text-[length:var(--font-size-caption)] font-semibold text-brand">{t('chat.clarificationTitle')}</div>
+                                <div className="text-[0.95rem] leading-[1.6] wrap-anywhere whitespace-pre-wrap text-foreground">{pendingClarification.question}</div>
                                 {pendingClarification.options.length > 0 && (
-                                    <div className="clarification-options" role="radiogroup" aria-label={t('chat.clarificationOptions')}>
+                                    <div className="mt-2.5 flex flex-col gap-1.5" role="radiogroup" aria-label={t('chat.clarificationOptions')}>
                                         {pendingClarification.options.map((option) => {
                                             const isSelected = clarificationInput === option;
                                             return (
@@ -1140,24 +1183,24 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                                     type="button"
                                                     role="radio"
                                                     aria-checked={isSelected}
-                                                    className={`clarification-option ${isSelected ? 'is-selected' : ''}`}
+                                                    className={`group/option flex w-full cursor-pointer items-start gap-2.5 rounded-[var(--radius-sm)] border bg-[var(--frame-surface)] px-3 py-2 text-left text-[length:var(--font-size-body-sm)] leading-normal text-foreground transition-[border-color,background-color] disabled:cursor-not-allowed disabled:opacity-58 motion-reduce:transition-none ${isSelected ? 'border-[rgba(194,65,12,0.36)]' : 'border-border enabled:hover:border-border-strong'}`}
                                                     onClick={() => {
                                                         setClarificationInput(option);
                                                         clarificationInputRef.current?.focus();
                                                     }}
                                                     disabled={isSubmittingClarification}
                                                 >
-                                                    <span className="clarification-option-mark" aria-hidden="true" />
+                                                    <span className={`mt-[3px] size-3.5 shrink-0 rounded-full transition-[border-color,border-width] motion-reduce:transition-none ${isSelected ? 'border-4 border-brand' : 'border-[1.5px] border-border-strong'}`} aria-hidden="true" />
                                                     <span>{option}</span>
                                                 </button>
                                             );
                                         })}
                                     </div>
                                 )}
-                                <div className="clarification-answer">
+                                <div className="mt-2.5 flex items-end gap-2 rounded-[var(--radius-md)] border border-border bg-[var(--frame-surface)] py-1.5 pr-1.5 pl-3 transition-[border-color,box-shadow] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                                     <textarea
                                         ref={clarificationInputRef}
-                                        className="clarification-input"
+                                        className="max-h-40 min-h-9 flex-1 resize-none border-0 bg-transparent py-[7px] text-[length:var(--font-size-body-sm)] leading-normal text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground"
                                         rows={1}
                                         value={clarificationInput}
                                         onChange={(e) => setClarificationInput(e.target.value)}
@@ -1168,7 +1211,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                     />
                                     <button
                                         type="button"
-                                        className={`chat-send-btn ${clarificationInput.trim() ? 'is-ready' : ''}`}
+                                        className={sendButton(clarificationInput.trim() ? 'ready' : 'idle', 'size-8 rounded-lg')}
                                         onClick={() => void handleSubmitClarification()}
                                         disabled={isSubmittingClarification || !clarificationInput.trim()}
                                         aria-label={isSubmittingClarification ? t('chat.submitting') : t('chat.submit')}
@@ -1184,15 +1227,16 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="chat-input-container p-4 border-t border-gray-100 bg-white">
+            <div className="bg-[var(--frame-surface)] px-11 pt-5 pb-7 max-[1100px]:px-7 max-[1100px]:pt-6 max-[1100px]:pb-8 max-[720px]:p-3">
                 {attachedFiles.length > 0 && (
-                    <ul className="chat-attachments" aria-label={t('chat.attachedFiles')}>
+                    <ul className="m-0 mb-2 flex list-none flex-wrap gap-1.5 p-0" aria-label={t('chat.attachedFiles')}>
                         {attachedFiles.map((file) => (
-                            <li key={file} className="attachment-chip" title={file}>
+                            <li key={file} className="inline-flex max-w-[260px] items-center gap-1.5 rounded-lg border border-border bg-white py-1 pr-2 pl-2.5 text-[0.8rem] text-body [&>span]:min-w-0 [&>span]:truncate" title={file}>
                                 <FileIcon filename={file} size={14} />
                                 <span>{file}</span>
                                 <button
                                     type="button"
+                                    className="grid size-[18px] shrink-0 cursor-pointer place-items-center rounded-[5px] border-0 bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                     onClick={() => setAttachedFiles(attachedFiles.filter((item) => item !== file))}
                                     aria-label={t('chat.removeAttachment').replace('{name}', file)}
                                     title={t('chat.removeAttachment').replace('{name}', file)}
@@ -1203,23 +1247,23 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         ))}
                     </ul>
                 )}
-                <div className="chat-input-meta">
+                <div className="mb-2 flex items-center justify-between gap-4 text-[0.75rem] text-muted-foreground max-[480px]:flex-col max-[480px]:items-start max-[480px]:gap-1">
                     {uploadError
-                        ? <span className="chat-input-error" role="alert">{t('chat.uploadFailed')}</span>
+                        ? <span className="text-destructive" role="alert">{t('chat.uploadFailed')}</span>
                         : <span>{isStreaming ? t('chat.steerHint') : null}</span>}
-                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : t('tools.statusError')}</span>}
+                    {runReason && <span>{t('chat.status') || '状态'}：{runReason === 'completed' ? t('tools.statusDone') : runReason === 'stopped' ? t('chat.stopped') || '已停止' : runReason === 'interrupted' || runReason === 'rejected' ? t('chat.interrupted') : t('tools.statusError')}</span>}
                 </div>
-                <div className="chat-input-wrapper shadow-sm">
+                <div className="relative flex min-h-14 items-end gap-2 rounded-[20px] border border-border bg-background px-3 py-2 shadow-none transition-[border-color,box-shadow,transform] focus-within:border-[rgba(194,65,12,0.36)] focus-within:shadow-[var(--shadow-ring)] motion-reduce:transition-none">
                     <input
                         ref={fileInputRef}
                         type="file"
                         multiple
-                        style={{ display: 'none' }}
+                        hidden
                         onChange={handleUploadChange}
                     />
                     <button
                         type="button"
-                        className="chat-icon-btn"
+                        className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground transition-[background-color,color,box-shadow,transform] disabled:cursor-not-allowed disabled:opacity-58 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 pointer-fine:enabled:hover:bg-[rgba(120,53,15,0.07)] pointer-fine:enabled:hover:text-foreground"
                         onClick={handleUploadClick}
                         disabled={isUploading || isStreaming}
                         title={t('chat.uploadTooltip')}
@@ -1229,29 +1273,16 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     </button>
                     <textarea
                         ref={textareaRef}
-                        className="chat-input flex-1"
+                        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 text-[15px] leading-normal wrap-anywhere whitespace-pre-wrap text-foreground outline-none placeholder:text-muted-foreground"
                         placeholder={isStreaming ? (t('chat.steerPlaceholder') || '执行中补充说明...') : t('chat.placeholder')}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         rows={1}
-                        style={{
-                            border: 'none',
-                            outline: 'none',
-                            padding: '8px 4px',
-                            fontSize: '15px',
-                            lineHeight: 1.5,
-                            resize: 'none',
-                            minHeight: '40px',
-                            maxHeight: '160px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            overflowWrap: 'anywhere',
-                        }}
                     />
                     <button
                         type="button"
-                        className={`chat-send-btn ${isStreaming && !inputValue.trim() ? 'is-stop' : inputValue.trim() ? 'is-ready' : ''}`}
+                        className={sendButton(isStreaming && !inputValue.trim() ? 'stop' : inputValue.trim() ? 'ready' : 'idle')}
                         onClick={() => void handlePrimaryAction()}
                         disabled={isUploading || (!isStreaming && !inputValue.trim())}
                         title={isStreaming && !inputValue.trim() ? t('chat.stop') : t('chat.send')}
@@ -1265,8 +1296,18 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     );
 };
 
+/** The send / stop button: grey while empty, ink when there is something to send, red while a run can be stopped. */
+function sendButton(state: 'idle' | 'ready' | 'stop', size = 'size-9 rounded-xl'): string {
+    const tone = state === 'ready'
+        ? 'bg-foreground text-white shadow-[0_12px_26px_-16px_rgba(28,25,23,0.8)] pointer-fine:enabled:hover:-translate-y-px pointer-fine:enabled:hover:bg-foreground'
+        : state === 'stop'
+            ? 'bg-destructive-soft text-destructive pointer-fine:enabled:hover:bg-destructive-border'
+            : 'bg-muted text-border-strong';
+    return `inline-flex ${size} shrink-0 cursor-pointer items-center justify-center border-0 transition-[background-color,color,box-shadow,transform] disabled:cursor-not-allowed disabled:opacity-58 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 ${tone}`;
+}
+
 const ChatArea: React.FC<ChatAreaProps> = (props) => {
-    const { currentTask, currentSession, createSession } = useSession();
+    const { currentTask, currentSession, createSession, createTask } = useSession();
     const { t } = useLanguage();
 
     if (currentTask && currentSession) {
@@ -1274,30 +1315,28 @@ const ChatArea: React.FC<ChatAreaProps> = (props) => {
     }
 
     return (
-        <main id="main-content" className="chat-area" aria-labelledby="chat-page-title">
-            <header className="breadcrumb-header">
+        <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
+            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:px-3">
                 <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
-                <div className="breadcrumb-main">
-                    <span className="breadcrumb-mark" aria-hidden="true">
-                        <AgentOrbitIcon size={32} className="breadcrumb-icon is-idle" animated={false} />
+                <div className="flex min-w-0 flex-auto items-center gap-2 overflow-hidden max-[480px]:gap-[5px]">
+                    <span className="-ml-1 inline-flex items-center justify-center p-1 text-body" aria-hidden="true">
+                        <AgentOrbitIcon size={32} className="shrink-0 text-faint" animated={false} />
                     </span>
-                    <span className="breadcrumb-title">{t('chat.agents')}</span>
+                    <span className="shrink-0 font-bold tracking-[-0.02em] whitespace-nowrap text-foreground">{t('chat.breadcrumbRoot')}</span>
                     {currentTask && (
                         <>
-                            <span className="breadcrumb-separator">/</span>
-                            <span className="breadcrumb-task">{currentTask.name}</span>
+                            <span className="mx-1 shrink-0 text-border-strong">/</span>
+                            <span className="max-w-[180px] truncate text-body max-[480px]:max-w-[76px]">{currentTask.name}</span>
                         </>
                     )}
                 </div>
             </header>
-            <div className="empty-chat-state task-chat-empty-state">
+            <div className="mt-[88px] flex w-[min(520px,100%)] flex-col items-center gap-3.5 self-center rounded-3xl border border-[rgba(120,53,15,0.1)] bg-white/58 px-[26px] py-[22px] text-center text-muted-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.72)]">
                 <div>{currentTask ? t('session.emptyPrompt') : t('task.emptyPrompt')}</div>
-                {currentTask && (
-                    <button type="button" className="create-session-empty-btn" onClick={() => createSession(currentTask.id)}>
-                        <Plus size={14} />
-                        <span>{t('session.create')}</span>
-                    </button>
-                )}
+                <button type="button" className="inline-flex cursor-pointer items-center gap-[7px] rounded-md [font:inherit] border border-[rgba(120,53,15,0.14)] bg-white px-[13px] py-2 text-body hover:border-[rgba(120,53,15,0.28)] hover:text-foreground" onClick={() => (currentTask ? createSession(currentTask.id) : createTask())}>
+                    <Plus size={14} />
+                    <span>{currentTask ? t('session.create') : t('task.startAsking')}</span>
+                </button>
             </div>
         </main>
     );

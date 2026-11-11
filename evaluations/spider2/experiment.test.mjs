@@ -59,7 +59,6 @@ test("semantic-spec ablation is an explicit experiment factor with a distinct to
     assert.equal(experiment.capabilities.semanticSpec.resolved, "disabled");
     assert.equal(experiment.capabilities.tools.resolved.includes("begin_query_task"), true);
     assert.equal(experiment.capabilities.tools.resolved.includes("set_answer_spec"), false);
-    assert.equal(experiment.capabilities.specFeedback.resolved, false);
     const headless = await resolveExperiment({ config: { ...current, enableClarificationTool: false, answering: { semanticSpecMode: "disabled" } }, instanceIds: ["local001"], inputs: { systemPrompt: "ablation prompt" } });
     assert.equal(headless.capabilities.clarification.resolved, false);
     assert.equal(headless.capabilities.tools.resolved.includes("ask_user_clarification"), false);

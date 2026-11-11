@@ -296,12 +296,12 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
         const value = input as { question: string; options?: string[] };
         const request = options.clarifications!.ask(toolContext?.sessionId ?? "", value.question, value.options ?? []);
         const answer = await request.promise;
-        if (!answer) return text("[CLARIFICATION_UNANSWERED] 用户未回答（超时或已取消）。按 answer-fields「决定与澄清」第 5 条处理：统计总体字段仍需引用能确定它的原题或业务文档，建议无倾向的字段只能引用业务文档，都没有时再次询问；其他字段按比较建议的倾向决定。", { clarificationId: request.clarificationId });
+        if (!answer) return text("[CLARIFICATION_UNANSWERED] 用户未回答（超时或已取消）。按 spec Skill 的「决定与澄清」第 5 条处理：统计总体字段仍需引用能确定它的原题或业务文档，建议无倾向的字段只能引用业务文档，都没有时再次询问；其他字段按比较建议的倾向决定。", { clarificationId: request.clarificationId });
         return text(`${answer}\n[CLARIFICATION_ANSWERED] clarificationId=${request.clarificationId}：在 set_answer_spec 中以 cite: [{source: "clarification:${request.clarificationId}", quote: <回答原文的逐字摘录>}] 引用这条回答。`, { clarificationId: request.clarificationId });
       },
     }, {
       promptSnippet: "请求并等待一个结构化的用户澄清。",
-      promptGuidelines: ["按 answer-fields 的「决定与澄清」使用：待定字段没有能排除其他候选的依据，且属于统计总体字段或比较建议无倾向时询问；同一任务要问的字段合并成一次询问，选项用候选的业务含义。比较建议和模型推断不能冒充用户确认。"],
+      promptGuidelines: ["按 spec Skill 的「决定与澄清」使用：待定字段没有能排除其他候选的依据，且属于统计总体字段或比较建议无倾向时询问；同一任务要问的字段合并成一次询问，选项用候选的业务含义。比较建议和模型推断不能冒充用户确认。"],
     }, { pinned: true }));
   }
 

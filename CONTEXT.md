@@ -5,7 +5,7 @@ This context defines the language used to assess whether a freely generated data
 ## Language
 
 **Evidence Authority**:
-The precedence order used when semantic evidence conflicts: user clarification, reviewed business definitions or semantic models, task-supplied business documents, explicit request wording, formal schema constraints, observed data evidence, and finally model inference. Evaluation Gold is never runtime evidence.
+The precedence order used when semantic evidence conflicts: user clarification, reviewed business definitions, task-supplied business documents, explicit request wording, formal schema constraints, observed data evidence, and finally model inference. Evaluation Gold is never runtime evidence.
 _Avoid_: Source priority, truth ranking
 
 **Query Task**:
@@ -171,10 +171,6 @@ _Avoid_: Deduplication rule, data quality verdict
 **Calendar Coverage**:
 The Runtime's list of the periods the time field actually has inside `population.time`, at the answer's year, quarter, month or day grain, read when a Revision commits. Periods without data make `population.missing` a required field and are disclosed with the result; how an absent period counts stays a Spec decision.
 _Avoid_: Gap filling, zero-fill rule
-
-**Requirement Phrase**:
-A phrase of the original request, copied verbatim, that constrains the answer, with its role (population, scope, computation, selection or time). A model that reads only the request lists them; the Runtime keeps only phrases found verbatim; the Spec feedback assessor, a decision model, judges each as expressed, contradicted or missing in the Spec's field claims. The judgment is advisory and disclosed, never evidence.
-_Avoid_: Reviewer finding, requirement checklist
 
 **Necessity Rule**:
 The rule that says which fields must have a state before a result query: eight always, and the measure sub-fields, `selection.ties` and `population.joinMultiplicity` when the formula, selection or source call for them, and `population.missing` when Calendar Coverage finds periods without data (ADR-0007). Not applicable is a state.

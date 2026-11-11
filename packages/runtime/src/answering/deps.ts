@@ -4,7 +4,6 @@ import type { ResultStore } from "./result-store.js";
 import type { EvidenceSource } from "./evidence-admission.js";
 import type { FanoutDialect, FanoutSchema } from "./fanout-check.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
-import type { RequirementExtractor, SpecAlignmentAssessor } from "../judgment/spec-alignment.js";
 import type { FieldAdviceOptions } from "./advice-execution.js";
 
 export interface FanoutAnsweringOptions {
@@ -14,20 +13,6 @@ export interface FanoutAnsweringOptions {
   readonly maxTargets?: number;
   readonly maxInputRows?: number;
 }
-
-export interface SpecFeedbackOptions {
-  readonly assessor: SpecAlignmentAssessor;
-  /** Lists the request's requirement phrases once per request; without it only output columns are assessed. */
-  readonly requirementExtractor?: RequirementExtractor;
-  readonly getOriginalQuestion: (requestMessageId: string, options?: { readonly signal?: AbortSignal }) => Promise<string | undefined>;
-  readonly timeoutMs?: number;
-  readonly maxInputBytes?: number;
-}
-
-export type ResolvedSpecFeedbackOptions = Omit<SpecFeedbackOptions, "timeoutMs" | "maxInputBytes"> & {
-  readonly timeoutMs: number;
-  readonly maxInputBytes: number;
-};
 
 export type SemanticQualificationMode = "required" | "bypassed";
 
@@ -52,7 +37,6 @@ export interface AnsweringDeps {
   /** Whether an unverified decision may settle the material population (ADR-0006). */
   readonly populationDecisions: "require_evidence" | "allow_disclosed";
   readonly evidenceSource?: EvidenceSource;
-  readonly specFeedback?: ResolvedSpecFeedbackOptions;
   readonly fanout: FanoutAnsweringOptions;
   /** Cached per Answering instance; loaded lazily from the executor. */
   readonly loadFanoutSchema: (context: BusinessContext) => Promise<FanoutSchema | undefined>;

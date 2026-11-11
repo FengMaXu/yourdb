@@ -5,7 +5,7 @@ import { exampleDataset } from "@data-agent/charts";
 import { checkChartSpec, type ChartSpec } from "@data-agent/contracts";
 import { renderChartSvg } from "./chart-render.js";
 
-const SKILLS = ["demo-report", "analysis"];
+const SKILLS = ["report", "chart"];
 const repo = path.resolve(process.cwd(), "..", "..");
 
 async function chartExamples(skill: string): Promise<{ body: string; line: number }[]> {

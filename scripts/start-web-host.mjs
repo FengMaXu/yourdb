@@ -12,9 +12,6 @@ const dataDir = process.env.DATA_AGENT_DATA_DIR
 const knowledgeRoot = process.env.DATA_AGENT_KNOWLEDGE_DIR
   ? path.resolve(process.env.DATA_AGENT_KNOWLEDGE_DIR)
   : path.join(root, "knowledge");
-const semanticProjectDir = process.env.DATA_AGENT_SEMANTIC_PROJECT_DIR
-  ? path.resolve(process.env.DATA_AGENT_SEMANTIC_PROJECT_DIR)
-  : path.resolve(dataDir, "..", "semantic-context");
 const packagedRoot = process.resourcesPath ?? root;
 const skillRoots = [path.join(root, ".agents", "skills"), path.join(packagedRoot, ".agents", "skills")];
 const builtinKnowledgeRoots = [path.join(root, ".agents", "knowledge"), path.join(packagedRoot, ".agents", "knowledge")];
@@ -23,59 +20,32 @@ const pythonExecutable = process.env.DATA_AGENT_PYTHON
 
 const { createDataAgentApplication } = await import(toUrl(path.join(root, "packages/runtime/dist/index.js")));
 const { createRuntimeServer } = await import(toUrl(path.join(root, "apps/server/dist/index.js")));
-const { createMcpQueryExecutor } = await import(toUrl(path.join(root, "apps/server/dist/mcp-query-executor.js")));
+const { createConfiguredQueryExecutor } = await import(toUrl(path.join(root, "packages/database/dist/index.js")));
 const { createHostTesters } = await import(toUrl(path.join(root, "apps/server/dist/host-testers.js")));
+const { createMcpPluginSupervisor, databaseHostServer } = await import(toUrl(path.join(root, "packages/mcp-plugins/dist/index.js")));
 
-const mysqlMcpProcess = {
-  command: process.execPath,
-  args: [path.join(root, "packages", "mcp-mysql", "dist", "cli.js")],
+const databaseServers = {
+  mysql: { command: process.execPath, args: [path.join(root, "packages", "mcp-mysql", "dist", "cli.js")] },
+  postgres: { command: process.execPath, args: [path.join(root, "packages", "mcp-pg", "dist", "cli.js")] },
+  sqlite: { command: process.execPath, args: [path.join(root, "packages", "mcp-sqlite", "dist", "cli.js")] },
 };
-function mysqlEnvFromConfig(config) {
-  const env = {};
-  if (!config) return env;
-  if (config.host) env.DATA_AGENT_MYSQL_HOST = String(config.host);
-  if (config.port) env.DATA_AGENT_MYSQL_PORT = String(config.port);
-  if (config.user) env.DATA_AGENT_MYSQL_USER = String(config.user);
-  if (config.password) env.DATA_AGENT_MYSQL_PASSWORD = String(config.password);
-  if (config.database) env.DATA_AGENT_MYSQL_DATABASE = String(config.database);
-  return env;
-}
 
 let application;
-let queryExecutor;
-let queryExecutorEnvKey = "";
-async function resolveQueryExecutor() {
-  const saved = (await application.getConfig("ui.settings")) ?? {};
-  const env = mysqlEnvFromConfig(saved);
-  const key = JSON.stringify(env);
-  if (!queryExecutor || key !== queryExecutorEnvKey) {
-    await queryExecutor?.close?.();
-    queryExecutor = createMcpQueryExecutor({
-      ...mysqlMcpProcess,
-      env: Object.keys(env).length ? env : undefined,
-    });
-    queryExecutorEnvKey = key;
-  }
-  return queryExecutor;
-}
+const queryExecutor = createConfiguredQueryExecutor({
+  readSettings: () => application.getConfig("ui.settings"),
+  servers: databaseServers,
+});
+const resolveQueryExecutor = () => queryExecutor.resolve();
 
 application = await createDataAgentApplication({
   dataRoot: dataDir,
   host: "web",
   knowledgeRoot,
   builtinKnowledgeRoots,
-  semanticProjectDir,
   pythonExecutable,
   queryExecutor: resolveQueryExecutor,
   ...(process.env.TYPESAFE_API_KEY?.trim() ? {
     jevHypothesisComparison: {
-      apiKey: process.env.TYPESAFE_API_KEY.trim(),
-      model: process.env.TYPESAFE_MODEL?.trim() || "jev-1.13.0",
-      ...(process.env.TYPESAFE_ENDPOINT?.trim() ? { endpoint: process.env.TYPESAFE_ENDPOINT.trim() } : {}),
-    },
-  } : {}),
-  ...(process.env.TYPESAFE_SPEC_ALIGNMENT === "1" && process.env.TYPESAFE_API_KEY?.trim() ? {
-    jevSpecAlignment: {
       apiKey: process.env.TYPESAFE_API_KEY.trim(),
       model: process.env.TYPESAFE_MODEL?.trim() || "jev-1.13.0",
       ...(process.env.TYPESAFE_ENDPOINT?.trim() ? { endpoint: process.env.TYPESAFE_ENDPOINT.trim() } : {}),
@@ -103,23 +73,12 @@ application = await createDataAgentApplication({
   packagedRoot,
   skillRoots,
 });
-application.setHostTesters(createHostTesters({ dbMcp: mysqlMcpProcess }));
-application.setIngestJob({
-  async getStatus() {
-    let count = 0;
-    try {
-      const fsPromises = await import("node:fs/promises");
-      for (const segment of ["semantic-layer", "business-semantic"]) {
-        const directory = path.join(semanticProjectDir, segment);
-        if (!existsSync(directory)) continue;
-        const entries = await fsPromises.readdir(directory, { recursive: true });
-        count += entries.filter((entry) => String(entry).endsWith(".yaml") || String(entry).endsWith(".yml")).length;
-      }
-    } catch { count = 0; }
-    return { status: count > 0 ? "ready" : "skipped", jobId: null, summary: { updated: 0, unchanged: count, failed: 0, skipped: 0 }, errorCode: null };
-  },
-  async retry() { return { accepted: true }; },
-});
+application.setHostTesters(createHostTesters({ databaseServers }));
+application.setMcpPlugins(createMcpPluginSupervisor({
+  readConfig: () => application.getConfig("mcp.config"),
+  writeConfig: (config) => application.setConfig("mcp.config", config),
+  hostServers: [databaseHostServer(() => queryExecutor.check())],
+}));
 resolveQueryExecutor().catch((error) => console.warn("[data-agent-web] mcp query executor unavailable:", error.message));
 
 const app = await createRuntimeServer(application, {
@@ -147,19 +106,24 @@ await app.listen({ port, host });
 console.log(`[data-agent-web] listening on http://${host}:${port}`);
 console.log(`[data-agent-web] data dir: ${dataDir}`);
 console.log(`[data-agent-web] knowledge dir: ${knowledgeRoot} (${application.knowledge.catalog().length} documents)`);
-console.log(`[data-agent-web] semantic project dir: ${semanticProjectDir}${existsSync(semanticProjectDir) ? "" : " (not created yet)"}`);
 
 // Channels (ADR-0011). The settings page connects one by scanning a QR code; FEISHU_APP_ID and
 // FEISHU_APP_SECRET still work as a fallback when nothing has been saved. Results reach a group only
 // when its chat id is listed in FEISHU_GROUP_DELIVERY_CHATS; otherwise they go to the asker privately.
 const { feishuProvider } = await import(toUrl(path.join(root, "packages/channel-feishu/dist/index.js")));
+const { weixinProvider } = await import(toUrl(path.join(root, "packages/channel-weixin/dist/index.js")));
 const { createDashboardSnapshotter } = await import(toUrl(path.join(root, "apps/server/dist/dashboard-snapshot.js")));
 const groupChats = new Set((process.env.FEISHU_GROUP_DELIVERY_CHATS ?? "").split(",").map((chatId) => chatId.trim()).filter(Boolean));
 // A chat's next message after this much quiet starts a new conversation; "/new" starts one at any time.
 const idleMinutes = Number(process.env.DATA_AGENT_CHANNEL_IDLE_MINUTES ?? 120);
 const feishuAppId = process.env.FEISHU_APP_ID?.trim();
 const feishuAppSecret = process.env.FEISHU_APP_SECRET?.trim();
-const channels = await application.enableChannels([feishuProvider()], {
+// Scan-to-connect retries switching a new bot to the long connection; each refusal Feishu gives is logged here.
+const channels = await application.enableChannels([
+  feishuProvider({ onError: (error) => console.error("[data-agent-web] feishu:", error instanceof Error ? error.message : error) }),
+  // Personal WeChat through ClawBot: private chats only, connected by scanning in the settings page.
+  weixinProvider({ onError: (error) => console.error("[data-agent-web] weixin:", error instanceof Error ? error.message : error) }),
+], {
   allowGroupDelivery: (address) => groupChats.has(address.chatId),
   // Dashboards reach phones as a picture; it needs Edge or Chrome on this host, and without one only the page is sent.
   snapshot: createDashboardSnapshotter(),

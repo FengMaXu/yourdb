@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { createMcpQueryExecutor, DATABASE_UNAVAILABLE } from "./mcp-query-executor.js";
+import { createMcpQueryExecutor, DATABASE_UNAVAILABLE } from "@data-agent/database";
 
 
 /**

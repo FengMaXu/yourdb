@@ -2,7 +2,7 @@ export { AnsweringError, InMemoryAnswering, SqlExecutionError, DEFAULT_QUERY_BUD
 export { DATABASE_UNAVAILABLE, isDatabaseUnavailable } from "./errors.js";
 export { leanOf, type FieldAdvisory } from "./advice.js";
 export type { FieldAdviceOptions } from "./advice-execution.js";
-export type { Answering, AnsweringSqlExecutor, FanoutAnsweringOptions, InMemoryAnsweringOptions, SemanticQualificationMode, SpecFeedbackOptions, SqlQueryResult } from "./service.js";
+export type { Answering, AnsweringSqlExecutor, FanoutAnsweringOptions, InMemoryAnsweringOptions, SemanticQualificationMode, SqlQueryResult } from "./service.js";
 export {
   checkFanout,
   hasPotentialFanout,
@@ -68,20 +68,9 @@ export {
   type QueryExecutionScope,
   type RefreshPublication,
   type SetAnswerFields,
-  type SpecFeedback,
-  type SpecFeedbackAssessment,
-  type SpecFeedbackChoice,
-  type SpecFeedbackColumn,
-  type SpecFeedbackDeterministicIssue,
-  type SpecFeedbackRequirement,
-  type SpecFeedbackStatus,
-  type RequirementJudgment,
-  type RequirementRole,
-  type ColumnJudgment,
   type SpecFields,
   type UntrustedEvidenceInput,
   CLARIFICATION_SOURCE_PREFIX,
   isEvidenceKind,
   isScopedReadOnlySql,
 } from "./model.js";
-export type { RequirementExtractor, RequirementPhrase, SpecAlignmentAssessor, SpecAlignmentField, SpecAlignmentInput } from "../judgment/spec-alignment.js";

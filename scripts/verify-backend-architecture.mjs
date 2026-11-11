@@ -13,9 +13,13 @@ const sourceRoots = [
   "packages/contracts/src",
   "packages/charts/src",
   "packages/channel-feishu/src",
+  "packages/channel-weixin/src",
   "packages/electron-host/src",
+  "packages/database/src",
+  "packages/mcp-plugins/src",
   "packages/mcp-mysql/src",
   "packages/mcp-pg/src",
+  "packages/mcp-sqlite/src",
   "apps/server/src",
   "frontend/src",
 ].map((relative) => path.join(root, relative));

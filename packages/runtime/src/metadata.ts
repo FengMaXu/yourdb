@@ -41,8 +41,5 @@ export class MetadataStore {
   static createId(): string { return randomUUID(); }
   async getConfig(key: string): Promise<unknown> { const row = await this.call("config.get", "system", { configKey: key }) as { value: string } | null; return row ? JSON.parse(row.value) : null; }
   async setConfig(key: string, value: unknown): Promise<void> { await this.call("config.set", "system", { configKey: key, valueJson: JSON.stringify(value) }); }
-  async listSemanticSources(): Promise<any[]> { return this.call("semantic.list", "system"); }
-  async getSemanticSource(connectionId: string, sourceName: string): Promise<any> { return this.call("semantic.get", "system", { connectionId, sourceName }); }
-  async upsertSemanticSource(connectionId: string, sourceName: string, definition: unknown): Promise<void> { await this.call("semantic.upsert", "system", { connectionId, sourceName, definitionJson: JSON.stringify(definition) }); }
   async authorizeSession(userId: string, sessionId: string): Promise<"owned" | "missing" | "forbidden"> { return this.call("session.authorize", userId, { sessionId }); }
 }

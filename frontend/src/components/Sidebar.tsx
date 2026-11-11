@@ -1,31 +1,45 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { MARKDOWN_DOCUMENT } from './markdown-styles';
 import {
-    Settings,
-    Languages,
-    FileText,
-    X,
-    Save,
-    Edit3,
-    Trash2,
-    Database,
+    Bot,
+    Cable,
     Check,
-    User,
+    Database,
+    Edit3,
+    FilePen,
+    FileText,
+    FileUp,
+    Folder,
+    Languages,
+    LibraryBig,
+    ListChecks,
     LogOut,
-} from './icons/Typicons';
+    MessageSquare,
+    Monitor,
+    PanelLeft,
+    Plus,
+    Puzzle,
+    Save,
+    Settings,
+    SquareCheck,
+    Trash2,
+    User,
+    Workflow,
+    X,
+} from 'lucide-react';
+import { toast as notify } from 'sonner';
 import { BrandWordmark } from './Brand';
-import { RiAdd, RiBookShelf, RiBrain4, RiChat3, RiComputer, RiConnector, RiDatabase2, RiDatabaseLine, RiFileEdit, RiFileText, RiFileUpload, RiFlowChart, RiFolder3, RiLayoutLeft2, RiListCheck3, RiPuzzle2, RiRefresh, RiRobot2, RiTaskLine } from './icons/RemixIcons';
-import { SectionHeader, TreeAction, TreeGroup, TreeNote, TreeRow } from './SidebarTree';
+import { NAV_EXPANDED, NAV_ITEM, NAV_TEXT, SectionHeader, TREE, TreeAction, TreeGroup, TreeNote, TreeRow } from './SidebarTree';
+import { cn } from '@/lib/utils';
 import {
     type KnowledgeFile,
 } from '../api/client';
-import { getSemanticSourceViaRuntime, listSemanticSourcesViaRuntime, readKnowledgeViaRuntime } from '../api/runtime-client';
-import { listKnowledgeViaRuntime, saveKnowledgeViaRuntime } from '../api/runtime-client';
+import { listKnowledgeViaRuntime, readKnowledgeViaRuntime, saveKnowledgeViaRuntime } from '../api/runtime-client';
 import ReactMarkdown from 'react-markdown';
 import { useSession } from '../hooks/useSession';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../hooks/useAuth';
-import { useFocusTrap } from '../hooks/useFocusTrap';
-import { SemanticAssetViewer, SourceKindBadge, type SemanticConnection, type SemanticSourceViewDto } from './semantic-viewer';
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { CHAT_VIEW, type WorkspaceView } from './workspace-view';
 import type { PluginsTab } from './PluginsPanel';
 import type { SettingsSection } from './SettingsPanel';
@@ -43,10 +57,10 @@ interface SidebarProps {
 }
 
 const SETTINGS_SECTIONS: { id: SettingsSection; icon: React.FC<{ size?: number }> }[] = [
-    { id: 'model', icon: RiRobot2 },
-    { id: 'database', icon: RiDatabaseLine },
-    { id: 'environment', icon: RiComputer },
-    { id: 'channels', icon: RiChat3 },
+    { id: 'model', icon: Bot },
+    { id: 'database', icon: Database },
+    { id: 'environment', icon: Monitor },
+    { id: 'channels', icon: MessageSquare },
 ];
 
 interface KnowledgeFileNode {
@@ -59,6 +73,9 @@ interface KnowledgeFileNode {
 const knowledgeLabel = (file: KnowledgeFile): string => (
     file.knowledgeId ? `${file.title ?? file.name}（${file.knowledgeId}）` : file.name
 );
+
+/** Footer entries sit a little tighter than the main ones, and keep their height on the rail. */
+const FOOTER_ITEM = 'min-h-9 justify-start rounded-lg group-data-[rail=true]/sidebar:h-auto group-data-[rail=true]/sidebar:min-h-9';
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = false, pinned = true, onExpand, onTogglePinned }) => {
     const {
@@ -83,13 +100,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [editTaskName, setEditTaskName] = useState('');
     const [knowledgeExpanded, setKnowledgeExpanded] = useState(false);
-    const [semanticExpanded, setSemanticExpanded] = useState(false);
     const [pluginsExpanded, setPluginsExpanded] = useState(false);
     const [settingsExpanded, setSettingsExpanded] = useState(false);
     const [knowledgeFiles, setKnowledgeFiles] = useState<KnowledgeFile[]>([]);
-    const [semanticConnections, setSemanticConnections] = useState<SemanticConnection[]>([]);
-    const [loadingSemantic, setLoadingSemantic] = useState(false);
-    const [semanticExpandedConnections, setSemanticExpandedConnections] = useState<Set<string>>(new Set());
     const [loadingKnowledge, setLoadingKnowledge] = useState(false);
     const [knowledgeExpandedPaths, setKnowledgeExpandedPaths] = useState<Set<string>>(new Set(['doc']));
     const [editorOpen, setEditorOpen] = useState(false);
@@ -97,30 +110,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const [fileContent, setFileContent] = useState('');
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
-    const [semanticViewerOpen, setSemanticViewerOpen] = useState(false);
-    const [semanticDetail, setSemanticDetail] = useState<SemanticSourceViewDto | null>(null);
-    const [loadingSemanticDetail, setLoadingSemanticDetail] = useState(false);
-    const [toast, setToast] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-    const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const knowledgeImportInputRef = useRef<HTMLInputElement>(null);
-    const editorOverlayRef = useRef<HTMLDivElement>(null);
-    const editorModalRef = useRef<HTMLDivElement>(null);
-    const semanticOverlayRef = useRef<HTMLDivElement>(null);
-    const semanticModalRef = useRef<HTMLDivElement>(null);
 
-    useFocusTrap(editorOpen, editorModalRef, editorOverlayRef);
-    useFocusTrap(semanticViewerOpen, semanticModalRef, semanticOverlayRef);
 
+    // Successes fade on their own; an error stays until it is dismissed. Each kind has one toast,
+    // which a newer one replaces, as the sidebar's own toast did.
     const showToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-        setToast({ text, type });
-        if (type === 'success') {
-            toastTimerRef.current = setTimeout(() => setToast(null), 3000);
-        }
-    }, []);
-
-    useEffect(() => () => {
-        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        if (type === 'error') notify.error(text, { id: 'sidebar-error', duration: Infinity, closeButton: true });
+        else notify.success(text, { id: 'sidebar-notice', duration: 3000 });
     }, []);
 
     const loadKnowledgeFiles = useCallback(async () => {
@@ -151,68 +148,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         if (knowledgeExpanded) void loadKnowledgeFiles();
     }, [knowledgeExpanded, loadKnowledgeFiles]);
 
-    const loadSemanticSources = useCallback(async () => {
-        setLoadingSemantic(true);
-        try {
-            const runtimeSources = await listSemanticSourcesViaRuntime();
-            const byConnection = new Map<string, SemanticConnection>();
-            for (const item of runtimeSources) {
-                const connection = byConnection.get(item.connectionId) ?? { connectionId: item.connectionId, sources: [] as SemanticConnection['sources'] };
-                connection.sources.push({ sourceName: item.sourceName, sourceKind: 'standalone', assetType: 'semantic_model', title: null, isQueryable: true, hasOverlay: false, description: '' });
-                byConnection.set(item.connectionId, connection);
-            }
-            const response = { connections: Array.from(byConnection.values()) };
-            setSemanticConnections(response.connections);
-            setSemanticExpandedConnections((previous) => {
-                if (previous.size > 0) return previous;
-                return response.connections.length > 0 ? new Set([response.connections[0].connectionId]) : previous;
-            });
-        } catch (error) {
-            console.error('Failed to load semantic assets:', error);
-            showToast(t('semantic.loadFailed'), 'error');
-        } finally {
-            setLoadingSemantic(false);
-        }
-    }, [showToast, t]);
 
-    useEffect(() => {
-        if (semanticExpanded) void loadSemanticSources();
-    }, [semanticExpanded, loadSemanticSources]);
-
-    // Auto-refresh while the section is open so newly ingested/discovered
-    // semantic sources appear without manual interaction.
-    useEffect(() => {
-        if (!semanticExpanded) return;
-        const timer = setInterval(() => { void loadSemanticSources(); }, 15000);
-        return () => clearInterval(timer);
-    }, [semanticExpanded, loadSemanticSources]);
-
-    useEffect(() => {
-        if (!editorOpen && !semanticViewerOpen) return;
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                if (semanticViewerOpen) {
-                    setSemanticViewerOpen(false);
-                    setSemanticDetail(null);
-                } else if (editorOpen) {
-                    setEditorOpen(false);
-                    setSelectedFile(null);
-                    setFileContent('');
-                    setIsEditing(false);
-                }
-            }
-        };
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [editorOpen, semanticViewerOpen]);
-
-    const toggleExclusiveSection = (section: 'tasks' | 'knowledge' | 'semantic' | 'plugins') => {
+    const toggleExclusiveSection = (section: 'tasks' | 'knowledge' | 'plugins') => {
         // From the icon rail, a section icon expands the sidebar straight into that section.
         const open = (current: boolean) => (collapsed ? true : !current);
         if (collapsed) onExpand?.();
         setTasksExpanded(section === 'tasks' ? open(tasksExpanded) : false);
         setKnowledgeExpanded(section === 'knowledge' ? open(knowledgeExpanded) : false);
-        setSemanticExpanded(section === 'semantic' ? open(semanticExpanded) : false);
         setPluginsExpanded(section === 'plugins' ? open(pluginsExpanded) : false);
     };
 
@@ -286,36 +228,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         }
     };
 
-    const openSemanticSource = async (connectionId: string, sourceName: string) => {
-        setSemanticViewerOpen(true);
-        setSemanticDetail(null);
-        setLoadingSemanticDetail(true);
-        try {
-            const detail = await getSemanticSourceViaRuntime(connectionId, sourceName);
-            setSemanticDetail({ connectionId, sourceName, sourceKind: 'standalone', assetType: 'semantic_model', title: null, isQueryable: true, rawYaml: detail.rawYaml ?? '', table: null, sql: null, descriptions: {}, primaryDescription: null, descriptionProvenance: null, grain: [], columns: [], measures: [], segments: [], joins: [], tags: [], defaultTimeDimension: null, sourceDocuments: [], businessRules: [], queryTemplates: [] });
-        } catch (error) {
-            console.error('Failed to load semantic asset:', error);
-            setSemanticViewerOpen(false);
-            showToast(t('semantic.loadFailed'), 'error');
-        } finally {
-            setLoadingSemanticDetail(false);
-        }
-    };
-
-    const closeSemanticViewer = () => {
-        setSemanticViewerOpen(false);
-        setSemanticDetail(null);
-    };
-
-    const toggleSemanticConnection = (connectionId: string) => {
-        setSemanticExpandedConnections((previous) => {
-            const next = new Set(previous);
-            if (next.has(connectionId)) next.delete(connectionId);
-            else next.add(connectionId);
-            return next;
-        });
-    };
-
     const handleSave = async () => {
         if (!selectedFile) return;
         setSaving(true);
@@ -331,8 +243,12 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         }
     };
 
+    // Closing keeps the file on screen until the dialog's exit animation ends; resetEditor then clears it.
     const closeEditor = () => {
         setEditorOpen(false);
+    };
+
+    const resetEditor = () => {
         setSelectedFile(null);
         setFileContent('');
         setIsEditing(false);
@@ -390,7 +306,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
             <React.Fragment key={item.path}>
                 <TreeRow
                     depth={level}
-                    icon={isDirectory ? <RiFolder3 size={15} /> : <RiFileText size={15} />}
+                    icon={isDirectory ? <Folder size={15} /> : <FileText size={15} />}
                     label={item.knowledgeId ? (item.title ?? item.name) : item.name}
                     secondary={item.readOnly ? `${item.knowledgeId} · ${t('common.knowledgeBuiltin')}` : item.hasContent === false ? `${item.knowledgeId} · ${t('common.knowledgePlaceholder')}` : item.knowledgeId}
                     title={isDirectory ? item.path : [knowledgeLabel(item), item.description, item.path, item.readOnly ? t('common.knowledgeBuiltinHint') : item.hasContent === false ? t('common.knowledgePlaceholderHint') : ''].filter(Boolean).join('\n')}
@@ -408,82 +324,54 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const knowledgeFileTree = buildKnowledgeFileTree();
     const isMarkdown = selectedFile?.name.toLowerCase().endsWith('.md');
 
-    const renderSemanticConnection = (connection: SemanticConnection) => {
-        const expanded = semanticExpandedConnections.has(connection.connectionId);
-        return (
-            <React.Fragment key={connection.connectionId}>
-                <TreeRow
-                    depth={0}
-                    icon={<RiDatabase2 size={15} />}
-                    label={connection.connectionId}
-                    title={connection.connectionId}
-                    meta={connection.sources.length}
-                    expanded={expanded}
-                    onSelect={() => toggleSemanticConnection(connection.connectionId)}
-                />
-                {expanded && (
-                    <TreeGroup depth={0}>
-                        {connection.sources.map((source) => (
-                            <TreeRow
-                                key={source.sourceName}
-                                depth={1}
-                                icon={<RiFileText size={15} />}
-                                label={source.title || source.sourceName}
-                                title={source.description || source.sourceName}
-                                meta={source.assetType === 'business_knowledge' ? t('semantic.businessKnowledge') : undefined}
-                                active={semanticViewerOpen && semanticDetail?.connectionId === connection.connectionId && semanticDetail?.sourceName === source.sourceName}
-                                onSelect={() => void openSemanticSource(connection.connectionId, source.sourceName)}
-                            />
-                        ))}
-                    </TreeGroup>
-                )}
-            </React.Fragment>
-        );
-    };
-
     return (
         <>
-            <nav id="workspace-sidebar" className={`sidebar ${collapsed ? 'is-rail' : ''}`} aria-label={t('sidebar.navigation')}>
-                <div className="sidebar-header">
+            <nav
+                id="workspace-sidebar"
+                data-rail={collapsed ? 'true' : undefined}
+                className="group/sidebar relative m-0 flex h-full w-full max-w-none min-w-0 shrink-0 flex-col justify-between overflow-hidden rounded-none border-0 bg-transparent p-0 pb-3 shadow-none"
+                aria-label={t('sidebar.navigation')}
+            >
+                <div className={cn('flex h-14 flex-none items-center border-b border-border', collapsed ? 'justify-center p-0' : 'justify-between gap-2 pr-3 pl-5')}>
                     {collapsed ? (
-                        <div className="sidebar-logo sidebar-logo-compact"><BrandWordmark title="yourdb" /></div>
+                        <div className="flex items-center text-[0.82rem] leading-none font-bold tracking-[-0.02em] text-foreground [&_.brand-wordmark]:h-[13px]"><BrandWordmark title="yourdb" /></div>
                     ) : (
                         <>
-                            <div className="sidebar-logo"><BrandWordmark title="yourdb" /></div>
+                            <div className="flex items-center text-xl leading-none font-bold tracking-[-0.04em] text-foreground max-[720px]:text-base max-[480px]:text-[0.95rem] [&_.brand-wordmark]:h-[22px]"><BrandWordmark title="yourdb" /></div>
                             <button
                                 type="button"
-                                className="sidebar-collapse-toggle"
+                                className="inline-flex size-8 flex-none cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground transition-colors active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand pointer-fine:hover:bg-[var(--tree-row-hover)] pointer-fine:hover:text-foreground"
                                 onClick={onTogglePinned}
                                 aria-expanded={pinned}
                                 aria-controls="workspace-sidebar"
                                 title={pinned ? t('sidebar.close') : t('sidebar.open')}
                                 aria-label={pinned ? t('sidebar.close') : t('sidebar.open')}
                             >
-                                <RiLayoutLeft2 size={18} />
+                                <PanelLeft size={18} />
                             </button>
                         </>
                     )}
                 </div>
-                <div className="nav-menu scrollable-area">
-                    <div className="nav-section">
+                <div className={cn('scrollable-area min-h-0 flex-1 pt-3.5', collapsed ? 'px-2.5' : 'pr-2 pl-2.5')}>
+                    <div className={cn('flex flex-col', collapsed ? 'items-center gap-1.5' : 'gap-1')}>
 
-                        <button type="button" className="nav-item sidebar-primary-action" title={t('sidebar.newTask')} aria-label={t('sidebar.newTask')} onClick={() => {
+                        <button type="button" className={cn(NAV_ITEM, 'mb-2')} title={t('sidebar.newTask')} aria-label={t('sidebar.newTask')} onClick={() => {
                             createTask();
                             onNavigate(CHAT_VIEW);
                             showToast(t('task.created') || '新任务创建成功');
                         }}>
-                            <RiTaskLine className="nav-item-icon" size={18} />
-                            <span className="nav-item-text">{t('sidebar.newTask')}</span>
+                            <SquareCheck className="shrink-0" size={18} />
+                            <span className={NAV_TEXT}>{t('sidebar.newTask')}</span>
                         </button>
 
                         <SectionHeader
-                            icon={<RiListCheck3 className="nav-item-icon" size={18} />}
+                            icon={<ListChecks className="shrink-0" size={18} />}
                             label={t('sidebar.currentTask')}
                             expanded={tasksExpanded}
                             onToggle={() => toggleExclusiveSection('tasks')}
                         />
                         {!collapsed && tasksExpanded && (
-                            <div className="tree">
+                            <div className={TREE}>
                                 {tasks.map((task) => {
                                     const expanded = expandedTaskIds.has(task.id);
                                     const editing = editingTaskId === task.id;
@@ -492,7 +380,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                         <React.Fragment key={task.id}>
                                             <TreeRow
                                                 depth={0}
-                                                icon={<RiFolder3 size={15} />}
+                                                icon={<Folder size={15} />}
                                                 label={task.name}
                                                 title={task.name}
                                                 expanded={expanded}
@@ -504,7 +392,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                 }}
                                                 editor={editing ? (
                                                     <input
-                                                        className="tree-input"
+                                                        className="mr-[30px] h-6 min-w-0 flex-auto rounded-md border border-border bg-[var(--frame-surface)] px-1.5 text-[0.82rem] text-foreground outline-none focus:border-[rgba(194,65,12,0.45)]"
                                                         value={editTaskName}
                                                         onChange={(event) => setEditTaskName(event.target.value)}
                                                         onKeyDown={(event) => {
@@ -527,7 +415,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                             createSession(task.id);
                                                             onNavigate(CHAT_VIEW);
                                                         }}>
-                                                            <RiAdd size={14} aria-hidden="true" />
+                                                            <Plus size={14} aria-hidden="true" />
                                                         </TreeAction>
                                                         <TreeAction label={t('common.edit')} onClick={() => { setEditTaskName(task.name); setEditingTaskId(task.id); }}>
                                                             <Edit3 size={14} aria-hidden="true" />
@@ -547,7 +435,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                         <TreeRow
                                                             key={session.id}
                                                             depth={1}
-                                                            icon={<RiChat3 size={15} />}
+                                                            icon={<MessageSquare size={15} />}
                                                             label={session.name}
                                                             title={session.name}
                                                             active={activeView.kind === 'chat' && currentSession?.id === session.id}
@@ -573,17 +461,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         )}
 
                         <SectionHeader
-                            icon={<RiBookShelf className="nav-item-icon" size={18} />}
+                            icon={<LibraryBig className="shrink-0" size={18} />}
                             label={t('sidebar.knowledge')}
                             expanded={knowledgeExpanded}
                             onToggle={() => toggleExclusiveSection('knowledge')}
                             actions={!collapsed && (
                                 <>
                                     <TreeAction label={t('common.knowledgeNew')} onClick={handleNewKnowledgeFile}>
-                                        <RiFileEdit size={15} aria-hidden="true" />
+                                        <FilePen size={15} aria-hidden="true" />
                                     </TreeAction>
                                     <TreeAction label={t('common.knowledgeImport')} onClick={() => knowledgeImportInputRef.current?.click()}>
-                                        <RiFileUpload size={15} aria-hidden="true" />
+                                        <FileUp size={15} aria-hidden="true" />
                                     </TreeAction>
                                 </>
                             )}
@@ -597,7 +485,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                             onChange={(event) => { void handleImportKnowledge(event); }}
                         />
                         {!collapsed && knowledgeExpanded && (
-                            <div className="tree">
+                            <div className={TREE}>
                                 {loadingKnowledge && knowledgeFiles.length === 0 ? (
                                     <TreeNote depth={0} role="status">{t('common.loading')}</TreeNote>
                                 ) : knowledgeFileTree.length === 0 ? (
@@ -607,63 +495,42 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         )}
 
                         <SectionHeader
-                            icon={<RiBrain4 className="nav-item-icon" size={18} />}
-                            label={t('sidebar.semantic')}
-                            expanded={semanticExpanded}
-                            onToggle={() => toggleExclusiveSection('semantic')}
-                            actions={!collapsed && (
-                                <TreeAction label={t('common.semanticRefresh')} onClick={() => { void loadSemanticSources(); }}>
-                                    <RiRefresh size={15} aria-hidden="true" />
-                                </TreeAction>
-                            )}
-                        />
-                        {!collapsed && semanticExpanded && (
-                            <div className="tree">
-                                {loadingSemantic && semanticConnections.length === 0 ? (
-                                    <TreeNote depth={0} role="status">{t('common.loading')}</TreeNote>
-                                ) : semanticConnections.length === 0 ? (
-                                    <TreeNote depth={0}>{t('common.noSemanticAssets')}</TreeNote>
-                                ) : semanticConnections.map(renderSemanticConnection)}
-                            </div>
-                        )}
-
-                        <SectionHeader
-                            icon={<RiPuzzle2 className="nav-item-icon" size={18} />}
+                            icon={<Puzzle className="shrink-0" size={18} />}
                             label={t('sidebar.plugins')}
                             expanded={pluginsExpanded}
                             onToggle={() => toggleExclusiveSection('plugins')}
                         />
                         {!collapsed && pluginsExpanded && (
-                            <div className="tree">
-                                <TreeRow depth={0} icon={<RiConnector size={15} />} label="MCP" title="MCP" active={isPluginsView('MCP')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'MCP' })} />
-                                <TreeRow depth={0} icon={<RiFlowChart size={15} />} label="Skills" title="Skills" active={isPluginsView('Skills')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'Skills' })} />
+                            <div className={TREE}>
+                                <TreeRow depth={0} icon={<Cable size={15} />} label="MCP" title="MCP" active={isPluginsView('MCP')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'MCP' })} />
+                                <TreeRow depth={0} icon={<Workflow size={15} />} label="Skills" title="Skills" active={isPluginsView('Skills')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'Skills' })} />
                             </div>
                         )}
                     </div>
                 </div>
 
-                <div className="sidebar-footer">
-                    <div className="nav-item sidebar-footer-user" title={user?.username || displayName}>
-                        <User className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{displayName}</span>
+                <div className={cn('mt-auto flex shrink-0 flex-col gap-1.5 pt-[22px]', collapsed ? 'items-center px-2.5' : 'pr-2 pl-2.5')}>
+                    <div className={cn(NAV_ITEM, FOOTER_ITEM, 'cursor-default')} title={user?.username || displayName}>
+                        <User className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{displayName}</span>
                     </div>
-                    <button type="button" className="nav-item sidebar-footer-settings" onClick={toggleLanguage} title={t('sidebar.langToggle')} aria-label={t('sidebar.langToggle')}>
-                        <Languages className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{t('sidebar.language')}</span>
+                    <button type="button" className={cn(NAV_ITEM, FOOTER_ITEM)} onClick={toggleLanguage} title={t('sidebar.langToggle')} aria-label={t('sidebar.langToggle')}>
+                        <Languages className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{t('sidebar.language')}</span>
                     </button>
                     <button
                         type="button"
-                        className={`nav-item sidebar-footer-settings ${settingsExpanded ? 'expanded' : ''}`}
+                        className={cn(NAV_ITEM, FOOTER_ITEM, settingsExpanded && NAV_EXPANDED)}
                         onClick={toggleSettings}
                         aria-expanded={settingsExpanded}
                         title={t('sidebar.settings')}
                         aria-label={t('sidebar.settings')}
                     >
-                        <Settings className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{t('sidebar.settings')}</span>
+                        <Settings className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{t('sidebar.settings')}</span>
                     </button>
                     {!collapsed && settingsExpanded && (
-                        <div className="tree sidebar-settings-tree">
+                        <div className={cn(TREE, 'mb-0.5')}>
                             {SETTINGS_SECTIONS.map(({ id, icon: Icon }) => (
                                 <TreeRow
                                     key={id}
@@ -677,80 +544,50 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                             ))}
                         </div>
                     )}
-                    <button type="button" className="nav-item sidebar-footer-settings" onClick={() => void logout()} title={t('sidebar.logout')} aria-label={t('sidebar.logout')}>
-                        <LogOut className="nav-item-icon" size={18} />
-                        <span className="nav-item-text">{t('sidebar.logout')}</span>
+                    <button type="button" className={cn(NAV_ITEM, FOOTER_ITEM)} onClick={() => void logout()} title={t('sidebar.logout')} aria-label={t('sidebar.logout')}>
+                        <LogOut className="shrink-0" size={18} />
+                        <span className={NAV_TEXT}>{t('sidebar.logout')}</span>
                     </button>
                 </div>
 
-                {toast && (
-                    <div className={`sidebar-toast ${toast.type}`} role={toast.type === 'error' ? 'alert' : 'status'} aria-live={toast.type === 'error' ? 'assertive' : 'polite'}>
-                        <span>{toast.text}</span>
-                        {toast.type === 'error' && (
-                            <button type="button" className="sidebar-toast-close" onClick={() => setToast(null)} aria-label={t('common.close')}>
-                                <X size={13} aria-hidden="true" />
-                            </button>
-                        )}
-                    </div>
-                )}
             </nav>
 
-            {editorOpen && selectedFile && (
-                <div ref={editorOverlayRef} className="editor-modal-overlay" onClick={closeEditor}>
-                    <div ref={editorModalRef} className="editor-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="editor-modal-title" tabIndex={-1}>
-                        <div className="editor-modal-header">
-                            <div className="editor-title" id="editor-modal-title"><FileText size={16} aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></div>
-                            <div className="editor-actions">
-                                {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="action-btn" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
-                                {isEditing && <button type="button" className="action-btn save" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
-                                <button type="button" className="action-btn" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
+            <Dialog
+                open={editorOpen && selectedFile !== null}
+                onOpenChange={(open) => { if (!open) closeEditor(); }}
+                onOpenChangeComplete={(open) => { if (!open) resetEditor(); }}
+            >
+                {selectedFile && (
+                    <DialogContent
+                        showCloseButton={false}
+                        overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[6px] supports-backdrop-filter:backdrop-blur-[6px] motion-reduce:animate-none"
+                        className="z-[2000] flex h-full max-h-none w-[calc(100vw-32px)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl bg-background p-0 text-[length:inherit] shadow-[0_34px_90px_-42px_rgba(28,25,23,0.7)] ring-0 motion-reduce:animate-none sm:max-w-none min-[421px]:h-[calc(100%-16px)] min-[721px]:h-[80vh] min-[721px]:max-h-[90vh] min-[721px]:w-[800px] min-[721px]:max-w-[calc(100vw-32px)] min-[721px]:rounded-3xl"
+                    >
+                        <div className="flex items-center justify-between border-b border-border bg-paper px-5 py-4">
+                            <DialogTitle className="flex items-center gap-2 text-[0.9rem] font-medium text-foreground"><FileText size={16} aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></DialogTitle>
+                            <div className="flex gap-1">
+                                {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-muted hover:text-foreground" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
+                                {isEditing && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-success-soft hover:text-success" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
+                                <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-muted hover:text-foreground" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
                             </div>
                         </div>
-                        <div className="editor-modal-content">
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                             {isMarkdown && !isEditing ? (
-                                <div className="editor-preview markdown-preview"><div className="markdown-content"><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
+                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><div className={`leading-[1.7] text-foreground ${MARKDOWN_DOCUMENT}`}><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
                             ) : !isEditing ? (
-                                <div className="editor-preview plain-preview"><pre>{fileContent}</pre></div>
+                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><pre className="m-0 font-mono text-[0.85rem] leading-relaxed break-words whitespace-pre-wrap">{fileContent}</pre></div>
                             ) : (
-                                <textarea className="editor-textarea" value={fileContent} onChange={(event) => setFileContent(event.target.value)} />
+                                <textarea
+                                    aria-label={knowledgeLabel(selectedFile)}
+                                    className="min-h-0 w-full flex-1 resize-none overflow-auto border-0 bg-background p-4 font-mono text-[0.85rem] leading-relaxed text-foreground outline-none"
+                                    value={fileContent}
+                                    onChange={(event) => setFileContent(event.target.value)}
+                                />
                             )}
                         </div>
-                    </div>
-                </div>
-            )}
-
-            {semanticViewerOpen && (
-                <div ref={semanticOverlayRef} className="semantic-modal-overlay" onClick={closeSemanticViewer}>
-                    <div ref={semanticModalRef} className="semantic-asset-modal" onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="semantic-modal-title" tabIndex={-1}>
-                        <div className="semantic-modal-header">
-                            <div className="semantic-modal-title" id="semantic-modal-title">
-                                <Database size={16} aria-hidden="true" />
-                                <span>{semanticDetail?.assetType === 'business_knowledge'
-                                    ? (semanticDetail.title || semanticDetail.sourceName)
-                                    : (semanticDetail?.sourceName || t('sidebar.semantic'))}</span>
-                                {semanticDetail && (semanticDetail.assetType === 'business_knowledge' ? (
-                                    <span className="semantic-asset-type-badge">{t('semantic.businessKnowledge')}</span>
-                                ) : (
-                                    <>
-                                        <SourceKindBadge kind={semanticDetail.sourceKind} />
-                                        {semanticDetail.isQueryable && <span className="semantic-queryable-badge">{t('semantic.queryable')}</span>}
-                                    </>
-                                ))}
-                            </div>
-                            <button type="button" className="semantic-modal-close" onClick={closeSemanticViewer} title={t('semantic.close')} aria-label={t('semantic.close')}>
-                                <X size={16} aria-hidden="true" />
-                            </button>
-                        </div>
-                        <div className="semantic-modal-content">
-                            {loadingSemanticDetail || !semanticDetail ? (
-                                <div className="semantic-loading-state" role="status">{t('semantic.loading')}</div>
-                            ) : (
-                                <SemanticAssetViewer dto={semanticDetail} onClose={closeSemanticViewer} />
-                            )}
-                        </div>
-                    </div>
-                </div>
-            )}
+                    </DialogContent>
+                )}
+            </Dialog>
         </>
     );
 };

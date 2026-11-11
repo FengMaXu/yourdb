@@ -328,6 +328,9 @@ export async function createMysqlReferenceServer(options: MysqlReferenceServerOp
 import { z } from "zod";
 
 export async function startMysqlReferenceStdio(options?: MysqlReferenceServerOptions): Promise<void> {
-  const { server } = await createMysqlReferenceServer(options ?? credentialsFromEnv());
+  const { server, close } = await createMysqlReferenceServer(options ?? credentialsFromEnv());
+  // The host stops the server by closing stdin; ending the pools closes each
+  // session cleanly and lets the process exit instead of waiting to be killed.
+  process.stdin.once("end", () => { void close().catch(() => undefined).finally(() => process.exit(0)); });
   await server.connect(new StdioServerTransport());
 }

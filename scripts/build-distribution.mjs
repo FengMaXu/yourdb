@@ -22,7 +22,8 @@ run("npm run build:contracts");
 // Runtime and the renderer depend on charts, including its browser bundle for dashboards.
 run("npm run build:charts");
 run("npm run build:runtime");
-for (const pkg of ["@data-agent/transport", "@data-agent/channel-feishu", "@data-agent/electron-host", "@data-agent/server", "@data-agent/mcp-mysql", "@data-agent/mcp-pg"]) {
+// mcp-sqlite before server: the server's evaluation launcher imports it.
+for (const pkg of ["@data-agent/database", "@data-agent/mcp-plugins", "@data-agent/transport", "@data-agent/channel-feishu", "@data-agent/channel-weixin", "@data-agent/electron-host", "@data-agent/mcp-sqlite", "@data-agent/server", "@data-agent/mcp-mysql", "@data-agent/mcp-pg"]) {
   run(`npm run build --workspace=${pkg}`);
 }
 run("npm run build --workspace=frontend");
@@ -77,6 +78,31 @@ const bundleArgs = [
   if (result.status !== 0) { console.error("mcp-mysql bundle failed"); process.exit(1); }
   normalizeGeneratedBundle("frontend/electron-host/mcp-mysql.cjs");
 }
+{
+  // pg is pure JavaScript and bundles whole; pg-native is its optional native binding.
+  const args = [
+    "node_modules/esbuild/bin/esbuild",
+    "packages/mcp-pg/dist/cli.js",
+    ...bundleArgs,
+    "--external:pg-native",
+    "--outfile=frontend/electron-host/mcp-pg.cjs",
+  ];
+  const result = spawnSync(process.execPath, args, { stdio: "inherit", cwd: root });
+  if (result.status !== 0) { console.error("mcp-pg bundle failed"); process.exit(1); }
+  normalizeGeneratedBundle("frontend/electron-host/mcp-pg.cjs");
+}
+{
+  // SQLite is Node's built-in node:sqlite, so this bundle has no externals.
+  const args = [
+    "node_modules/esbuild/bin/esbuild",
+    "packages/mcp-sqlite/dist/cli.js",
+    ...bundleArgs,
+    "--outfile=frontend/electron-host/mcp-sqlite.cjs",
+  ];
+  const result = spawnSync(process.execPath, args, { stdio: "inherit", cwd: root });
+  if (result.status !== 0) { console.error("mcp-sqlite bundle failed"); process.exit(1); }
+  normalizeGeneratedBundle("frontend/electron-host/mcp-sqlite.cjs");
+}
 
 // The generated Electron entry is the shipped production path. Run the same
 // architecture gate against source and bundle so stale legacy output cannot be
@@ -96,6 +122,8 @@ for (const p of [
   "frontend/electron-host/main.cjs",
   "frontend/electron-host/metadata-worker.cjs",
   "frontend/electron-host/mcp-mysql.cjs",
+  "frontend/electron-host/mcp-pg.cjs",
+  "frontend/electron-host/mcp-sqlite.cjs",
   "frontend/dist/index.html",
 ]) {
   if (!existsSync(path.join(root, p))) {

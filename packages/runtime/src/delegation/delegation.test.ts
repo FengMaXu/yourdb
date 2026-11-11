@@ -329,6 +329,30 @@ describe("NativeDelegation", () => {
     await expect(run).resolves.toMatchObject([{ status: "interrupted", terminalConfirmed: true }]);
   });
 
+  it("durably settles a reserved child cancelled before admission", async () => {
+    let markResolving!: () => void;
+    const resolving = new Promise<void>((resolve) => { markResolving = resolve; });
+    const blockedResolver: DelegationTaskResolver = {
+      resolve: async (_task, _run, _context, signal) => {
+        markResolving();
+        return new Promise<never>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(new Error("RESOLUTION_CANCELLED")), { once: true });
+        });
+      },
+    };
+    const executor = new FakeExecutor();
+    const ledger = new InMemoryDelegationLedger();
+    const delegation = new NativeDelegation({ executor, resolver: blockedResolver, ledger });
+    const abort = new AbortController();
+    const run = delegation.run({ tasks: [task("cancel-after-reserve")] }, context("cancel-after-reserve"), abort.signal);
+    await resolving;
+    abort.abort();
+    await expect(run).resolves.toMatchObject([{ status: "cancelled", terminalConfirmed: true }]);
+    expect((await ledger.list()).map((record) => record.state)).toEqual(["reserved", "settled"]);
+    expect(executor.calls).toHaveLength(0);
+    await delegation.close();
+  });
+
   it("does not create a child when cancellation is already requested", async () => {
     const executor = new FakeExecutor();
     const delegation = new NativeDelegation({ executor, resolver: resolver(), ledger: new InMemoryDelegationLedger() });

@@ -4,7 +4,7 @@
   "engines": {
     "node": ">=22.13"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -15,18 +15,23 @@
     "build:contracts": "npm run build --workspace=@data-agent/contracts",
     "build:charts": "npm run build --workspace=@data-agent/charts",
     "build:runtime": "npm run build --workspace=@data-agent/runtime",
+    "build:database": "npm run build --workspace=@data-agent/database",
+    "build:mcp-plugins": "npm run build --workspace=@data-agent/mcp-plugins",
     "build:transport": "npm run build --workspace=@data-agent/transport",
     "build:channel-feishu": "npm run build --workspace=@data-agent/channel-feishu",
+    "build:channel-weixin": "npm run build --workspace=@data-agent/channel-weixin",
     "build:electron-host": "npm run build --workspace=@data-agent/electron-host",
+    "build:mcp-sqlite": "npm run build --workspace=@data-agent/mcp-sqlite",
     "build:server": "npm run build --workspace=@data-agent/server",
     "build:frontend": "npm run build --workspace=frontend",
     "build:mcp": "npm run build --workspace=@data-agent/mcp-mysql && npm run build --workspace=@data-agent/mcp-pg",
-    "build": "npm run build:contracts && npm run build:charts && npm run build:runtime && npm run build:transport && npm run build:channel-feishu && npm run build:electron-host && npm run build:server && npm run build:mcp && npm run build:frontend",
+    "build": "npm run build:contracts && npm run build:charts && npm run build:runtime && npm run build:database && npm run build:mcp-plugins && npm run build:transport && npm run build:channel-feishu && npm run build:channel-weixin && npm run build:electron-host && npm run build:mcp-sqlite && npm run build:server && npm run build:mcp && npm run build:frontend",
     "build:distribution": "node scripts/build-distribution.mjs",
     "verify:architecture": "node scripts/verify-backend-architecture.mjs",
     "check:affected": "node scripts/check-affected.mjs",
     "test:scripts": "node --test scripts/check-affected.test.mjs",
     "smoke:charts": "node scripts/smoke-charts-browser.mjs",
+    "visual:snapshot": "node scripts/visual-snapshot.mjs",
     "verify:backend": "npm run verify:architecture && npm run typecheck && npm run typecheck:negative --workspace=@data-agent/runtime && npm test && npm run build:distribution && node scripts/smoke-web-host.mjs && node scripts/smoke-charts-browser.mjs",
     "verify:backend:packaged": "npm run verify:backend && node scripts/package-electron-manual.mjs frontend/release-final/win-unpacked && node scripts/smoke-electron.mjs frontend/release-final/win-unpacked",
     "eval:spider2": "node evaluations/spider2/run.mjs",
@@ -40,6 +45,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0",
     "typescript": "5.9.3",
     "vitest": "3.2.7"
   },

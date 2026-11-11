@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   DataAgentEventEnvelopeSchema,
   DataAgentResponseEnvelopeSchema,
@@ -23,6 +24,8 @@ import type { ApplicationAgentEvent } from "./application/host.js";
 import type { ApplicationCommandHost, ApplicationEventFilter, EventReplay } from "./application/protocol-host.js";
 import type { TranscriptMessage } from "./facets/transcript.js";
 import { readBoundedFile } from "./bounded-read.js";
+import { ensureSampleDatabase } from "./sample-database.js";
+import type { McpPluginPort } from "./tools/mcp-plugins.js";
 
 export class DataAgentRuntimeError extends Error {
   readonly code: "INVALID_COMMAND" | "UNSUPPORTED_PROTOCOL_VERSION" | "INVALID_CONTEXT" | "SESSION_ACCESS_DENIED" | "SESSION_BUSY" | "CLARIFICATION_SETTLED";
@@ -96,25 +99,30 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   private readonly bundledPythonExecutable: string | undefined;
   private readonly knowledge: KnowledgeIndex | undefined;
   private readonly knowledgeRoot: string | undefined;
-  private readonly semanticProjectDir: string | undefined;
   private readonly skillRoots: string[];
   queryExecutor?: { run(sql: string, rowLimit: number, options?: { readonly idempotencyKey?: string }): Promise<{ columns: string[]; rows: unknown[][]; truncated: boolean }> };
   dbTester?: { test(connection: Record<string, unknown>): Promise<{ success: boolean; message: string; details?: unknown }> };
   llmTester?: { test(profile: Record<string, unknown>): Promise<{ success: boolean; message: string; details?: unknown }> };
+  /** The model profile a chat would use now; lets `llm.test` with an empty profile check the saved settings, keys included. */
+  savedModelProfile?: (context: RequestContext) => Promise<Record<string, unknown>>;
+  /** Where the demo database is created; without it `db.sample` is unavailable. */
+  sampleDatabaseRoot?: string;
   /** Host callback for capability controllers after config changes. */
   onConfigSaved?: (config: Record<string, unknown>, context: RequestContext) => void | Promise<void>;
-  mcpSupervisor?: { status(): Promise<Array<{ name: string; enabled: boolean; connected: boolean; toolCount: number; hostManaged: boolean }>>; test(name: string): Promise<{ ok: boolean; message: string }>; restart(name: string): Promise<{ ok: boolean }> };
+  /** The host's MCP plugin supervisor; without one, plugin settings are only stored. */
+  mcpSupervisor?: Pick<McpPluginPort, "view" | "save" | "status" | "test" | "restart">;
   /** Host-composed channel management (ADR-0011); absent where no channels are enabled. */
-  channelControl?: { list(): import("@data-agent/contracts").ChannelStatus[]; provision(channelId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; disconnect(channelId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; createLinkCode(userId: string): Promise<{ code: string; expiresAt: number }>; access(): Promise<import("@data-agent/contracts").ChannelAccess>; decideAccess(requestId: string, decision: "allow" | "deny", decidedBy: string): Promise<unknown>; revokeAccess(actor: import("@data-agent/contracts").ChannelActor): Promise<void> };
-  ingestJob?: { getStatus(): Promise<{ status: string; jobId: string | null; summary: { updated: number; unchanged: number; failed: number; skipped: number }; errorCode: string | null }>; retry(): Promise<{ accepted: boolean }> };
+  channelControl?: { list(): import("@data-agent/contracts").ChannelStatus[]; provision(channelId: string, userId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; disconnect(channelId: string): Promise<import("@data-agent/contracts").ChannelStatus[]>; configure(channelId: string, settings: { enabled?: boolean; replyDetail?: import("@data-agent/contracts").ReplyDetail }): Promise<import("@data-agent/contracts").ChannelStatus[]>; createLinkCode(userId: string): Promise<{ code: string; expiresAt: number }>; access(): Promise<import("@data-agent/contracts").ChannelAccess>; decideAccess(requestId: string, decision: "allow" | "deny", decidedBy: string): Promise<unknown>; revokeAccess(actor: import("@data-agent/contracts").ChannelActor): Promise<void> };
   private readonly clarifications: ClarificationManager;
   /** Host composition seam for wiring native AgentHarness tools. */
   get clarificationManager(): ClarificationManager { return this.clarifications; }
   /** Correlation only: Pi owns the operation lifecycle and durable state. */
   private nextSequence = 1;
+  /** Event sequences restart with the process; this tells one process's cursors from another's. */
+  private readonly instanceId = randomUUID();
   private agent: RuntimeAgent | undefined;
 
-  constructor(options: { metadata?: MetadataStore; sessions?: RuntimeSessionStore; workspace?: WorkspaceStore; pythonExecutable?: string; bundledPythonExecutable?: string; knowledge?: KnowledgeIndex; knowledgeRoot?: string; semanticProjectDir?: string; skillRoots?: string[]; projectRoot?: string; packagedRoot?: string; clarifications?: ClarificationManager; agent?: RuntimeAgent } = {}) {
+  constructor(options: { metadata?: MetadataStore; sessions?: RuntimeSessionStore; workspace?: WorkspaceStore; pythonExecutable?: string; bundledPythonExecutable?: string; knowledge?: KnowledgeIndex; knowledgeRoot?: string; skillRoots?: string[]; projectRoot?: string; packagedRoot?: string; clarifications?: ClarificationManager; agent?: RuntimeAgent } = {}) {
     this.metadata = options.metadata;
     this.authService = new LocalAuthService(this.metadata);
     this.sessions = options.sessions;
@@ -123,7 +131,6 @@ export class DataAgentRuntime implements ApplicationCommandHost {
     this.bundledPythonExecutable = options.bundledPythonExecutable ?? options.pythonExecutable;
     this.knowledge = options.knowledge;
     this.knowledgeRoot = options.knowledgeRoot;
-    this.semanticProjectDir = (options as { semanticProjectDir?: string }).semanticProjectDir;
     this.skillRoots = options.skillRoots ?? resolveSkillRoots({
       ...(options.projectRoot ? { projectRoot: options.projectRoot } : {}),
       ...(options.packagedRoot ? { packagedRoot: options.packagedRoot } : {}),
@@ -147,6 +154,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
    * Replays buffered events after a cursor. The buffer is bounded, so a cursor
    * older than its first retained event means events were lost; `complete`
    * then tells the transport to have the client resynchronize from a snapshot.
+   * A cursor from another process is the transport's to detect, by instance.
    */
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay {
     const first = this.eventBuffer[0]?.sequence ?? this.nextSequence;
@@ -154,6 +162,10 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       events: this.eventBuffer.filter((event) => event.sequence > sequence && this.eventVisible(event, filter)),
       complete: sequence >= first - 1,
     };
+  }
+
+  eventStreamPosition(): { readonly instanceId: string; readonly latestSequence: number } {
+    return { instanceId: this.instanceId, latestSequence: this.nextSequence - 1 };
   }
 
   subscribe(listener: DataAgentEventListener, filter?: ApplicationEventFilter): () => void {
@@ -215,56 +227,19 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "runtime.probe.result", service: "data-agent-runtime", runtimeVersion: "0.1.0" } };
     }
 
-    if (command.command.type === "semantic.sources.list" && this.semanticProjectDir) {
-      const { resolve: resolvePath2 } = await import("node:path");
-      const fs = await import("node:fs/promises");
-      const base = resolvePath2(this.semanticProjectDir);
-      const sources: Array<{ connectionId: string; sourceName: string; definition: unknown; updatedAt: number }> = [];
-      // Both supported semantic source layouts are read without re-ingestion.
-      const seen = new Set<string>();
-      for (const segment of ["business-semantic", "semantic-layer"]) {
-        let connections: string[] = [];
-        try { connections = await fs.readdir(resolvePath2(base, segment)); } catch { connections = []; }
-        for (const connectionId of connections) {
-          const connDir = resolvePath2(base, segment, connectionId);
-          let entries: any[] = [];
-          try { entries = await fs.readdir(connDir, { withFileTypes: true }); } catch { continue; }
-          for (const entry of entries) {
-            if (!entry.isFile() || !(entry.name.endsWith(".yaml") || entry.name.endsWith(".yml"))) continue;
-            const sourceName = entry.name.replace(/\.ya?ml$/i, "");
-            const key = `${connectionId}/${sourceName}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            const full = resolvePath2(connDir, entry.name);
-            const info = await fs.stat(full);
-            sources.push({ connectionId, sourceName, definition: {}, updatedAt: info.mtimeMs });
-          }
-        }
-      }
-      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "semantic.sources.result", sources } };
-    }
-    if (command.command.type === "semantic.sources.get" && this.semanticProjectDir) {
-      const { resolve: resolvePath2 } = await import("node:path");
-      const fs = await import("node:fs/promises");
-      const getCmd = command.command as { connectionId: string; sourceName: string };
-      const segments = ["business-semantic", "semantic-layer"];
-      const candidates = segments.flatMap((segment) => [".yaml", ".yml"].map((ext) => resolvePath2(this.semanticProjectDir as string, segment, getCmd.connectionId, getCmd.sourceName + ext)));
-      let rawYaml: string | null = null;
-      for (const candidate of candidates) { try { rawYaml = await fs.readFile(candidate, "utf8"); break; } catch { /* next */ } }
-      if (rawYaml === null) throw new DataAgentRuntimeError("INVALID_COMMAND", "SEMANTIC_SOURCE_NOT_FOUND");
-      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "semantic.source.result", source: { connectionId: getCmd.connectionId, sourceName: getCmd.sourceName, definition: { rawYaml }, updatedAt: Date.now() } } };
-    }
-    if (command.command.type === "semantic.sources.list") {
-      const rows = (await this.metadata!.listSemanticSources()) ?? [];
-      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "semantic.sources.result", sources: rows.map((r: any) => ({ connectionId: String(r.connectionId), sourceName: String(r.sourceName), definition: JSON.parse(String(r.definitionJson)), updatedAt: r.updatedAt })) } };
-    }
-    if (command.command.type === "semantic.sources.get") {
-      const row = await this.metadata!.getSemanticSource(command.command.connectionId, command.command.sourceName);
-      if (!row) throw new DataAgentRuntimeError("INVALID_COMMAND", "SEMANTIC_SOURCE_NOT_FOUND");
-      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "semantic.source.result", source: { connectionId: String(row.connectionId), sourceName: String(row.sourceName), definition: JSON.parse(String(row.definitionJson)), updatedAt: row.updatedAt } } };
-    }
     if (command.command.type === "mcp.config.get" || command.command.type === "mcp.config.save") {
-      if (command.command.type === "mcp.config.save") await this.metadata!.setConfig("mcp.config", (command.command as { config: unknown }).config);
+      const saved = command.command.type === "mcp.config.save" ? (command.command as { config: unknown }).config : undefined;
+      if (this.mcpSupervisor) {
+        // The supervisor validates the save and never returns secrets.
+        const config = command.command.type === "mcp.config.save"
+          ? await this.mcpSupervisor.save(saved).catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            throw message.startsWith("MCP_CONFIG_INVALID") ? new DataAgentRuntimeError("INVALID_COMMAND", message) : error;
+          })
+          : await this.mcpSupervisor.view();
+        return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "mcp.config.result", config } };
+      }
+      if (command.command.type === "mcp.config.save") await this.metadata!.setConfig("mcp.config", saved);
       const config = (await this.metadata!.getConfig("mcp.config")) ?? null;
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "mcp.config.result", config } };
     }
@@ -291,40 +266,20 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       const result = await this.agent.refreshDashboard({ path: command.command.path, viewIds: command.command.viewIds, requestId: command.requestId }, { sessionId: context.sessionId, userId: context.userId });
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "dashboard.refresh.result", ...result } };
     }
-    if (command.command.type === "semantic.ingest.status") {
-      if (!this.ingestJob) throw new DataAgentRuntimeError("INVALID_COMMAND", "INGEST_JOB_NOT_CONFIGURED");
-      const status = await this.ingestJob.getStatus();
-      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "semantic.ingest.status.result", ...status } };
-    }
-    if (command.command.type === "semantic.ingest.retry") {
-      if (!this.ingestJob) throw new DataAgentRuntimeError("INVALID_COMMAND", "INGEST_JOB_NOT_CONFIGURED");
-      const result = await this.ingestJob.retry();
-      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "semantic.ingest.retry.result", accepted: result.accepted } };
-    }
     if (command.command.type === "config.get" || command.command.type === "config.save") {
-      if (command.command.type === "config.save") {
-        const current = sanitizeConfigForHost(await this.metadata!.getConfig("ui.settings"), context.host);
-        const patch = { ...((command.command as { patch: Record<string, unknown> }).patch) };
-        for (const field of DESKTOP_SECRET_CONFIG_FIELDS) {
-          if (typeof patch[field] === "string" && patch[field].trim() === "" && typeof current[field] === "string" && current[field] !== "") {
-            delete patch[field];
-          }
-        }
-        const next: Record<string, unknown> = { ...current, ...patch };
-        if (context.host === "electron") {
-          for (const field of DESKTOP_SECRET_CONFIG_FIELDS) delete next[field];
-        }
-        await this.metadata!.setConfig("ui.settings", next);
-        const pythonConfig = asRecord(patch.python_runtime);
-        if (pythonConfig) {
-          this.pythonExecutable = pythonConfig.mode === "external" && typeof pythonConfig.executable === "string" && pythonConfig.executable.trim()
-            ? pythonConfig.executable
-            : this.bundledPythonExecutable;
-        }
-        await this.onConfigSaved?.(next, context);
-      }
+      if (command.command.type === "config.save") await this.saveSettings({ ...((command.command as { patch: Record<string, unknown> }).patch) }, context);
       const config = sanitizeConfigForHost(await this.metadata!.getConfig("ui.settings"), context.host);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "config.get.result", config } };
+    }
+    if (command.command.type === "db.sample") {
+      if (!this.sampleDatabaseRoot) throw new DataAgentRuntimeError("INVALID_COMMAND", "SAMPLE_DATABASE_NOT_CONFIGURED");
+      try {
+        const database = ensureSampleDatabase(this.sampleDatabaseRoot);
+        await this.saveSettings({ driver: "sqlite", database }, context);
+        return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: true, message: "已连接示例销售库", details: { database } } };
+      } catch (error) {
+        return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: false, message: `示例库创建失败: ${error instanceof Error ? error.message : String(error)}` } };
+      }
     }
     if (command.command.type === "python.runtime.test") {
       const { execFile } = await import("node:child_process");
@@ -345,7 +300,17 @@ export class DataAgentRuntime implements ApplicationCommandHost {
     }
     if (command.command.type === "llm.test") {
       if (!this.llmTester) throw new DataAgentRuntimeError("INVALID_COMMAND", "LLM_TESTER_NOT_CONFIGURED");
-      const result = await this.llmTester.test((command.command as { profile: Record<string, unknown> }).profile);
+      const given = (command.command as { profile: Record<string, unknown> }).profile;
+      // An empty profile means "the model chats use now", which on the desktop includes a key the renderer never sees.
+      let profile = given;
+      if (Object.keys(given).length === 0 && this.savedModelProfile) {
+        try {
+          profile = await this.savedModelProfile(context);
+        } catch (error) {
+          return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: false, message: error instanceof Error ? error.message : String(error) } };
+        }
+      }
+      const result = await this.llmTester.test(profile);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: result.success, message: result.message, details: result.details } };
     }
     if (command.command.type === "channel.access.list" || command.command.type === "channel.access.decide" || command.command.type === "channel.access.revoke") {
@@ -362,10 +327,16 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       const { code, expiresAt } = await this.channelControl.createLinkCode(context.userId);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "channel.bind_code.result", code, expiresAt } };
     }
+    if (command.command.type === "channel.configure") {
+      if (!this.channelControl) throw new DataAgentRuntimeError("INVALID_COMMAND", "CHANNELS_NOT_CONFIGURED");
+      const { channelId, enabled, replyDetail } = command.command;
+      const channels = await this.channelControl.configure(channelId, { ...(enabled !== undefined ? { enabled } : {}), ...(replyDetail ? { replyDetail } : {}) });
+      return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "channel.list.result", channels } };
+    }
     if (command.command.type === "channel.list" || command.command.type === "channel.provision" || command.command.type === "channel.disconnect") {
       if (!this.channelControl) throw new DataAgentRuntimeError("INVALID_COMMAND", "CHANNELS_NOT_CONFIGURED");
       const c = command.command;
-      const channels = c.type === "channel.list" ? this.channelControl.list() : c.type === "channel.provision" ? await this.channelControl.provision(c.channelId) : await this.channelControl.disconnect(c.channelId);
+      const channels = c.type === "channel.list" ? this.channelControl.list() : c.type === "channel.provision" ? await this.channelControl.provision(c.channelId, context.userId) : await this.channelControl.disconnect(c.channelId);
       return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "channel.list.result", channels } };
     }
 
@@ -400,6 +371,7 @@ export class DataAgentRuntime implements ApplicationCommandHost {
         inProgressRun: current ? { runId: current.id, startedAt: current.startedAt } : null,
         pendingClarification: pending ? { clarificationId: pending.clarificationId, question: pending.question, options: [...pending.options] } : null,
         eventSequence,
+        eventInstance: this.instanceId,
       } };
     }
     if (command.command.type === "session.prepare") {
@@ -563,6 +535,28 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   }
 
   /** Checks each attached file exists in the Session workspace; a missing one rejects the prompt rather than reaching the model. */
+  /** Merges a settings patch, keeping desktop keys out of the store, then lets the host react. */
+  private async saveSettings(patch: Record<string, unknown>, context: RequestContext): Promise<void> {
+    const current = sanitizeConfigForHost(await this.metadata!.getConfig("ui.settings"), context.host);
+    for (const field of DESKTOP_SECRET_CONFIG_FIELDS) {
+      if (typeof patch[field] === "string" && patch[field].trim() === "" && typeof current[field] === "string" && current[field] !== "") {
+        delete patch[field];
+      }
+    }
+    const next: Record<string, unknown> = { ...current, ...patch };
+    if (context.host === "electron") {
+      for (const field of DESKTOP_SECRET_CONFIG_FIELDS) delete next[field];
+    }
+    await this.metadata!.setConfig("ui.settings", next);
+    const pythonConfig = asRecord(patch.python_runtime);
+    if (pythonConfig) {
+      this.pythonExecutable = pythonConfig.mode === "external" && typeof pythonConfig.executable === "string" && pythonConfig.executable.trim()
+        ? pythonConfig.executable
+        : this.bundledPythonExecutable;
+    }
+    await this.onConfigSaved?.(next, context);
+  }
+
   private async resolveAttachments(requested: readonly { path: string }[], context: RequestContext): Promise<PromptAttachment[]> {
     if (requested.length === 0) return [];
     if (!this.workspace) throw new DataAgentRuntimeError("INVALID_COMMAND", "Workspace is not configured");
@@ -647,5 +641,3 @@ export { AgentControllerError } from "./facets/agent-controller.js";
 export { KnowledgeIndex } from "./knowledge.js";
 export { DataAgentSessionApplication } from "./application/host.js";
 export { JevHypothesisChoiceAdvisor } from "./adapters/jev-hypothesis-choice-advisor.js";
-export { JevSpecAlignmentAssessor } from "./adapters/jev-spec-alignment-assessor.js";
-export { ModelRequirementExtractor, REQUIREMENT_EXTRACTION_PROMPT } from "./adapters/model-requirement-extractor.js";

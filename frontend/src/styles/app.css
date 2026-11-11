@@ -1,0 +1,25 @@
+/*
+ * The one stylesheet entry. Every rule sits in a cascade layer, in this order:
+ *   theme      Tailwind's design tokens and ours (theme.css)
+ *   base       Tailwind's Preflight and the few global base styles (base.css)
+ *   components shadcn/ui components
+ *   utilities  Tailwind utilities
+ * Nothing may be left outside a layer: unlayered CSS beats every layer.
+ * See docs/前端迁移计划-Tailwind与shadcn.md.
+ */
+@layer theme, base, components, utilities;
+
+@import "tailwindcss/theme.css" layer(theme);
+@import "./theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "./base.css" layer(base);
+
+/* Generate utilities only for class names in src, not for words in docs and the rest of the repo. */
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "../";
+/* Only @utility and @property definitions: Tailwind emits the utilities into its utilities layer itself. */
+@import "tw-animate-css";
+/* Directives for the shadcn/ui components; its one plain rule is layered inside the file. */
+@import "./shadcn.css";
+/* Our own utilities (directives only). */
+@import "./utilities.css";

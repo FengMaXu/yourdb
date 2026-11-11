@@ -1,6 +1,6 @@
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
-import { ChannelActorSchema, ChannelAccessSchema, ChannelStatusSchema, DashboardDeliveredSchema, PublicationDeliveredSchema } from "./channel.js";
+import { ChannelActorSchema, ChannelAccessSchema, ChannelStatusSchema, DashboardDeliveredSchema, ReplyDetailSchema, PublicationDeliveredSchema } from "./channel.js";
 
 export const ProtocolVersion = 1 as const;
 export const RequestContextSchema = Type.Object({ userId: Type.String({ minLength: 1 }), host: Type.Union([Type.Literal("electron"), Type.Literal("web"), Type.Literal("channel")]), sessionId: Type.Optional(Type.String({ minLength: 1 })) });
@@ -27,19 +27,17 @@ const ConfigGetCommandSchema = Type.Object({ type: Type.Literal("config.get") })
 const ConfigSaveCommandSchema = Type.Object({ type: Type.Literal("config.save"), patch: Type.Record(Type.String(), Type.Unknown()) });
 const PythonRuntimeTestCommandSchema = Type.Object({ type: Type.Literal("python.runtime.test"), mode: Type.Union([Type.Literal("bundled"), Type.Literal("external")]), executable: Type.Optional(Type.String()) });
 const DbTestCommandSchema = Type.Object({ type: Type.Literal("db.test"), connection: Type.Record(Type.String(), Type.Unknown()) });
+/** Creates the bundled demo SQLite database and makes it the saved connection. */
+const DbSampleCommandSchema = Type.Object({ type: Type.Literal("db.sample") });
 const LlmTestCommandSchema = Type.Object({ type: Type.Literal("llm.test"), profile: Type.Record(Type.String(), Type.Unknown()) });
 const McpServersStatusCommandSchema = Type.Object({ type: Type.Literal("mcp.servers.status") });
 const McpServerTestCommandSchema = Type.Object({ type: Type.Literal("mcp.server.test"), name: Type.String({ minLength: 1 }) });
 const McpServerRestartCommandSchema = Type.Object({ type: Type.Literal("mcp.server.restart"), name: Type.String({ minLength: 1 }) });
 const SessionTranscriptCommandSchema = Type.Object({ type: Type.Literal("session.transcript"), sessionId: Type.String({ minLength: 1 }) });
 const SessionPrepareCommandSchema = Type.Object({ type: Type.Literal("session.prepare"), sessionId: Type.String({ minLength: 1 }) });
-const SemanticSourcesListCommandSchema = Type.Object({ type: Type.Literal("semantic.sources.list") });
-const SemanticSourcesGetCommandSchema = Type.Object({ type: Type.Literal("semantic.sources.get"), connectionId: Type.String(), sourceName: Type.String() });
 const McpConfigGetCommandSchema = Type.Object({ type: Type.Literal("mcp.config.get") });
 const McpConfigSaveCommandSchema = Type.Object({ type: Type.Literal("mcp.config.save"), config: Type.Unknown() });
 const SkillsListCommandSchema = Type.Object({ type: Type.Literal("skills.list") });
-const SemanticIngestStatusCommandSchema = Type.Object({ type: Type.Literal("semantic.ingest.status") });
-const SemanticIngestRetryCommandSchema = Type.Object({ type: Type.Literal("semantic.ingest.retry") });
 const DashboardRefreshCommandSchema = Type.Object({ type: Type.Literal("dashboard.refresh"), path: Type.String({ minLength: 1 }), viewIds: Type.Array(Type.String({ minLength: 1 }), { minItems: 1, maxItems: 40 }) });
 const TaskCreateCommandSchema = Type.Object({ type: Type.Literal("task.create"), name: Type.String({ minLength: 1 }) });
 const TaskListCommandSchema = Type.Object({ type: Type.Literal("task.list") });
@@ -52,12 +50,14 @@ const SessionDeleteCommandSchema = Type.Object({ type: Type.Literal("session.del
 const ChannelListCommandSchema = Type.Object({ type: Type.Literal("channel.list") });
 const ChannelProvisionCommandSchema = Type.Object({ type: Type.Literal("channel.provision"), channelId: Type.String({ minLength: 1 }) });
 const ChannelDisconnectCommandSchema = Type.Object({ type: Type.Literal("channel.disconnect"), channelId: Type.String({ minLength: 1 }) });
+/** Switches a bot on or off, or changes how much of a run it sends; answers with the channel list. */
+const ChannelConfigureCommandSchema = Type.Object({ type: Type.Literal("channel.configure"), channelId: Type.String({ minLength: 1 }), enabled: Type.Optional(Type.Boolean()), replyDetail: Type.Optional(ReplyDetailSchema) });
 /** A one-time code the signed-in user sends to a channel bot as `/bind <code>` to link that IM identity to their account. */
 const ChannelBindCodeCommandSchema = Type.Object({ type: Type.Literal("channel.bind_code") });
 const ChannelAccessListCommandSchema = Type.Object({ type: Type.Literal("channel.access.list") });
 const ChannelAccessDecideCommandSchema = Type.Object({ type: Type.Literal("channel.access.decide"), requestId: Type.String({ minLength: 1 }), decision: Type.Union([Type.Literal("allow"), Type.Literal("deny")]) });
 const ChannelAccessRevokeCommandSchema = Type.Object({ type: Type.Literal("channel.access.revoke"), actor: ChannelActorSchema });
-export const DataAgentCommandSchema = Type.Union([ChannelListCommandSchema, ChannelProvisionCommandSchema, ChannelDisconnectCommandSchema, ChannelBindCodeCommandSchema, ChannelAccessListCommandSchema, ChannelAccessDecideCommandSchema, ChannelAccessRevokeCommandSchema, RuntimeProbeCommandSchema, AgentPromptCommandSchema, AgentSteerCommandSchema, AgentFollowUpCommandSchema, AgentStopCommandSchema, WorkspaceListCommandSchema, WorkspaceReadCommandSchema, WorkspaceWriteCommandSchema, WorkspaceDeleteCommandSchema, RunPythonCommandSchema, KnowledgeSearchCommandSchema, KnowledgeReadCommandSchema, ClarificationAnswerCommandSchema, KnowledgeListCommandSchema, KnowledgeSaveCommandSchema, ConfigGetCommandSchema, ConfigSaveCommandSchema, PythonRuntimeTestCommandSchema, DbTestCommandSchema, LlmTestCommandSchema, McpServersStatusCommandSchema, McpServerTestCommandSchema, McpServerRestartCommandSchema, SessionPrepareCommandSchema, SessionTranscriptCommandSchema, SemanticSourcesListCommandSchema, SemanticSourcesGetCommandSchema, McpConfigGetCommandSchema, McpConfigSaveCommandSchema, SkillsListCommandSchema, DashboardRefreshCommandSchema, SemanticIngestStatusCommandSchema, SemanticIngestRetryCommandSchema, TaskCreateCommandSchema, TaskListCommandSchema, TaskRenameCommandSchema, TaskDeleteCommandSchema, SessionCreateCommandSchema, SessionListCommandSchema, SessionRenameCommandSchema, SessionDeleteCommandSchema]);
+export const DataAgentCommandSchema = Type.Union([ChannelListCommandSchema, ChannelProvisionCommandSchema, ChannelDisconnectCommandSchema, ChannelConfigureCommandSchema, ChannelBindCodeCommandSchema, ChannelAccessListCommandSchema, ChannelAccessDecideCommandSchema, ChannelAccessRevokeCommandSchema, RuntimeProbeCommandSchema, AgentPromptCommandSchema, AgentSteerCommandSchema, AgentFollowUpCommandSchema, AgentStopCommandSchema, WorkspaceListCommandSchema, WorkspaceReadCommandSchema, WorkspaceWriteCommandSchema, WorkspaceDeleteCommandSchema, RunPythonCommandSchema, KnowledgeSearchCommandSchema, KnowledgeReadCommandSchema, ClarificationAnswerCommandSchema, KnowledgeListCommandSchema, KnowledgeSaveCommandSchema, ConfigGetCommandSchema, ConfigSaveCommandSchema, PythonRuntimeTestCommandSchema, DbTestCommandSchema, DbSampleCommandSchema, LlmTestCommandSchema, McpServersStatusCommandSchema, McpServerTestCommandSchema, McpServerRestartCommandSchema, SessionPrepareCommandSchema, SessionTranscriptCommandSchema, McpConfigGetCommandSchema, McpConfigSaveCommandSchema, SkillsListCommandSchema, DashboardRefreshCommandSchema, TaskCreateCommandSchema, TaskListCommandSchema, TaskRenameCommandSchema, TaskDeleteCommandSchema, SessionCreateCommandSchema, SessionListCommandSchema, SessionRenameCommandSchema, SessionDeleteCommandSchema]);
 export type DataAgentCommand = Static<typeof DataAgentCommandSchema>;
 export const DataAgentCommandEnvelopeSchema = Type.Object({ protocolVersion: Type.Literal(ProtocolVersion), requestId: Type.String({ minLength: 1 }), sessionId: Type.Optional(Type.String({ minLength: 1 })), command: DataAgentCommandSchema });
 export type DataAgentCommandEnvelope = Static<typeof DataAgentCommandEnvelopeSchema>;
@@ -81,12 +81,8 @@ const KnowledgeListResponseSchema = Type.Object({ type: Type.Literal("knowledge.
   hasContent: Type.Optional(Type.Boolean()),
 })) });
 const KnowledgeSaveResponseSchema = Type.Object({ type: Type.Literal("knowledge.save.result"), path: Type.String() });
-const SemanticSourcesResponseSchema = Type.Object({ type: Type.Literal("semantic.sources.result"), sources: Type.Array(Type.Object({ connectionId: Type.String(), sourceName: Type.String(), definition: Type.Unknown(), updatedAt: Type.Number() })) });
-const SemanticSourceResponseSchema = Type.Object({ type: Type.Literal("semantic.source.result"), source: Type.Object({ connectionId: Type.String(), sourceName: Type.String(), definition: Type.Unknown(), updatedAt: Type.Number() }) });
 const McpConfigResponseSchema = Type.Object({ type: Type.Literal("mcp.config.result"), config: Type.Unknown() });
 const SkillsListResponseSchema = Type.Object({ type: Type.Literal("skills.list.result"), skills: Type.Array(Type.Object({ name: Type.String(), description: Type.String(), tools: Type.Array(Type.String()) })), diagnostics: Type.Optional(Type.Array(Type.Object({ path: Type.String(), message: Type.String() }))) });
-const SemanticIngestStatusResponseSchema = Type.Object({ type: Type.Literal("semantic.ingest.status.result"), status: Type.String(), jobId: Type.Union([Type.String(), Type.Null()]), summary: Type.Object({ updated: Type.Number(), unchanged: Type.Number(), failed: Type.Number(), skipped: Type.Number() }), errorCode: Type.Union([Type.String(), Type.Null()]) });
-const SemanticIngestRetryResponseSchema = Type.Object({ type: Type.Literal("semantic.ingest.retry.result"), accepted: Type.Boolean() });
 const SessionTranscriptResponseSchema = Type.Object({ type: Type.Literal("session.transcript.result"), messages: Type.Array(Type.Object({
   id: Type.String(),
   role: Type.String(),
@@ -109,6 +105,8 @@ const SessionTranscriptResponseSchema = Type.Object({ type: Type.Literal("sessio
   pendingClarification: Type.Optional(Type.Union([Type.Object({ clarificationId: Type.String(), question: Type.String(), options: Type.Array(Type.String()) }), Type.Null()])),
   /** Last event sequence emitted before the snapshot; a client resumes the event stream after it. */
   eventSequence: Type.Optional(Type.Integer({ minimum: 0 })),
+  /** The server instance that issued eventSequence: sequences restart with the process. */
+  eventInstance: Type.Optional(Type.String()),
 });
 const ConfigGetResponseSchema = Type.Object({ type: Type.Literal("config.get.result"), config: Type.Unknown() });
 const ConfigSaveResponseSchema = Type.Object({ type: Type.Literal("config.save.result"), saved: Type.Boolean() });
@@ -126,7 +124,7 @@ const ListResponseSchema = Type.Object({ type: Type.Literal("list.result"), enti
 const ChannelListResponseSchema = Type.Object({ type: Type.Literal("channel.list.result"), channels: Type.Array(ChannelStatusSchema) });
 const ChannelBindCodeResponseSchema = Type.Object({ type: Type.Literal("channel.bind_code.result"), code: Type.String({ pattern: "^[0-9]{6}$" }), expiresAt: Type.Integer() });
 const ChannelAccessResponseSchema = Type.Object({ type: Type.Literal("channel.access.result"), access: ChannelAccessSchema });
-export const DataAgentResponseSchema = Type.Union([ChannelListResponseSchema, ChannelBindCodeResponseSchema, ChannelAccessResponseSchema, RuntimeProbeResponseSchema, AgentPromptResponseSchema, KnowledgeSearchResponseSchema, KnowledgeReadResponseSchema, KnowledgeListResponseSchema, KnowledgeSaveResponseSchema, SemanticSourcesResponseSchema, SemanticSourceResponseSchema, McpConfigResponseSchema, SkillsListResponseSchema, SemanticIngestStatusResponseSchema, SemanticIngestRetryResponseSchema, SessionTranscriptResponseSchema, ConfigGetResponseSchema, ConfigSaveResponseSchema, SimpleTestResponseSchema, McpServersStatusResponseSchema, McpServerTestResponseSchema, McpServerRestartResponseSchema, DashboardRefreshResponseSchema, PythonResponseSchema, WorkspaceResponseSchema, MutationResponseSchema, ListResponseSchema]);
+export const DataAgentResponseSchema = Type.Union([ChannelListResponseSchema, ChannelBindCodeResponseSchema, ChannelAccessResponseSchema, RuntimeProbeResponseSchema, AgentPromptResponseSchema, KnowledgeSearchResponseSchema, KnowledgeReadResponseSchema, KnowledgeListResponseSchema, KnowledgeSaveResponseSchema, McpConfigResponseSchema, SkillsListResponseSchema, SessionTranscriptResponseSchema, ConfigGetResponseSchema, ConfigSaveResponseSchema, SimpleTestResponseSchema, McpServersStatusResponseSchema, McpServerTestResponseSchema, McpServerRestartResponseSchema, DashboardRefreshResponseSchema, PythonResponseSchema, WorkspaceResponseSchema, MutationResponseSchema, ListResponseSchema]);
 export type DataAgentResponse = Static<typeof DataAgentResponseSchema>;
 export const DataAgentResponseEnvelopeSchema = Type.Object({ protocolVersion: Type.Literal(ProtocolVersion), requestId: Type.String({ minLength: 1 }), response: DataAgentResponseSchema });
 export type DataAgentResponseEnvelope = Static<typeof DataAgentResponseEnvelopeSchema>;

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import {
-  clone,
   contentHash,
   type AnswerRevisionRecord,
   type AnswerRevisionView,
@@ -40,8 +39,6 @@ import {
   type ParsedField,
 } from "./field-transition.js";
 import { inheritedFields } from "./report.js";
-import { initialSpecFeedback } from "./spec-feedback.js";
-import { finishRevisionSubmission } from "./spec-feedback-execution.js";
 import { attachDataChecks } from "./data-checks-execution.js";
 import { localId, now } from "./support.js";
 import { probeContextFor, viewFromRevision } from "./views.js";
@@ -54,7 +51,7 @@ function requestEvidenceId(requestMessageId: string): string {
 }
 
 /**
- * The auto-registered request handle gives SpecFeedback and reviewers the
+ * The auto-registered request handle gives reviewers the
  * original message identity. It has no quote or verification and therefore
  * never settles a field.
  */
@@ -187,12 +184,18 @@ function applyWrites(base: FieldBody, writes: readonly PreparedWrite[], register
   return { body, outcomes, added, applied: outcomes.some((outcome) => outcome.status === "applied") };
 }
 
-/** What the view adds about the call and the task; attached after SpecFeedback re-reads the view. */
-function taskExtras(tx: Pick<AnsweringTransaction, "getTask">, task: Pick<QueryTaskRecord, "role" | "parent">, outcomes?: readonly FieldOutcome[]): Partial<AnswerRevisionView> {
+/** What the view adds about the call and the task rather than the Revision. */
+function taskExtras(tx: Pick<AnsweringTransaction, "getTask" | "listChartQueries">, task: Pick<QueryTaskRecord, "taskId" | "currentRevisionId" | "role" | "parent">, outcomes?: readonly FieldOutcome[]): Partial<AnswerRevisionView> {
+  // A changed Report Task leaves its open chart queries bound to the Revision they copied: say so before they
+  // are queried. Published and closed ones keep what they delivered; rebinding would reopen them.
+  const stale = task.role === "report"
+    ? tx.listChartQueries(task.taskId).filter((chart) => chart.lifecycle === "open" && chart.parent?.revisionId !== task.currentRevisionId).map((chart) => chart.taskId)
+    : [];
   return {
     ...(outcomes ? { outcomes } : {}),
     ...(task.role ? { role: task.role } : {}),
     ...(task.parent ? { parent: { ...task.parent, current: tx.getTask(task.parent.taskId)?.currentRevisionId === task.parent.revisionId } } : {}),
+    ...(stale.length > 0 ? { staleChartQueries: stale } : {}),
   };
 }
 
@@ -281,7 +284,7 @@ async function startTask(deps: AnsweringDeps, input: SetAnswerFields, context: B
     const evidence = [requestEvidence, ...applied.added];
     for (const item of evidence) tx.appendEvidence(taskId, item);
     const baseRevision = revisionRecord({ taskId, revisionId, requestId, createdAt, ...(parent ? { parentBinding: parent.binding } : {}) }, applied.body);
-    const revision: AnswerRevisionRecord = { ...baseRevision, ...(parent ? { parentBinding: parent.binding } : {}), specFeedback: initialSpecFeedback(baseRevision, evidence, Boolean(deps.specFeedback), createdAt) };
+    const revision: AnswerRevisionRecord = { ...baseRevision, ...(parent ? { parentBinding: parent.binding } : {}) };
     const task: QueryTaskRecord = {
       taskId,
       sessionId: context.sessionId,
@@ -299,12 +302,9 @@ async function startTask(deps: AnsweringDeps, input: SetAnswerFields, context: B
     tx.putRevision(revision);
     tx.putTask(task);
     extras = taskExtras(tx, task, applied.outcomes);
-    return {
-      view: viewFromRevision(taskId, revision, probeContextFor(deps, task, evidence), task.role === "report"),
-      feedbackTarget: { taskId, revisionId, requestMessageId, evidence: clone(evidence) },
-    } as const;
+    return { view: viewFromRevision(taskId, revision, probeContextFor(deps, task, evidence), task.role === "report") } as const;
   }, context);
-  const view = await attachDataChecks(deps, await finishRevisionSubmission(deps, outcome, context), context);
+  const view = await attachDataChecks(deps, outcome.view, context);
   return { ...view, ...extras };
 }
 
@@ -363,22 +363,19 @@ async function reviseFields(deps: AnsweringDeps, input: SetAnswerFields, context
     const revisionId = makeInternalId("revision") as unknown as RevisionId;
     const binding = existingTask.parent ? (rebound ? parent!.binding : existingTask.parent) : undefined;
     const baseRevision = revisionRecord({ taskId, revisionId, parentRevisionId: previous.revisionId, requestId, createdAt }, applied.body);
-    const revision: AnswerRevisionRecord = { ...baseRevision, ...(binding ? { parentBinding: binding } : {}), specFeedback: initialSpecFeedback(baseRevision, allEvidence, Boolean(deps.specFeedback), createdAt) };
+    const revision: AnswerRevisionRecord = { ...baseRevision, ...(binding ? { parentBinding: binding } : {}) };
     tx.putRevision(revision);
     const { latestCandidateId: _latestCandidateId, publicationId: _publicationId, ...taskWithoutResults } = task;
     tx.putAttempt({ ...reservation.attempt!, state: "succeeded", outcome: "succeeded", sqlExecuted: false, updatedAt: createdAt });
     const revisedTask: QueryTaskRecord = { ...taskWithoutResults, currentRevisionId: revisionId, lifecycle: "open", updatedAt: createdAt, ...(rebound ? { parent: parent!.binding } : {}) };
     tx.putTask(revisedTask);
     extras = taskExtras(tx, revisedTask, applied.outcomes);
-    return {
-      view: viewFromRevision(taskId, revision, probeContextFor(deps, task, allEvidence), task.role === "report"),
-      feedbackTarget: { taskId, revisionId, requestMessageId: task.requestMessageId, evidence: clone(allEvidence) },
-    } as const;
+    return { view: viewFromRevision(taskId, revision, probeContextFor(deps, task, allEvidence), task.role === "report") } as const;
   }, context);
   if ("obstacle" in outcome) {
     throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", outcome.obstacle.message, obstacleDetails(undefined, outcome.obstacle));
   }
-  const view = await attachDataChecks(deps, await finishRevisionSubmission(deps, outcome, context), context);
+  const view = await attachDataChecks(deps, outcome.view, context);
   // A waiver may have completed a field's outputs in this call.
   return { ...withAdvice(view, await ensureAdvice(deps, taskId, context)), ...extras };
 }

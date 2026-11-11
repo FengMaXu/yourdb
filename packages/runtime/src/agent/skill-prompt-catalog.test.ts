@@ -11,9 +11,9 @@ import { withToolPromptCatalog } from "./tool-prompt-models.js";
 
 const skills = [
   { name: "query-task", description: "ablation flow", requiredTools: ["begin_query_task"] },
-  { name: "answer-fields", description: "Answer Spec\n流程", whenToUse: "每个取数请求", requiredTools: ["set_answer_spec", "query_database"] },
+  { name: "spec", description: "Answer Spec\n流程", whenToUse: "每个取数请求", requiredTools: ["set_answer_spec", "query_database"] },
   { name: "hidden", description: "application only", disableModelInvocation: true },
-  { name: "analysis", description: "charting" },
+  { name: "chart", description: "charting" },
 ];
 
 describe("Skill catalog", () => {
@@ -22,8 +22,8 @@ describe("Skill catalog", () => {
     expect(renderSkillCatalog(skills, ["load_skill", "query_database"], granted)).toBe([
       "## 可用 Skill",
       "任务匹配时先用 `load_skill(name)` 加载对应 Skill，再按其流程执行。",
-      "- `analysis`：charting",
-      "- `answer-fields`：Answer Spec 流程。适用：每个取数请求",
+      "- `chart`：charting",
+      "- `spec`：Answer Spec 流程。适用：每个取数请求",
     ].join("\n"));
     expect(isSkillAvailable(skills[0]!, granted)).toBe(false);
   });
@@ -54,8 +54,8 @@ describe("Skill catalog", () => {
     expect(prompt.indexOf("BASE")).toBe(0);
     expect(prompt.indexOf("## 可用 Skill")).toBeGreaterThan(0);
     expect(prompt.indexOf("## 可用 Skill")).toBeLessThan(prompt.indexOf("## 当前可用工具"));
-    expect(prompt).toContain("`analysis`");
-    expect(prompt).not.toContain("`answer-fields`");
+    expect(prompt).toContain("`chart`");
+    expect(prompt).not.toContain("`spec`");
   });
 
   it("ships the protocol Skills with the metadata that keeps each arm exclusive", async () => {
@@ -64,12 +64,12 @@ describe("Skill catalog", () => {
       path.join(repo, ".agents", "skills"),
       path.join(repo, "evaluations", "spider2", "skills"),
     ]);
-    expect(diagnostics.filter((item) => item.path.includes("answer-fields") || item.path.includes("query-task"))).toEqual([]);
-    const answerFields = loaded.find((skill) => skill.name === "answer-fields");
+    expect(diagnostics.filter((item) => item.path.includes("spec") || item.path.includes("query-task"))).toEqual([]);
+    const spec = loaded.find((skill) => skill.name === "spec");
     const queryTask = loaded.find((skill) => skill.name === "query-task");
     // The semantic and ablation arms each have their own protocol Skill, so neither sees the other's tools.
-    expect(answerFields).toMatchObject({ requiredTools: ["set_answer_spec", "query_database"], whenToUse: expect.any(String) });
+    expect(spec).toMatchObject({ requiredTools: ["set_answer_spec", "query_database"], whenToUse: expect.any(String) });
     expect(queryTask).toMatchObject({ requiredTools: ["begin_query_task", "query_database"] });
-    expect(answerFields?.allowedTools).toBeUndefined();
+    expect(spec?.allowedTools).toBeUndefined();
   });
 });

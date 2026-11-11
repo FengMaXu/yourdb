@@ -26,9 +26,8 @@ import { HarnessChildExecutor, JsonlChildSessionRepository, MemoryChildSessionRe
 import { createQueryTaskDelegationResolver, type DelegationSqlExplorer } from "./delegation.js";
 import { createSubagentToolDefinition } from "../tools/subagent.js";
 import type { DataAgentToolDefinition } from "../tools/tool-definition.js";
+import { createMcpPluginToolDefinitions, type McpPluginTool } from "../tools/mcp-plugins.js";
 import type { HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
-import type { RequirementExtractor, SpecAlignmentAssessor } from "../judgment/spec-alignment.js";
-import { ModelRequirementExtractor } from "../adapters/model-requirement-extractor.js";
 import { isRuntimeInjected } from "../runtime-injected.js";
 
 export interface DataAgentSessionRuntimeOptions {
@@ -56,12 +55,10 @@ export interface DataAgentSessionRuntimeOptions {
   readonly resultStore?: ResultStore;
   /** Optional external advisor for unresolved competing hypotheses. */
   readonly hypothesisChoiceAdvisor?: HypothesisChoiceAdvisor;
-  /** Optional post-commit Jev Spec alignment assessor. */
-  readonly specAlignmentAssessor?: SpecAlignmentAssessor;
-  /** Overrides the session-model requirement extractor used by Spec feedback. */
-  readonly requirementExtractor?: RequirementExtractor;
   /** Evaluation-only semantic-spec ablation. Product composition leaves this required. */
   readonly semanticSpecMode?: SemanticSpecMode;
+  /** Tools of the MCP plugins the user enabled, resolved when the session opens. */
+  readonly mcpPluginTools?: readonly McpPluginTool[];
   /** Explicit Answering budget; omitted uses the production default policy. */
   readonly answeringBudgetPolicy?: QueryBudgetPolicy;
   /** Explicit fanout capability setting; omitted uses the production default. */
@@ -244,12 +241,6 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
   const clarificationLedger = new PiSessionClarificationLedger(session, TODO_CONTEXT);
   const resultStore = options.resultStore ?? (options.resultRoot ? new FileResultStore(options.resultRoot) : new InMemoryResultStore());
   const piRuntime = await createDataAgentPiRuntime(options.profile);
-  // The requirement list comes from the session's model reading only the request; the assessor decides each item (ADR-0003).
-  const specFeedback = options.specAlignmentAssessor ? {
-    assessor: options.specAlignmentAssessor,
-    requirementExtractor: options.requirementExtractor ?? new ModelRequirementExtractor(piRuntime.models, piRuntime.model),
-    getOriginalQuestion: (requestMessageId: string, feedbackOptions?: { readonly signal?: AbortSignal }) => readOriginalQuestion(session, requestMessageId, feedbackOptions?.signal),
-  } : undefined;
   const answering: Answering = new InMemoryAnswering({
     store: answeringStore,
     resultStore,
@@ -268,7 +259,6 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
     } : {}),
     // ADR-0006: without a clarification tool an unverified population decision is disclosed, not blocked.
     populationDecisions: options.enableClarificationTool === false ? "allow_disclosed" : "require_evidence",
-    ...(specFeedback ? { specFeedback } : {}),
     evidenceSource: createEvidenceSource({
       session,
       sessionId: options.sessionId,
@@ -338,6 +328,7 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
     ),
     ...createChartToolDefinitions({ workspace: options.workspace, artifacts, derived: derivedDatasets }),
     ...(options.enableDashboards !== false ? createDashboardToolDefinitions({ workspace: options.workspace, artifacts, derived: derivedDatasets }) : []),
+    ...createMcpPluginToolDefinitions(options.mcpPluginTools ?? []),
   ];
   const delegation = options.enableSubagents ? new NativeDelegation({
     executor: new HarnessChildExecutor({

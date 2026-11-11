@@ -167,7 +167,18 @@ function citeEvidence(path: string, cite: unknown, currentMessageId: string | un
 /** Parses one path's untrusted write. Pure and synchronous: nothing is checked against state yet. */
 export function parseFieldWrite(rawPath: string, input: unknown, currentMessageId?: string): ParsedField {
   const path = rawPath.trim();
-  if (!isSpecPath(path)) invalid(`unknown field path ${path}; use one of ${FIELD_PATHS.join(", ")}, or measures.<name> on a Report Task`);
+  if (!isSpecPath(path)) {
+    // Mistakes seen in practice get their own answer: a form key written as a path, or appended to one,
+    // and measures without a name.
+    const segments = path.split(".");
+    const key = segments.at(-1) ?? "";
+    if ((FORM_KEYS as readonly string[]).includes(key)) {
+      const owner = segments.length > 1 && isSpecPath(segments.slice(0, -1).join(".")) ? segments.slice(0, -1).join(".") : key === "ref" ? "measure.formula" : "<field path>";
+      invalid(`${path} is not a field path: "${key}" goes inside the field it belongs to, {"${owner}": {${key === "ref" ? "" : `"value": …, `}"${key}": …}}${key === "ref" ? " (only on a chart query)" : ""}`);
+    }
+    if (path === "measures") invalid(`measures is written one measure per path, "measures.<name>": {formula, countGrain?, denominator?, window?}, and only on a Report Task; a chart query takes a measure with "measure.formula": {"ref": "<name>"}`);
+    invalid(`unknown field path ${path}; use one of ${FIELD_PATHS.join(", ")}, or measures.<name> on a Report Task`);
+  }
   if (input === "n/a") return { path, write: { kind: "not_applicable" }, evidence: [] };
   const body = record(input);
   // A value can itself be an object ({rowMode}, {op}, {name}); without any form key it is a bare value.

@@ -10,6 +10,11 @@ import { API_BASE_URL, getAuthToken } from '../api/client';
 
 const INTERNAL_PREFIXES = ['/workspace/', '/api/'];
 const SESSION_RELATIVE_WORKSPACE_ROOTS = ['data', 'output', 'dashboards', 'reports'];
+/** Kinds of file an agent writes to the workspace and links; a link to anything else is not taken as a workspace file. */
+const WORKSPACE_FILE_EXTENSIONS = new Set([
+    'md', 'markdown', 'txt', 'html', 'htm', 'pdf', 'csv', 'tsv', 'json', 'xlsx', 'xls', 'docx', 'pptx',
+    'svg', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'sql', 'py', 'ipynb', 'parquet',
+]);
 const WORKSPACE_FILE_ENDPOINT = '/workspace/files/';
 const PUBLICATION_ENDPOINT = '/api/runtime/publications/';
 
@@ -24,6 +29,36 @@ export function isWorkspaceRelativePath(href: string | undefined): href is strin
     if (!value || /^(?:[a-z][a-z0-9+.-]*:|\/|#|\?|\/\/)/i.test(value)) return false;
     const firstSegment = value.replace(/^(?:\.\/)+/, '').split(/[/?#]/)[0] || '';
     return SESSION_RELATIVE_WORKSPACE_ROOTS.includes(firstSegment);
+}
+
+/**
+ * A relative path, within the session, to a file the agent wrote: under a
+ * known folder, or ending in a workspace file extension. Not a path that
+ * climbs out (`..`), and not a web address written without its scheme
+ * (`example.com/page.html`, `www.example.com`).
+ */
+function sessionFilePath(value: string): string | undefined {
+    const segments = value.split(/[?#]/)[0].replace(/^(?:\.\/)+/, '').split('/');
+    if (segments.some((segment) => segment === '..')) return undefined;
+    if (isWorkspaceRelativePath(value)) return value;
+    const extension = /\.([a-z0-9]+)$/i.exec(segments.at(-1) || '')?.[1]?.toLowerCase();
+    if (!extension || !WORKSPACE_FILE_EXTENSIONS.has(extension)) return undefined;
+    if (segments.length > 1 && /^(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(segments[0])) return undefined;
+    return value;
+}
+
+/**
+ * The workspace path a link in an agent's answer points to, relative to the
+ * session, or undefined when it is no workspace file. Agents link files in
+ * three ways: under a known folder (`reports/x.md`), at the session root
+ * (`olist_report.md`), or either of those with a leading slash
+ * (`/dashboards/x.html`, `/olist_report.md`). Opened as plain links, the last
+ * ones resolved against the app's URL and landed on its home page.
+ */
+export function workspaceLinkPath(href: string | undefined): string | undefined {
+    const value = href?.trim();
+    if (!value || /^(?:[a-z][a-z0-9+.-]*:|#|\?|\/\/)/i.test(value)) return undefined;
+    return sessionFilePath(value.startsWith('/') ? value.slice(1) : value);
 }
 
 function appendAuthToken(url: string): string {
@@ -144,8 +179,9 @@ export function resolveInternalUrl(href: string | undefined, currentSessionId?: 
 export function resolveWorkspaceDownloadUrl(href: string | undefined, currentSessionId?: string): string {
     if (!href) return '';
     const value = href.trim();
-    if (isWorkspaceRelativePath(value)) {
-        const path = resolveRelativeWorkspacePath(value, undefined, currentSessionId);
+    const linked = workspaceLinkPath(value);
+    if (linked) {
+        const path = resolveRelativeWorkspacePath(linked, undefined, currentSessionId);
         return path ? buildWorkspaceFileUrl('download', path) : value;
     }
 
@@ -168,8 +204,9 @@ export function resolveWorkspaceDownloadUrl(href: string | undefined, currentSes
 export function resolveWorkspacePreviewUrl(href: string | undefined, currentSessionId?: string): string {
     if (!href) return '';
     const value = href.trim();
-    if (isWorkspaceRelativePath(value)) {
-        const path = resolveRelativeWorkspacePath(value, undefined, currentSessionId);
+    const linked = workspaceLinkPath(value);
+    if (linked) {
+        const path = resolveRelativeWorkspacePath(linked, undefined, currentSessionId);
         return path ? buildWorkspaceFileUrl('preview', path) : value;
     }
 
@@ -204,7 +241,11 @@ export function resolveWorkspaceAssetUrl(
     if (value.startsWith('/workspace/files/download') || value.startsWith('/workspace/files/preview')) {
         return resolveWorkspacePreviewUrl(value, currentSessionId);
     }
-    if (value.startsWith('/')) return resolveInternalUrl(value, currentSessionId);
+    if (value.startsWith('/')) {
+        // `/charts/x.svg` names a file from the session root, as a link with a leading slash does.
+        const rooted = workspaceLinkPath(value);
+        return rooted ? resolveWorkspacePreviewUrl(rooted, currentSessionId) : resolveInternalUrl(value, currentSessionId);
+    }
 
     const assetPath = resolveRelativeWorkspacePath(value, sourceUrl, currentSessionId);
     const sourceSession = assetPath.split('/')[0] || '';

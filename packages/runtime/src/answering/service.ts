@@ -20,7 +20,6 @@ import { assertTaskAccess, type AnsweringStore } from "./answering-store.js";
 import { AnsweringError } from "./errors.js";
 import { InMemoryResultStore, type ResultStore } from "./result-store.js";
 import type { EvidenceSource } from "./evidence-admission.js";
-import { SPEC_FEEDBACK_DEFAULT_TIMEOUT_MS, SPEC_FEEDBACK_MAX_INPUT_BYTES } from "./spec-feedback.js";
 import { DEFAULT_QUERY_BUDGET_POLICY, obstacle, obstacleDetails, validateBudgetPolicy } from "./budget.js";
 import { setAnswerFields } from "./revision.js";
 import { executeExploration } from "./exploration.js";
@@ -28,14 +27,14 @@ import { executeResult } from "./result-execution.js";
 import { createFanoutSchemaLoader } from "./fanout-execution.js";
 import { publishCandidate } from "./publication.js";
 import { refreshPublication } from "./refresh.js";
-import type { AnsweringDeps, FanoutAnsweringOptions, SemanticQualificationMode, SpecFeedbackOptions } from "./deps.js";
+import type { AnsweringDeps, FanoutAnsweringOptions, SemanticQualificationMode } from "./deps.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { FieldAdviceOptions } from "./advice-execution.js";
 
 export { AnsweringError };
 export { DEFAULT_QUERY_BUDGET_POLICY };
 export { SqlExecutionError, type AnsweringSqlExecutor, type SqlQueryResult } from "./sql-execution.js";
-export type { FanoutAnsweringOptions, SemanticQualificationMode, SpecFeedbackOptions } from "./deps.js";
+export type { FanoutAnsweringOptions, SemanticQualificationMode } from "./deps.js";
 
 /** The five public Answering use cases; the architecture gate pins this list. */
 export interface Answering {
@@ -59,8 +58,6 @@ export interface InMemoryAnsweringOptions {
   readonly budgetPolicy?: QueryBudgetPolicy;
   /** Optional bounded JOIN fanout diagnostics; enabled by default when applicable. */
   readonly fanout?: FanoutAnsweringOptions;
-  /** Optional post-commit, advisory Spec alignment feedback. */
-  readonly specFeedback?: SpecFeedbackOptions;
   /** Evaluation-only: preserve task/candidate/receipt identity without semantic qualification. */
   readonly semanticQualificationMode?: SemanticQualificationMode;
   /**
@@ -94,14 +91,6 @@ function assertContext(context: BusinessContext): void {
 }
 
 function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
-  const specFeedbackTimeout = options.specFeedback?.timeoutMs ?? SPEC_FEEDBACK_DEFAULT_TIMEOUT_MS;
-  const specFeedbackMaxInputBytes = options.specFeedback?.maxInputBytes ?? SPEC_FEEDBACK_MAX_INPUT_BYTES;
-  if (options.specFeedback && (!Number.isSafeInteger(specFeedbackTimeout) || specFeedbackTimeout <= 0)) {
-    throw new AnsweringError("INVALID_REQUEST", "Invalid Spec feedback timeout");
-  }
-  if (options.specFeedback && (!Number.isSafeInteger(specFeedbackMaxInputBytes) || specFeedbackMaxInputBytes <= 0)) {
-    throw new AnsweringError("INVALID_REQUEST", "Invalid Spec feedback input byte limit");
-  }
   const fanout = { ...(options.fanout ?? {}) };
   return {
     store: options.store,
@@ -115,13 +104,6 @@ function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
     adviceRequired: options.fieldProbes === true && Boolean(options.fieldAdvice),
     populationDecisions: options.populationDecisions ?? "require_evidence",
     ...(options.evidenceSource ? { evidenceSource: options.evidenceSource } : {}),
-    ...(options.specFeedback ? {
-      specFeedback: {
-        ...options.specFeedback,
-        timeoutMs: specFeedbackTimeout,
-        maxInputBytes: specFeedbackMaxInputBytes,
-      },
-    } : {}),
     fanout,
     loadFanoutSchema: createFanoutSchemaLoader(fanout, options.sqlExecutor),
   };

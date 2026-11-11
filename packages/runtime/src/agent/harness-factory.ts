@@ -19,6 +19,7 @@ import { createPiAgentController } from "../facets/agent-controller.js";
 import { unwrapApplicationSession, type SessionInput } from "../session-store.js";
 import { ToolPromptCatalog } from "./tool-prompt-catalog.js";
 import { withToolPromptCatalog } from "./tool-prompt-models.js";
+import { withCoalescedDeltas } from "./coalesced-stream-models.js";
 import { isSkillAvailable, renderSkillCatalog, type SkillCatalogEntry } from "./skill-prompt-catalog.js";
 import { LENGTH_CONTINUATION_PROMPT, LengthContinuationGuard } from "./length-continuation.js";
 import { RUNTIME_INJECTED_LABEL } from "../runtime-injected.js";
@@ -257,9 +258,10 @@ export async function createPiSessionHost(options: DataAgentSessionHostOptions):
     ...definition,
     tool: tools[index]!,
   }));
-  const models = withToolPromptCatalog(piRuntime.models, new ToolPromptCatalog(effectiveDefinitions), {
+  // Gathered deltas keep the session file from storing one durable frame per streamed token.
+  const models = withCoalescedDeltas(withToolPromptCatalog(piRuntime.models, new ToolPromptCatalog(effectiveDefinitions), {
     renderPreamble: (activeToolNames) => renderSkillCatalog(currentSkills(), activeToolNames, grantedToolNames),
-  });
+  }));
   const created = await AgentHarness.create({
     session: nativeSession,
     models,
@@ -340,13 +342,20 @@ export async function createPiSessionHost(options: DataAgentSessionHostOptions):
   };
   // AgentHarness.create restores accepted operations without starting effects.
   // The Application Host publishes these IDs before asking Pi to resume them.
+  // Stops the background drive of recovered operations when the Session Host closes.
+  const recoveryStop = new AbortController();
   const resumeOpenOperations = async (): Promise<void> => {
     for (const open of created.open) {
       if (open.lane !== "main") continue;
       // Pi owns recovery semantics for run, compaction and navigation. The
-      // Session Host must not silently strand a native accepted operation.
-      const driven = await lane.drive({ operationId: open.operationId }, TODO_CONTEXT);
-      if (!driven.ok) throw driven.error;
+      // Session Host must not silently strand a native accepted operation:
+      // the controller binds it and drives it until it settles, as a prompt's
+      // operation (recovery typically ends in a retry wait, which only a
+      // further drive runs; Stop also takes effect only inside a drive). In
+      // the background, so opening the session does not wait for the run.
+      void nativeController.recover(open.operationId, { pi: TODO_CONTEXT }, recoveryStop.signal).catch((error: unknown) => {
+        if (!recoveryStop.signal.aborted) console.error("[harness] recovered operation failed to settle", open.operationId, error);
+      });
     }
   };
   return {
@@ -395,7 +404,7 @@ export async function createPiSessionHost(options: DataAgentSessionHostOptions):
       }, TODO_CONTEXT);
     },
     resumeOpenOperations,
-    close: async () => { transcript.close(); await harness.close(TODO_CONTEXT); },
+    close: async () => { recoveryStop.abort(); transcript.close(); await harness.close(TODO_CONTEXT); },
   };
 }
 

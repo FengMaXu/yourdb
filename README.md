@@ -14,7 +14,7 @@
 - 支持知识库（BM25 检索）、Skill、MCP 工具与本地工作区协同
 - 提供 Electron 桌面端（TypeScript 主进程 + IPC 版本化通道）与 Fastify Web Host
 - 内置 Python 数据运行时 pack（分析/可视化），通过 MCP 服务器访问 MySQL/PostgreSQL/SQLite
-- V3/V4 BI 看板：静态 HTML 看板与 KTX 语义看板
+- 看板：静态 HTML 看板与可刷新的实时看板
 
 ## 核心价值
 

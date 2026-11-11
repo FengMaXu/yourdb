@@ -95,7 +95,9 @@ describe("Report Task", () => {
     const parent = await report(answering);
     const child = await chart(answering, parent.taskId);
     const changed = await revise(answering, parent.taskId, "parent-2", { "population.time": { value: { expression: "2017", boundary: "inclusive" }, reason: "the report covers 2017" } });
-    await expect(result(answering, child.taskId, child.revisionId, "stale")).rejects.toMatchObject({ code: "PARENT_REVISION_STALE" });
+    // The change itself names the chart query that must rebind, and the refused query says how.
+    expect(changed.staleChartQueries).toEqual([child.taskId]);
+    await expect(result(answering, child.taskId, child.revisionId, "stale")).rejects.toMatchObject({ code: "PARENT_REVISION_STALE", message: expect.stringContaining(`"taskId": "${child.taskId}", "rebind": true`) });
     await expect(answering.execute({ kind: "exploration", taskId: child.taskId, sql: "SELECT 1" }, context("explore"))).resolves.toMatchObject({ kind: "exploration" });
 
     const rebound = await revise(answering, child.taskId, "rebind", {}, { rebind: true });
@@ -180,6 +182,13 @@ describe("Report Task", () => {
 
     const unknown = await chart(answering, parent.taskId, "chart-unknown", { ...rest, "measure.formula": { ref: "gmv" } });
     expect(unknown.outcomes?.find((item) => item.path === "measure.formula")).toMatchObject({ status: "rejected", message: expect.stringContaining("negative_rate, late_rate") });
+
+    // A ref wrapped in "value" is told where it belongs, instead of "unknown keys ref".
+    const wrapped = await chart(answering, parent.taskId, "chart-wrapped", { ...rest, "measure.formula": { value: { ref: "negative_rate" } } });
+    const message = wrapped.outcomes?.find((item) => item.path === "measure.formula")?.message ?? "";
+    expect(message).toContain('"measure.formula": {"ref": "<measure name>"}');
+    expect(message).toContain("never inside \"value\"");
+    expect(message).not.toContain("unknown keys");
   });
 
   it("asks for a reason before a chart query uses a measure of its own when the Report Task defines measures", async () => {

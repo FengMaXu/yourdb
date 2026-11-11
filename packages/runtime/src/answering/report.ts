@@ -26,6 +26,11 @@ export function reportUnresolved(fields: SpecFields, probes: readonly FieldProbe
   return [...undeclaredPaths(fields, true), ...open.filter((path) => path.startsWith("population."))];
 }
 
+/** The set_answer_spec call that rebinds a chart query to its Report Task's current Revision. */
+export function rebindCall(taskId: string): string {
+  return `set_answer_spec({"taskId": "${taskId}", "rebind": true, "fields": {}})`;
+}
+
 /**
  * A Report Task never delivers; a chart query delivers only while its bound
  * parent Revision is current and handled. Exploration is never gated here.
@@ -36,7 +41,7 @@ export function assertDeliverable(tx: Pick<AnsweringTransaction, "getTask" | "ge
   const parent = tx.getTask(task.parent.taskId);
   if (!parent) throw new AnsweringError("TASK_NOT_FOUND", `Report Task ${task.parent.taskId} was not found`);
   if (parent.currentRevisionId !== task.parent.revisionId) {
-    throw new AnsweringError("PARENT_REVISION_STALE", `The Report Task changed since this chart query copied its shared fields; rebind the chart query to Revision ${parent.currentRevisionId}`, { currentRevisionId: parent.currentRevisionId });
+    throw new AnsweringError("PARENT_REVISION_STALE", `The Report Task changed (now Revision ${parent.currentRevisionId}) since this chart query copied its shared fields; rebind it with ${rebindCall(task.taskId)}, then run its result query again on the Revision that returns and publish that candidate`, { currentRevisionId: parent.currentRevisionId });
   }
   const revision = tx.getRevision(parent.currentRevisionId);
   if (!revision) throw new AnsweringError("REVISION_NOT_FOUND", `Report Task Revision ${parent.currentRevisionId} was not found`);

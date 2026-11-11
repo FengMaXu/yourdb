@@ -4,7 +4,6 @@ import { AnsweringError } from "./errors.js";
 import { makeInternalId } from "./internal-ids.js";
 import { candidateCheckFailure, evaluateCandidateCheckReport } from "./candidate-checks.js";
 import { evaluateFanout, fanoutCoverage, fanoutFindings } from "./fanout-execution.js";
-import { specFeedbackCoverage } from "./spec-feedback.js";
 import { composeDisclosure } from "./publication.js";
 import { buildPhysicalProfile } from "./physical-profile.js";
 import { boundedResult } from "./sql-execution.js";
@@ -69,7 +68,7 @@ export async function refreshPublication(deps: AnsweringDeps, input: RefreshPubl
     sql: candidate.sql,
     queryHash: candidate.queryHash,
     findings: [...checkReport.findings, ...fanoutFindings(fanout)],
-    coverage: [...checkReport.coverage, fanoutCoverage(fanout), specFeedbackCoverage(revision.specFeedback)],
+    coverage: [...checkReport.coverage, fanoutCoverage(fanout)],
     fanout,
     createdByInvocationId: context.invocationId,
     createdAt: now(),

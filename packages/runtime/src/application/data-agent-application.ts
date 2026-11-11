@@ -19,7 +19,7 @@ import {
 } from "./host.js";
 import type { ApplicationAuthService, ApplicationCommandHost, ApplicationEventFilter, EventReplay } from "./protocol-host.js";
 import { JevHypothesisChoiceAdvisor } from "../adapters/jev-hypothesis-choice-advisor.js";
-import { JevSpecAlignmentAssessor } from "../adapters/jev-spec-alignment-assessor.js";
+import type { McpPluginPort } from "../tools/mcp-plugins.js";
 
 export interface DataAgentApplicationOptions {
   readonly dataRoot: string;
@@ -28,7 +28,6 @@ export interface DataAgentApplicationOptions {
   readonly knowledgeRoot?: string;
   /** Read-only roots holding built-in knowledge that ships with the application; earlier roots win on duplicate paths. */
   readonly builtinKnowledgeRoots?: readonly string[];
-  readonly semanticProjectDir?: string;
   readonly pythonExecutable?: string | (() => string | undefined);
   readonly bundledPythonExecutable?: string;
   readonly queryExecutor?: SessionQueryExecutor | (() => SessionQueryExecutor | Promise<SessionQueryExecutor>);
@@ -51,18 +50,6 @@ export interface DataAgentApplicationOptions {
     readonly endpoint?: string;
     readonly timeoutMs?: number;
   };
-  /** Explicit opt-in; this does not follow jevHypothesisComparison implicitly. */
-  readonly jevSpecAlignment?: {
-    readonly apiKey: string;
-    readonly model?: string;
-    readonly endpoint?: string;
-    readonly timeoutMs?: number;
-  };
-}
-
-export interface IngestJobPort {
-  getStatus(): Promise<{ status: string; jobId: string | null; summary: { updated: number; unchanged: number; failed: number; skipped: number }; errorCode: string | null }>;
-  retry(): Promise<{ accepted: boolean }>;
 }
 
 export interface HostTestPorts {
@@ -80,6 +67,7 @@ const CHANNEL_CONFIG_KEY = "channels";
 
 export class DataAgentApplication implements ApplicationCommandHost {
   private queryExecutorPort: DataAgentApplicationOptions["queryExecutor"];
+  private mcpPlugins: McpPluginPort | undefined;
   private closed = false;
   private channels: { readonly hub: ChannelHub; readonly registry: ChannelRegistry } | undefined;
 
@@ -125,11 +113,6 @@ export class DataAgentApplication implements ApplicationCommandHost {
     const hypothesisChoiceAdvisor = options.jevHypothesisComparison
       ? new JevHypothesisChoiceAdvisor(options.jevHypothesisComparison)
       : undefined;
-    const specAlignmentAssessor = options.jevSpecAlignment
-      ? new JevSpecAlignmentAssessor(options.jevSpecAlignment)
-      : undefined;
-    // A deployment fact, said once here rather than disclosed with every published result.
-    if (!specAlignmentAssessor) console.info("[data-agent] Answer Spec feedback assessor is not configured; results are published without Spec feedback.");
     const sessions = new DataAgentSessionApplication({
       sessionRoot: path.join(dataRoot, "sessions"),
       workspace,
@@ -141,11 +124,11 @@ export class DataAgentApplication implements ApplicationCommandHost {
         if (!port) throw new Error("QUERY_EXECUTOR_NOT_CONFIGURED");
         return typeof port === "function" ? port() : port;
       },
+      mcpPluginTools: async () => application.mcpPlugins ? application.mcpPlugins.tools() : [],
       resultRoot: path.join(dataRoot, "results"),
       // doc/business.md is a canonical, model-unwritable document; its id cannot be reused by drafts.
       answeringEvidenceDocuments: { "business-definitions": "reviewed_definition" },
       ...(hypothesisChoiceAdvisor ? { hypothesisChoiceAdvisor } : {}),
-      ...(specAlignmentAssessor ? { specAlignmentAssessor } : {}),
       resolveProfile: (context) => options.resolveProfile(context, application),
       ...(options.systemPrompt ? { systemPrompt: options.systemPrompt } : {}),
       ...(options.systemPromptRoots ? { systemPromptRoots: options.systemPromptRoots } : {}),
@@ -172,7 +155,6 @@ export class DataAgentApplication implements ApplicationCommandHost {
       knowledgeRoot,
       ...(initialPythonExecutable ? { pythonExecutable: initialPythonExecutable } : {}),
       ...(options.bundledPythonExecutable ? { bundledPythonExecutable: options.bundledPythonExecutable } : {}),
-      ...(options.semanticProjectDir ? { semanticProjectDir: options.semanticProjectDir } : {}),
       ...(options.skillRoots ? { skillRoots: [...options.skillRoots] } : {}),
       ...(options.projectRoot ? { projectRoot: options.projectRoot } : {}),
       ...(options.packagedRoot ? { packagedRoot: options.packagedRoot } : {}),
@@ -180,6 +162,12 @@ export class DataAgentApplication implements ApplicationCommandHost {
     });
     const agent = sessions.createAgentAdapter({ ...(options.defaultUserId ? { userId: options.defaultUserId } : {}), host: options.host });
     application = new DataAgentApplication(runtime, sessions, metadata, workspace, knowledge, agent, options.queryExecutor);
+    runtime.sampleDatabaseRoot = path.join(dataRoot, "samples");
+    // The tester speaks the settings' field names; the profile is what a chat in this request would use.
+    runtime.savedModelProfile = async (context) => {
+      const profile = await options.resolveProfile({ userId: context.userId, sessionId: "", host: options.host }, application);
+      return { provider: profile.provider, model: profile.model, api_key: profile.apiKey ?? "", ...(profile.baseUrl ? { base_url: profile.baseUrl } : {}) };
+    };
     if (sessions.sessionStore) runtime.attachSessionStore(sessions.sessionStore);
     runtime.attachAgent(agent);
     if (options.queryExecutor) application.setQueryExecutor(options.queryExecutor);
@@ -204,6 +192,7 @@ export class DataAgentApplication implements ApplicationCommandHost {
   }
   subscribe(listener: (event: DataAgentEventEnvelope) => void, filter?: ApplicationEventFilter): () => void { return this.runtime.subscribe(listener, filter); }
   replayAfter(sequence: number, filter?: ApplicationEventFilter): EventReplay { return this.runtime.replayAfter(sequence, filter); }
+  eventStreamPosition(): { readonly instanceId: string; readonly latestSequence: number } { return this.runtime.eventStreamPosition(); }
 
   getConfig(key: string): Promise<unknown> { return this.metadata.getConfig(key); }
   setConfig(key: string, value: unknown): Promise<void> { return this.metadata.setConfig(key, value); }
@@ -232,8 +221,10 @@ export class DataAgentApplication implements ApplicationCommandHost {
     this.channels = { hub, registry };
     this.runtime.channelControl = {
       list: () => registry.list(),
-      provision: (channelId) => registry.provision(channelId),
+      // Whoever scans owns the new bot; the transport has already authenticated them.
+      provision: (channelId, userId) => registry.provision(channelId, userId),
       disconnect: (channelId) => registry.disconnect(channelId),
+      configure: (channelId, settings) => registry.configure(channelId, settings),
       createLinkCode: (userId) => hub.createLinkCode(userId),
       access: () => hub.access(),
       decideAccess: (requestId, decision, decidedBy) => hub.decideAccess(requestId, decision, decidedBy),
@@ -262,11 +253,15 @@ export class DataAgentApplication implements ApplicationCommandHost {
       },
     };
   }
+  /** The host's MCP plugin supervisor: it serves the plugin settings and the tools new sessions get. */
+  setMcpPlugins(plugins: McpPluginPort): void {
+    this.mcpPlugins = plugins;
+    this.runtime.mcpSupervisor = plugins;
+  }
   setHostTesters(ports: HostTestPorts): void {
     if (ports.dbTester) this.runtime.dbTester = ports.dbTester;
     if (ports.llmTester) this.runtime.llmTester = ports.llmTester;
   }
-  setIngestJob(job: IngestJobPort): void { this.runtime.ingestJob = job; }
   getResources(): ApplicationResources { return this.agent.getResources(); }
   setResources(resources: ApplicationResources): Promise<void> { return this.agent.setResources(resources); }
 

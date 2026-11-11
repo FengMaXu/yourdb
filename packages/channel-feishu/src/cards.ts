@@ -117,7 +117,11 @@ export function publicationCard(publication: PublicationDelivered, rows: { reado
 
 export function progressCard(view: ProgressView): string {
   const text = withoutLocalLinks(view.text).trim();
-  if (view.state === "completed") return JSON.stringify(card([markdown(text || "已完成。")]));
+  if (view.state === "completed") {
+    // At full detail the steps taken follow the answer, quietly.
+    const steps = view.steps?.length ? [note(`做过的步骤：${view.steps.join(" → ")}`)] : [];
+    return JSON.stringify(card([markdown(text || "已完成。"), ...steps]));
+  }
   return JSON.stringify(card([
     markdown(text || "正在思考…"),
     note(view.activeTool ? `⏳ 正在执行 ${view.activeTool}` : "⏳ 处理中"),

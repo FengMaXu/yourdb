@@ -11,7 +11,7 @@
  *   2. rename electron.exe -> <productName>.exe
  *   3. pack the application (package.json + dist + electron + electron-host)
  *      into resources/app.asar
- *   4. stage extraResources (python-runtime, ktx-semantic-context)
+ *   4. stage extraResources (python-runtime)
  *   5. keep only the Chinese and English Electron locales
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
@@ -33,7 +33,9 @@ if (!existsSync(path.join(frontend, "dist", "index.html"))) {
 }
 if (!existsSync(path.join(frontend, "electron-host", "main.cjs"))
   || !existsSync(path.join(frontend, "electron-host", "metadata-worker.cjs"))
-  || !existsSync(path.join(frontend, "electron-host", "mcp-mysql.cjs"))) {
+  || !existsSync(path.join(frontend, "electron-host", "mcp-mysql.cjs"))
+  || !existsSync(path.join(frontend, "electron-host", "mcp-pg.cjs"))
+  || !existsSync(path.join(frontend, "electron-host", "mcp-sqlite.cjs"))) {
   console.error("Electron host bundle missing; run scripts/build-distribution.mjs first");
   process.exit(1);
 }
@@ -88,7 +90,7 @@ writeFileSync(path.join(staging, "package.json"), JSON.stringify(appPkg, null, 2
 cpSync(path.join(frontend, "dist"), path.join(staging, "dist"), { recursive: true });
 cpSync(path.join(frontend, "electron"), path.join(staging, "electron"), { recursive: true });
 mkdirSync(path.join(staging, "electron-host"), { recursive: true });
-for (const name of ["main.cjs", "metadata-worker.cjs", "mcp-mysql.cjs"]) {
+for (const name of ["main.cjs", "metadata-worker.cjs", "mcp-mysql.cjs", "mcp-pg.cjs", "mcp-sqlite.cjs"]) {
   for (const file of [name, `${name}.map`]) {
     if (existsSync(path.join(frontend, "electron-host", file))) {
       cpSync(path.join(frontend, "electron-host", file), path.join(staging, "electron-host", file));
@@ -114,6 +116,8 @@ for (const name of [
   "@modelcontextprotocol/sdk", "ajv", "ajv-formats", "cross-spawn", "fast-deep-equal",
   "fast-uri", "json-schema-traverse", "json-schema-typed", "path-key", "require-from-string",
   "shebang-command", "shebang-regex", "which", "isexe", "zod", "zod-to-json-schema",
+  // The MCP plugin supervisor reaches remote plugins over Streamable HTTP and SSE.
+  "eventsource", "eventsource-parser", "pkce-challenge",
 ]) {
   cpSync(resolveModule(name), path.join(staging, "node_modules", name), { recursive: true });
 }
@@ -132,8 +136,8 @@ if (!pythonRuntimeExecutable) {
   process.exit(1);
 }
 for (const required of [
-  "../.agents/skills/analysis/SKILL.md",
-  "../.agents/skills/answer-fields/SKILL.md",
+  "../.agents/skills/chart/SKILL.md",
+  "../.agents/skills/spec/SKILL.md",
   "../.agents/knowledge/doc/rules.md",
   "../.agents/knowledge/doc/semantic_guide.md",
   "../.pi/SYSTEM.md",

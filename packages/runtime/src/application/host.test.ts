@@ -167,7 +167,7 @@ describe("DataAgent Session Application production composition", () => {
     try {
       const host = await application.session({ userId: "user-1", host: "web", sessionId: "session-1" });
       const loadSkill = host.tools.find((tool) => tool.name === "load_skill")! as any;
-      for (const name of ["dashboard", "analysis", "demo-report"]) {
+      for (const name of ["chart", "dashboard", "report"]) {
         await loadSkill.execute(`load-${name}`, { name }, undefined, { sessionId: "session-1", principalId: "user-1" }, invocation(`load-${name}`), TODO_CONTEXT);
         const active = await host.lane.getActiveTools(TODO_CONTEXT);
         expect(active).toEqual(expect.arrayContaining(["load_skill", "set_answer_spec", "query_database", "publish_query_result", "export_query", "inspect_answer", "ask_user_clarification", "subagent"]));

@@ -12,12 +12,19 @@ import {
   type DeliveryContent,
   type DeliveryTarget,
   type ProgressView,
+  type ReplyDetail,
   type RequestContext,
   type Submission,
   type SubmissionBody,
 } from "@data-agent/contracts";
 import type { ApplicationCommandHost } from "../application/protocol-host.js";
 import type { BoundSession, ChannelSessionBinding, ChannelStore, OutboxItem } from "./store.js";
+
+/** Who scanned a channel's bot: their id as that bot sees them, and the account they scanned from. */
+export interface ChannelOwner {
+  readonly externalUserId: string;
+  readonly userId: string;
+}
 
 export type SubmitOutcome = "dispatched" | "duplicate" | "rejected" | "denied";
 
@@ -42,7 +49,64 @@ export interface ChannelHubOptions {
   readonly onError?: (error: unknown) => void;
 }
 
-type ProgressState = { target: DeliveryTarget; runId?: string; text: string; activeTool?: string; timer?: ReturnType<typeof setTimeout> };
+type ProgressState = {
+  target: DeliveryTarget;
+  runId?: string;
+  /** Everything the agent wrote this run. */
+  text: string;
+  /** What it wrote since its last step: the answer, once the run is done. */
+  answer: string;
+  steps: string[];
+  activeTool?: string;
+  timer?: ReturnType<typeof setTimeout>;
+};
+
+/** Agent steps as people read them; anything else is shown by its name. */
+const STEP_LABEL: Readonly<Record<string, string>> = {
+  query_database: "查询数据库",
+  explore_sql: "试探查询",
+  describe_schema: "查看表结构",
+  begin_query_task: "梳理问题",
+  set_answer_spec: "确定统计口径",
+  inspect_answer: "核对结果",
+  render_chart: "生成图表",
+  generate_dashboard: "生成看板",
+  show_widget: "生成图表",
+  run_python: "运行 Python 分析",
+  search_knowledge: "查阅知识库",
+  read_knowledge: "查阅知识库",
+  update_knowledge: "更新知识库",
+  read_file: "读取文件",
+  write_file: "写入文件",
+  list_workspace: "查看文件",
+  load_skill: "加载技能",
+  ask_user_clarification: "向你确认问题",
+  subagent: "分派子任务",
+};
+
+/** Repeats of one step read as one line with a count. */
+function stepLines(steps: readonly string[]): string[] {
+  const lines: { label: string; count: number }[] = [];
+  for (const step of steps) {
+    const last = lines.at(-1);
+    if (last?.label === step) last.count += 1;
+    else lines.push({ label: step, count: 1 });
+  }
+  return lines.map(({ label, count }) => count > 1 ? `${label} ×${count}` : label);
+}
+
+const REPLY_DETAIL_LABEL: Readonly<Record<ReplyDetail, string>> = { summary: "摘要", standard: "标准", full: "完整" };
+const REPLY_DETAIL_WORDS: Readonly<Record<string, ReplyDetail>> = { summary: "summary", 摘要: "summary", standard: "standard", 标准: "standard", full: "full", 完整: "full" };
+
+const HELP_TEXT = [
+  "直接用自己的话提问即可，例如“上个月销售额最高的十个产品”。",
+  "可用命令：",
+  "/new 开始新对话",
+  "/status 查看机器人和你的状态",
+  "/detail 摘要|标准|完整 调整回复详细度",
+  "/help 查看这份说明",
+  "/bind 绑定码 把另一个 IM 账号绑定到网页端账号（仅私聊）",
+].join("\n");
 
 const PROGRESS_TEXT_LIMIT = 4000;
 const OUTBOX_BATCH = 50;
@@ -53,7 +117,7 @@ const NOTICE_TEXT = {
   GROUP_DELIVERY_REDIRECTED: "查询结果已私聊发送给提问人。",
   CONVERSATION_STARTED: "已开始新对话，之前的上下文不会带入。",
   ACCESS_DENIED: "你还没有使用权限。请在数据智能体网页端「设置 → 消息渠道」获取绑定码，然后在与我的私聊中发送 /bind 绑定码。",
-  ACCOUNT_LINKED: "已绑定。之后你在这里的对话会出现在数据智能体网页端你的账号下。",
+  ACCOUNT_LINKED: "已绑定。之后你在这里的对话会出现在数据智能体网页端你的账号下。发送 /help 查看可用命令。",
   LINK_NOT_PRIVATE: "绑定码只能在与我的私聊中发送。这个绑定码已作废，请在网页端重新获取。",
   LINK_INVALID: "绑定码无效、已过期或已被使用，请在网页端重新获取。",
   LINK_USAGE: "请发送 /bind 加上网页端给出的 6 位绑定码，例如 /bind 123456。",
@@ -61,7 +125,11 @@ const NOTICE_TEXT = {
   ACCESS_REQUESTED: "已向管理员申请使用权限，批准后会通知你。",
   ACCESS_PENDING: "你的使用申请正在等待管理员处理。",
   ACCESS_REFUSED: "管理员没有同意你的使用申请。",
-  ACCESS_GRANTED: "管理员已同意你使用数据助手，请重新发送你的问题。",
+  ACCESS_GRANTED: "管理员已同意你使用数据助手，请重新发送你的问题。发送 /help 查看可用命令。",
+  WELCOME: `你好，我是你的数据助手，已经连上你的数据智能体。\n${HELP_TEXT}`,
+  HELP: HELP_TEXT,
+  DETAIL_USAGE: "请发送 /detail 加上 摘要、标准 或 完整，例如 /detail 摘要。\n摘要：只发最终答案；标准：边写边发，并显示正在做的步骤；完整：标准之外，再在答案下列出做过的步骤。",
+  DETAIL_NOT_MEMBER: "只有已绑定账号的成员可以调整回复详细度。",
   DECIDER_NOT_MEMBER: "只有已绑定账号的成员可以处理使用申请。",
   DECISION_ALLOWED: "已允许，对方会收到通知。",
   DECISION_DENIED: "已拒绝，对方会收到通知。",
@@ -96,14 +164,23 @@ type ConversationBody = Extract<SubmissionBody, { kind: "input" | "answer" }>;
 
 /** Typed alone in any channel, these start over instead of being asked as a question. */
 const NEW_CONVERSATION_COMMANDS = new Set(["/new", "/新对话", "新对话"]);
+const HELP_COMMANDS = new Set(["/help", "/帮助", "帮助"]);
+const STATUS_COMMANDS = new Set(["/status", "/状态"]);
+/** `/detail 摘要` (or `/详细度`); bare, it tells the current level. */
+const DETAIL_COMMAND = /^\/(?:detail|详细度)(?:\s+(\S+))?$/i;
 
-type Interpreted = SubmissionBody | { kind: "link"; code?: string };
+type Interpreted = SubmissionBody | { kind: "link"; code?: string } | { kind: "help" } | { kind: "status" } | { kind: "detail"; level?: string };
 
 /** Text commands are the core's, so every channel gets them; a channel with a menu can send the body kind directly. */
 function interpreted(body: SubmissionBody): Interpreted {
   if (body.kind !== "input") return body;
   const text = body.text.trim();
-  if (NEW_CONVERSATION_COMMANDS.has(text.toLowerCase())) return { kind: "new_conversation" };
+  const lower = text.toLowerCase();
+  if (NEW_CONVERSATION_COMMANDS.has(lower)) return { kind: "new_conversation" };
+  if (HELP_COMMANDS.has(lower)) return { kind: "help" };
+  if (STATUS_COMMANDS.has(lower)) return { kind: "status" };
+  const detail = DETAIL_COMMAND.exec(text);
+  if (detail) return { kind: "detail", ...(detail[1] ? { level: detail[1] } : {}) };
   const link = LINK_COMMAND.exec(text);
   return link ? { kind: "link", ...(link[1] ? { code: link[1] } : {}) } : body;
 }
@@ -124,11 +201,16 @@ function addressTarget(address: ConversationAddress): DeliveryTarget {
  */
 export class ChannelHub {
   private readonly channels = new Map<string, Channel>();
+  /** Who scanned each channel's bot; they may use it without asking. */
+  private readonly owners = new Map<string, ChannelOwner>();
   private readonly boundSessions = new Map<string, Promise<BoundSession | undefined>>();
   private readonly sessionChoices = new Map<string, Promise<unknown>>();
   private readonly linkFailures = new Map<string, { count: number; since: number }>();
   private readonly eventQueues = new Map<string, Promise<void>>();
   private readonly progress = new Map<string, ProgressState>();
+  private readonly replyDetails = new Map<string, ReplyDetail>();
+  /** Saves a reply detail changed from a chat; the registry sets it so the change survives a restart. */
+  onReplyDetailChange: ((channelId: string, detail: ReplyDetail) => Promise<void>) | undefined;
   private readonly unsubscribe: () => void;
   private readonly startedAt: number;
   private poller: ReturnType<typeof setInterval> | undefined;
@@ -140,9 +222,11 @@ export class ChannelHub {
     this.unsubscribe = options.host.subscribe((envelope) => this.receive(envelope));
   }
 
-  async register(channel: Channel): Promise<void> {
+  async register(channel: Channel, owner?: ChannelOwner): Promise<void> {
     if (this.channels.has(channel.id)) throw new Error(`CHANNEL_ALREADY_REGISTERED: ${channel.id}`);
     this.channels.set(channel.id, channel);
+    if (owner) this.owners.set(channel.id, owner);
+    else this.owners.delete(channel.id);
     // Accepted by an earlier process but never dispatched: say so instead of replaying a non-idempotent run.
     for (const interrupted of await this.options.store.interruptedInbound(channel.id, this.startedAt)) {
       await this.options.store.enqueue(channel.id, `notice:interrupted:${interrupted.requestId}`, addressTarget(interrupted.address), { kind: "notice", code: "SUBMISSION_INTERRUPTED", text: NOTICE_TEXT.SUBMISSION_INTERRUPTED }, this.now());
@@ -152,6 +236,15 @@ export class ChannelHub {
     this.poller ??= setInterval(() => { void this.flush(); }, this.options.retry?.pollMs ?? 5_000);
     this.poller.unref?.();
     await this.flush();
+  }
+
+  /** How much of a run this channel's bot sends; `standard` until set. */
+  setReplyDetail(channelId: string, detail: ReplyDetail): void {
+    this.replyDetails.set(channelId, detail);
+  }
+
+  replyDetail(channelId: string): ReplyDetail {
+    return this.replyDetails.get(channelId) ?? "standard";
   }
 
   /** Stops and removes a channel; its undelivered Deliverables wait for it to come back. */
@@ -182,14 +275,20 @@ export class ChannelHub {
         await this.options.store.settleInbound(channelId, submission.requestId, "dispatched");
         return "dispatched";
       }
-      // Default deny: only a linked account or an approved guest may run anything (ADR-0011).
-      const userId = (await this.options.store.linkedUser(actor))?.userId;
+      // Default deny: only the owner, a linked account or an approved guest may run anything (ADR-0011).
+      const linked = await this.options.store.linkedUser(actor);
+      const userId = linked?.userId ?? await this.claimOwner(submission);
       if (!userId) {
         await this.requestAccess(submission);
         await this.options.store.settleInbound(channelId, submission.requestId, "denied");
         return "denied";
       }
-      if (body.kind === "new_conversation") await this.startOver(submission, userId);
+      const role = linked?.role ?? "account";
+      const here = addressTarget(address);
+      if (body.kind === "help") await this.notice(here, `notice:help:${submission.requestId}`, "HELP", NOTICE_TEXT.HELP);
+      else if (body.kind === "status") await this.notice(here, `notice:status:${submission.requestId}`, "STATUS", await this.statusText(submission, userId, role));
+      else if (body.kind === "detail") await this.changeDetail(submission, body.level, role);
+      else if (body.kind === "new_conversation") await this.startOver(submission, userId);
       else {
         const session = await this.ensureSession(submission, body, userId);
         await this.dispatchBody(submission.requestId, body, { userId, host: "channel", sessionId: session.sessionId });
@@ -230,6 +329,17 @@ export class ChannelHub {
   async access(): Promise<ChannelAccess> {
     const [members, requests] = await Promise.all([this.options.store.members(), this.options.store.pendingRequests()]);
     return { members: members.map((member) => ({ ...member })), requests: requests.map(({ id, requester, audience, text, at }) => ({ id, requester, audience, text, at })) };
+  }
+
+  /**
+   * Forgets who may use a channel and who is waiting: a new or removed bot
+   * makes the old ids meaningless. The owner of the next bot comes with it.
+   */
+  async forgetAccess(channelId: string): Promise<void> {
+    this.owners.delete(channelId);
+    const [members, requests] = await Promise.all([this.options.store.members(), this.options.store.pendingRequests()]);
+    for (const member of members) if (member.actor.channel === channelId) await this.options.store.unlink(member.actor);
+    for (const request of requests) if (request.requester.channel === channelId) await this.options.store.decideRequest(request.id, "denied", "system", this.now());
   }
 
   /** Takes away an identity's access; its next message asks again. */
@@ -372,6 +482,53 @@ export class ChannelHub {
    * are only told where things stand. With nobody to ask, they get the link
    * instructions.
    */
+  /**
+   * The owner's first message links them to the account that scanned (the
+   * tenant is only known from a message) and gets a welcome with the commands
+   * before its answer.
+   */
+  private async claimOwner(submission: Submission): Promise<string | undefined> {
+    const { actor, address } = submission;
+    const owner = this.owners.get(actor.channel);
+    if (!owner || owner.externalUserId !== actor.externalUserId) return undefined;
+    await this.options.store.link(actor, owner.userId, this.now(), "account");
+    await this.notice(addressTarget(address), `notice:welcome:${submission.requestId}`, "HELP", NOTICE_TEXT.WELCOME);
+    return owner.userId;
+  }
+
+  private async statusText(submission: Submission, userId: string, role: "account" | "guest"): Promise<string> {
+    const session = await this.options.store.findSession(submission.address, userId);
+    const idleMs = this.options.idleSessionMs;
+    const current = session && !(idleMs !== undefined && this.now() - session.lastActiveAt >= idleMs);
+    const minutes = session ? Math.max(0, Math.round((this.now() - session.lastActiveAt) / 60_000)) : 0;
+    return [
+      "机器人运行中。",
+      `你的身份：${role === "account" ? "账号成员" : "访客"}`,
+      `回复详细度：${REPLY_DETAIL_LABEL[this.replyDetail(submission.address.channel)]}`,
+      current ? `当前对话：上次提问在 ${minutes} 分钟前，接着问会带上之前的上下文；发送 /new 重新开始。` : "当前对话：下一条消息会开始新对话。",
+    ].join("\n");
+  }
+
+  /** A guest may read the level but not change it: it applies to everyone using the bot. */
+  private async changeDetail(submission: Submission, level: string | undefined, role: "account" | "guest"): Promise<void> {
+    const channelId = submission.address.channel;
+    const here = addressTarget(submission.address);
+    const key = `notice:detail:${submission.requestId}`;
+    if (level === undefined) return this.notice(here, key, "STATUS", `当前回复详细度：${REPLY_DETAIL_LABEL[this.replyDetail(channelId)]}。\n${NOTICE_TEXT.DETAIL_USAGE}`);
+    const detail = REPLY_DETAIL_WORDS[level.toLowerCase()];
+    if (!detail) return this.notice(here, key, "SETTING_CHANGED", NOTICE_TEXT.DETAIL_USAGE);
+    if (role !== "account") return this.notice(here, key, "SETTING_CHANGED", NOTICE_TEXT.DETAIL_NOT_MEMBER);
+    this.setReplyDetail(channelId, detail);
+    await this.onReplyDetailChange?.(channelId, detail);
+    await this.notice(here, key, "SETTING_CHANGED", `回复详细度已改为“${REPLY_DETAIL_LABEL[detail]}”，对这个机器人的所有对话生效。`);
+  }
+
+  private async notice(target: DeliveryTarget, key: string, code: "HELP" | "STATUS" | "SETTING_CHANGED", text: string): Promise<void> {
+    const channel = target.kind === "address" ? target.address.channel : target.actor.channel;
+    await this.options.store.enqueue(channel, key, target, { kind: "notice", code, text }, this.now());
+    void this.flush();
+  }
+
   private async requestAccess(submission: Submission): Promise<void> {
     const { address, actor, body } = submission;
     const here = addressTarget(address);
@@ -489,24 +646,42 @@ export class ChannelHub {
     if (!channel?.progress) return;
     const event = envelope.event;
     if (event.type !== "agent.text_delta" && event.type !== "agent.tool_started" && event.type !== "agent.tool_finished" && event.type !== "agent.completed") return;
-    const state = this.progress.get(sessionId) ?? { target: this.resultTarget(bound), text: "" };
+    const state = this.progress.get(sessionId) ?? { target: this.resultTarget(bound), text: "", answer: "", steps: [] };
     this.progress.set(sessionId, state);
     if (envelope.runId) state.runId = envelope.runId;
-    if (event.type === "agent.text_delta") state.text = (state.text + event.delta).slice(-PROGRESS_TEXT_LIMIT);
-    else if (event.type === "agent.tool_started") state.activeTool = event.toolName;
-    else if (event.type === "agent.tool_finished") delete state.activeTool;
+    if (event.type === "agent.text_delta") {
+      state.text = (state.text + event.delta).slice(-PROGRESS_TEXT_LIMIT);
+      state.answer = (state.answer + event.delta).slice(-PROGRESS_TEXT_LIMIT);
+    } else if (event.type === "agent.tool_started") {
+      state.activeTool = event.toolName;
+      state.answer = "";
+      state.steps.push(STEP_LABEL[event.toolName] ?? event.toolName);
+    } else if (event.type === "agent.tool_finished") delete state.activeTool;
+    const detail = this.replyDetail(bound.address.channel);
     if (event.type === "agent.completed") {
       this.progress.delete(sessionId);
-      this.sendProgress(channel, state, "completed");
+      this.sendProgress(channel, state, "completed", detail);
       return;
     }
-    state.timer ??= setTimeout(() => this.sendProgress(channel, state, "running"), this.options.progressIntervalMs ?? 1_000);
+    // A summary waits for the answer; nothing is sent while the run works.
+    if (detail === "summary") return;
+    state.timer ??= setTimeout(() => this.sendProgress(channel, state, "running", detail), this.options.progressIntervalMs ?? 1_000);
   }
 
-  private sendProgress(channel: Channel, state: ProgressState, phase: ProgressView["state"]): void {
+  private sendProgress(channel: Channel, state: ProgressState, phase: ProgressView["state"], detail: ReplyDetail): void {
     if (state.timer) clearTimeout(state.timer);
     delete state.timer;
-    const view: ProgressView = { state: phase, text: state.text, ...(state.runId ? { runId: state.runId } : {}), ...(state.activeTool ? { activeTool: state.activeTool } : {}) };
+    const done = phase === "completed";
+    // A summary is the last thing written: the answer, not the narration before each step.
+    const text = done && detail === "summary" && state.answer.trim() ? state.answer : state.text;
+    const steps = done && detail === "full" && state.steps.length > 0 ? stepLines(state.steps) : undefined;
+    const view: ProgressView = {
+      state: phase,
+      text,
+      ...(state.runId ? { runId: state.runId } : {}),
+      ...(state.activeTool ? { activeTool: STEP_LABEL[state.activeTool] ?? state.activeTool } : {}),
+      ...(steps ? { steps } : {}),
+    };
     channel.progress?.(state.target, view).catch((error: unknown) => this.report(error));
   }
 

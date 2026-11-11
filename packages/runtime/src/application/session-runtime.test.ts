@@ -9,8 +9,6 @@ import { KnowledgeIndex } from "../knowledge.js";
 import { ClarificationManager } from "../clarification.js";
 import { InMemoryAnsweringStore } from "../answering/answering-store.js";
 import type { CompareHypothesesInput, HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
-import type { SpecAlignmentAssessor } from "../judgment/spec-alignment.js";
-import type { SpecFeedbackAssessment } from "../answering/model.js";
 
 const profile: DataAgentModelProfile = { provider: "openai", model: "test-model", apiKey: "test" };
 const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
@@ -24,8 +22,8 @@ describe("Session Runtime scoped query composition", () => {
   it("does not load a protocol Skill whose required tools are absent in the ablation arm", async () => {
     const root = await mkdtemp(path.join(process.cwd(), ".tmp-session-runtime-skills-"));
     const skillRoot = path.join(root, "skills");
-    await mkdir(path.join(skillRoot, "answer-fields"), { recursive: true });
-    await writeFile(path.join(skillRoot, "answer-fields", "SKILL.md"), ["---", "name: answer-fields", "description: protocol", "requires-tools:", "  - set_answer_spec", "---", "ANSWER SPEC BODY"].join("\n"), "utf8");
+    await mkdir(path.join(skillRoot, "spec"), { recursive: true });
+    await writeFile(path.join(skillRoot, "spec", "SKILL.md"), ["---", "name: spec", "description: protocol", "requires-tools:", "  - set_answer_spec", "---", "ANSWER SPEC BODY"].join("\n"), "utf8");
     const invocation = { invocationId: "invoke-skill", operationId: "operation-1", turnId: "turn-1", getMemo: async () => undefined, setMemo: async () => undefined };
     const context = { sessionId: "session-1", principalId: "user-1" };
     const hosts = await Promise.all((["required", "disabled"] as const).map((semanticSpecMode) => createDataAgentSessionHost({
@@ -40,8 +38,8 @@ describe("Session Runtime scoped query composition", () => {
     try {
       const [required, disabled] = hosts as [typeof hosts[number], typeof hosts[number]];
       const load = (host: typeof required) => host.tools.find((tool) => tool.name === "load_skill")!;
-      await expect(load(required).execute("load", { name: "answer-fields" }, undefined, context, invocation, TODO_CONTEXT)).resolves.toMatchObject({ content: [{ text: "ANSWER SPEC BODY" }] });
-      await expect(load(disabled).execute("load", { name: "answer-fields" }, undefined, context, invocation, TODO_CONTEXT)).rejects.toThrow("SKILL_NOT_FOUND");
+      await expect(load(required).execute("load", { name: "spec" }, undefined, context, invocation, TODO_CONTEXT)).resolves.toMatchObject({ content: [{ text: "ANSWER SPEC BODY" }] });
+      await expect(load(disabled).execute("load", { name: "spec" }, undefined, context, invocation, TODO_CONTEXT)).rejects.toThrow("SKILL_NOT_FOUND");
     } finally {
       await Promise.all(hosts.map((host) => host.close()));
       await rm(root, { recursive: true, force: true });
@@ -254,38 +252,6 @@ describe("Session Runtime scoped query composition", () => {
       const unchanged = await host.answering.inspect({ taskId: begun.taskId }, business("inspect-after-jev"));
       expect(unchanged.currentRevision.fields["measure.denominator"]).toMatchObject({ state: "open" });
       expect(unchanged.task.currentRevisionId).toBe(begun.revisionId);
-    } finally {
-      await host.close();
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("injects the post-commit Spec assessor with the exact Session request", async () => {
-    const root = await mkdtemp(path.join(process.cwd(), ".tmp-session-runtime-spec-feedback-"));
-    let observed: string | undefined;
-    let extracted: string | undefined;
-    const assessment: SpecFeedbackAssessment = { model: "jev-test", ruleVersion: "spec-alignment-v3", requirements: [], columns: [] };
-    const assessor: SpecAlignmentAssessor = {
-      assess: async (input) => { observed = input.originalQuestion; return assessment; },
-    };
-    const session = await new MemorySessionRepo().create({ id: "session-spec-feedback" }, TODO_CONTEXT);
-    const branch = await session.createBranch("main", null, TODO_CONTEXT);
-    const requestMessageId = await branch.appendMessage({ role: "user", content: "只统计已完成订单", timestamp: Date.now() }, TODO_CONTEXT);
-    const host = await createDataAgentSessionHost({
-      session,
-      sessionId: "session-spec-feedback",
-      principalId: "user-1",
-      workspace: new WorkspaceStore(path.join(root, "workspace")),
-      profile,
-      systemPrompt: "You are Data Agent.",
-      specAlignmentAssessor: assessor,
-      requirementExtractor: { extract: async (question) => { extracted = question; return []; } },
-    });
-    try {
-      const begun = await host.answering.set({ requestMessageId, requestId: "begin-spec-feedback", fields: spec }, business("begin-spec-feedback"));
-      expect(observed).toBe("只统计已完成订单");
-      expect(extracted).toBe("只统计已完成订单");
-      expect(begun.specFeedback).toMatchObject({ status: "completed", assessment: { model: "jev-test" } });
     } finally {
       await host.close();
       await rm(root, { recursive: true, force: true });

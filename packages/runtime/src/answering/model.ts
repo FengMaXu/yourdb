@@ -89,67 +89,6 @@ export interface CheckCoverage {
   readonly reason?: string;
 }
 
-/** skipped: the Revision still had undeclared fields, so there was no complete Spec to assess. */
-export type SpecFeedbackStatus = "pending" | "completed" | "unavailable" | "disabled" | "skipped";
-/** What a requirement phrase constrains; it tells the assessor which fields to read first. */
-export type RequirementRole = "population" | "scope" | "computation" | "selection" | "time";
-export type RequirementJudgment = "expressed" | "contradicted" | "missing";
-export type ColumnJudgment = "defined" | "undefined";
-
-export interface SpecFeedbackChoice<TChoice extends string> {
-  readonly choice: TChoice;
-  readonly probabilities: Readonly<Record<TChoice, number>>;
-  /** Concentration of this Choice distribution; not calibrated correctness. */
-  readonly confidence: number;
-}
-
-/** One phrase of the original request, verified verbatim, and how the Spec relates to it. */
-export interface SpecFeedbackRequirement {
-  readonly quote: string;
-  readonly role: RequirementRole;
-  readonly judgment: SpecFeedbackChoice<RequirementJudgment>;
-}
-
-/** One declared output column and whether a field defines its values. */
-export interface SpecFeedbackColumn {
-  readonly column: string;
-  readonly judgment: SpecFeedbackChoice<ColumnJudgment>;
-}
-
-export interface SpecFeedbackAssessment {
-  readonly model: string;
-  readonly ruleVersion: string;
-  readonly requirements: readonly SpecFeedbackRequirement[];
-  readonly columns: readonly SpecFeedbackColumn[];
-}
-
-export interface SpecFeedbackDeterministicIssue {
-  readonly code: "scalar_row_count_conflict" | "strict_top_n_row_count_conflict";
-  readonly paths: NonEmpty<SpecPath>;
-  readonly message: string;
-  readonly actual?: number;
-  readonly expected?: number;
-}
-
-export interface SpecFeedback {
-  readonly taskId: TaskId;
-  readonly revisionId: RevisionId;
-  readonly ruleVersion: string;
-  readonly status: SpecFeedbackStatus;
-  readonly deterministicIssues: readonly SpecFeedbackDeterministicIssue[];
-  readonly assessment?: SpecFeedbackAssessment;
-  readonly inputHash?: string;
-  readonly evidenceIds: readonly EvidenceId[];
-  readonly limitations: readonly string[];
-  readonly reason?: string;
-  readonly startedAt?: string;
-  readonly completedAt?: string;
-  readonly durationMs?: number;
-  /** The report was bound to an older Revision when it was persisted. */
-  readonly stale?: true;
-  readonly currentRevisionId?: RevisionId;
-}
-
 export interface FanoutProbeObservation {
   readonly sourceRows: number;
   readonly sourceNonNullKeys: number;
@@ -417,8 +356,6 @@ export interface AnswerRevisionRecord {
   readonly createdAt: string;
   /** Fields rewritten in this Revision, with reasons. */
   readonly rewrites?: readonly FieldRewrite[];
-  /** Advisory report attached to this Revision; it never changes qualification. */
-  readonly specFeedback?: SpecFeedback;
   /** Row, distinct-row and key counts of the declared sources, taken after the Revision commits; disclosed, never blocking. */
   readonly entityIdentity?: EntityIdentityReport;
   /** Periods of population.time the data has at the answer's calendar grain; missing periods make population.missing required. */
@@ -621,7 +558,6 @@ export interface AnswerRevisionView {
   readonly open: readonly SpecPath[];
   /** Fields disclosed at publication: assumed values and unverified decisions. */
   readonly unverified: readonly SpecPath[];
-  readonly specFeedback?: SpecFeedback;
   readonly entityIdentity?: EntityIdentityReport;
   readonly calendarCoverage?: CalendarCoverageReport;
   /** Per-path outcome of the set call, in call order. */
@@ -632,6 +568,8 @@ export interface AnswerRevisionView {
   readonly deviations?: readonly Deviation[];
   /** The Report Task measure definition a chart query's measure is taken from. */
   readonly measureRef?: string;
+  /** For a Report Task: its chart queries still bound to an earlier Revision, which must rebind before querying. */
+  readonly staleChartQueries?: readonly TaskId[];
 }
 
 export interface QueryExecutionView {

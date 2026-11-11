@@ -1,0 +1,75 @@
+/*
+ * Global base styles, after Tailwind's Preflight in the base layer: the page itself, focus
+ * rings, and where yourdb keeps a different default from Preflight's.
+ */
+
+/* Borders draw in the theme's hairline unless a utility says otherwise (as shadcn/ui expects). */
+*,
+::before,
+::after,
+::backdrop,
+::file-selector-button {
+  border-color: var(--border);
+}
+
+/* The app has always set text at the browser's normal line height; Preflight's 1.5 would loosen every line. */
+html,
+:host {
+  line-height: normal;
+}
+
+body {
+  height: 100dvh;
+  min-height: 100%;
+  overflow: hidden;
+  background: var(--frame-backdrop);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@media (max-width: 720px) {
+  body {
+    overflow: auto;
+  }
+}
+
+#root {
+  height: 100%;
+}
+
+:is(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Reduced motion: no smooth scrolling anywhere. */
+@media (prefers-reduced-motion: reduce) {
+  html,
+  * {
+    scroll-behavior: auto;
+  }
+}
+
+/*
+ * Brand artwork (components/Brand.tsx): sized by height, sitting on the text baseline. Kept in
+ * the base layer, not as utilities, so a page that resizes it (the landing page, a [&_.brand-wordmark]
+ * utility) wins.
+ */
+.brand-wordmark {
+  display: inline-block;
+  flex-shrink: 0;
+  width: auto;
+  height: 0.95em;
+  aspect-ratio: 2300 / 674;
+  vertical-align: -0.23em;
+}
+
+.brand-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  width: auto;
+  height: 1em;
+  aspect-ratio: 1;
+}

@@ -25,12 +25,12 @@ describe("Web Application Host end-to-end", () => {
     const knowledgeRoot = path.join(root, "knowledge");
     await mkdir(knowledgeRoot, { recursive: true });
     const sessions = new PiJsonlSessionStore(path.join(root, "sessions"));
-    const runtime = new DataAgentRuntime({ metadata, sessions, knowledgeRoot, semanticProjectDir: root, agent: { prompt: async () => ({ operationId: "test-operation" }), getTranscript: async () => [] } } as never);
+    const runtime = new DataAgentRuntime({ metadata, sessions, knowledgeRoot, agent: { prompt: async () => ({ operationId: "test-operation" }), getTranscript: async () => [] } } as never);
     app = await createRuntimeServer(runtime);
     await app.ready();
   });
 
-  it("covers auth, tasks, sessions, knowledge, config, and semantic sources", async () => {
+  it("covers auth, tasks, sessions, knowledge, and config", async () => {
     // auth
     await app.inject({ method: "POST", url: "/auth/register", payload: { username: "alice", password: "secret123" } });
     const login = await app.inject({ method: "POST", url: "/auth/login", payload: { username: "alice", password: "secret123" } });
@@ -64,10 +64,6 @@ describe("Web Application Host end-to-end", () => {
     await command("config.save", { patch: { mysql_host: "localhost" } });
     const cfg = await command("config.get");
     expect(cfg.json().response.config.mysql_host).toBe("localhost");
-
-    // semantic sources (empty project dir is valid)
-    const sources = await command("semantic.sources.list");
-    expect(sources.json().response.type).toBe("semantic.sources.result");
 
     // skills listing
     const skills = await command("skills.list");

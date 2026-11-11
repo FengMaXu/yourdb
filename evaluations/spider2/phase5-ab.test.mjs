@@ -67,7 +67,6 @@ test("Phase 5 A/B verifier recognizes semantic-spec mode as the sole experiment 
       capabilities: {
         semanticSpec: { configured: mode, resolved: mode },
         tools: { resolved: tools },
-        specFeedback: { resolved: false },
       },
       observedCapabilities: { tools: { state: "observed", coverage: "complete", observedCases: 1, expectedCases: 1, resolved: tools } },
       observedInputs: { databases: [{ caseId: "local001", state: "known", backend: "sqlite", path: "C:/db/local001.sqlite", sha256: "database-observed" }] },

@@ -532,35 +532,6 @@ function fanoutMetrics(calls) {
   };
 }
 
-function specFeedbackMetrics(calls) {
-  const reports = calls.flatMap((call) => {
-    const details = call.result?.details;
-    const report = details && typeof details === "object" && details.specFeedback && typeof details.specFeedback === "object" ? details.specFeedback : undefined;
-    return report ? [report] : [];
-  });
-  const unique = [];
-  const seen = new Set();
-  for (const report of reports) {
-    const key = `${report.taskId ?? ""}:${report.revisionId ?? ""}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(report);
-  }
-  const byStatus = Object.fromEntries(["pending", "completed", "unavailable", "disabled"].map((status) => [status, unique.filter((report) => report.status === status).length]));
-  const deterministicIssueCount = unique.reduce((sum, report) => sum + (Array.isArray(report.deterministicIssues) ? report.deterministicIssues.length : 0), 0);
-  const concernCount = unique.reduce((sum, report) => sum + (Array.isArray(report.assessment?.facets)
-    ? report.assessment.facets.filter((facet) => facet.relation?.choice === "contradicted" || facet.relation?.choice === "not_established" || facet.coverage?.choice === "partial" || facet.coverage?.choice === "missing").length
-    : 0), 0);
-  return {
-    reports: unique,
-    reportCount: unique.length,
-    byStatus,
-    deterministicIssueCount,
-    concernCount,
-    enabled: unique.some((report) => report.status !== "disabled"),
-  };
-}
-
 async function recordInternalCallSpans(attemptRecorder, call, index, traceId, toolSpanId) {
   const callId = call.toolCallId ?? `tool-${index + 1}`;
   const finishedAt = call.finishedAt ?? call.startedAt;
@@ -622,9 +593,8 @@ function knowledgeMetrics(calls, startedAt) {
 
 async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attempt-001", experimentId = "legacy", attemptMode = "run", queryBudgetPolicy, retryOfAttemptId, fanoutEnabled = true, semanticSpecMode = "required") {
   const protocol = await import("@data-agent/runtime/testing");
-  const { createMcpQueryExecutor } = await import("../../apps/server/dist/mcp-query-executor.js");
+  const { createMcpQueryExecutor } = await import("../../packages/database/dist/mcp-query-executor.js");
   const profile = profileFromConfig(config);
-  const specFeedbackConfigured = semanticSpecMode === "required" && specFeedbackRequested(config) && Boolean(process.env.TYPESAFE_API_KEY?.trim());
   return async (instance) => {
     const startedAt = Date.now();
     const legacyCaseRoot = path.join(runDir, "cases", instance.instance_id);
@@ -689,14 +659,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
             onObservation: (observation) => jevObservations.push(observation),
           })
         : undefined;
-      const specAlignmentAssessor = semanticSpecMode === "required" && specFeedbackRequested(config) && process.env.TYPESAFE_API_KEY?.trim() && protocol.JevSpecAlignmentAssessor
-        ? new protocol.JevSpecAlignmentAssessor({
-            apiKey: process.env.TYPESAFE_API_KEY.trim(),
-            model: process.env.TYPESAFE_MODEL?.trim() || "jev-1.13.0",
-            ...(process.env.TYPESAFE_ENDPOINT?.trim() ? { endpoint: process.env.TYPESAFE_ENDPOINT.trim() } : {}),
-            onObservation: (observation) => jevObservations.push(observation),
-          })
-        : undefined;
       application = new protocol.DataAgentSessionApplication({
         sessionRoot: path.join(caseRoot, "session"),
         workspace: prepared.workspace,
@@ -707,7 +669,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         resultRoot: path.join(caseRoot, "results"),
         profile,
         ...(hypothesisChoiceAdvisor ? { hypothesisChoiceAdvisor } : {}),
-        ...(specAlignmentAssessor ? { specAlignmentAssessor } : {}),
         ...(queryBudgetPolicy ? { answeringBudgetPolicy: queryBudgetPolicy } : {}),
         semanticSpecMode,
         enableClarificationTool: config.enableClarificationTool !== false,
@@ -830,7 +791,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
     }
     const recordedKnowledgeMetrics = knowledgeMetrics(recorder?.calls ?? [], startedAt);
     const recordedFanoutMetrics = fanoutMetrics(recorder?.calls ?? []);
-    const recordedSpecFeedbackMetrics = specFeedbackMetrics(recorder?.calls ?? []);
     const result = {
       instanceId: instance.instance_id,
       db: instance.db,
@@ -850,12 +810,11 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
       ...(attemptRecorder?.persistenceError ? { recordIncomplete: true, recordPersistenceError: attemptRecorder.persistenceError } : {}),
       semanticSpecMode,
       assuranceMode: "answering-fanout",
-      assuranceManifest: { mode: "answering-fanout", policyVersion: "answering-publication-v1", reviewerOnline: false, detectorsOnline: recordedFanoutMetrics.enabled, fanoutRuleVersion: "answering-fanout-v1", specFeedbackOnline: recordedSpecFeedbackMetrics.enabled, specFeedbackRuleVersion: "spec-feedback-v1" },
+      assuranceManifest: { mode: "answering-fanout", policyVersion: "answering-publication-v1", reviewerOnline: false, detectorsOnline: recordedFanoutMetrics.enabled, fanoutRuleVersion: "answering-fanout-v1" },
       publicationStatus: publicationStatusFor(recorder, status),
       assuranceAuditRecords: [],
       anomalies: recordedFanoutMetrics.findingCount > 0 ? recordedFanoutMetrics.reports.flatMap((report) => (report.targets ?? []).filter((target) => target.status === "finding").map((target) => ({ detector: "join_fanout", status: "observed", targetId: target.targetId, sourceRelation: target.sourceRelation, sourceKey: target.sourceKey, observation: target.observation }))) : [],
       fanoutMetrics: recordedFanoutMetrics,
-      specFeedbackMetrics: recordedSpecFeedbackMetrics,
       anomalyMetrics: { total: recordedFanoutMetrics.findingCount, byDetector: recordedFanoutMetrics.findingCount > 0 ? { join_fanout: recordedFanoutMetrics.findingCount } : {}, distinctFingerprintsBySlot: {}, interpretationHookCount: 0, unresolvedHypothesisHookCount: 0, unresolvedHypothesisIds: [], interpretationBudgetSkipCount: 0, detectorTiers: { tierA: ["join_fanout"], tierB: [], disabled: [], enabled: recordedFanoutMetrics.enabled } },
       nativeObservationCount: nativeObservations.count,
       activeTools,
@@ -949,13 +908,12 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         capabilities: {
           semanticSpec: { configured: true, executed: (recorder?.calls ?? []).some((call) => (semanticSpecMode === "required" ? ["set_answer_spec"] : ["begin_query_task"]).includes(call.toolName)), coverage: semanticSpecMode },
           fanout: { configured: fanoutEnabled, executed: recordedFanoutMetrics.reportCount > 0, coverage: recordedFanoutMetrics.reportCount > 0 ? "observed" : fanoutEnabled ? "not_observed" : "disabled" },
-          specFeedback: { configured: specFeedbackConfigured, executed: recordedSpecFeedbackMetrics.enabled, coverage: recordedSpecFeedbackMetrics.enabled ? "observed" : specFeedbackConfigured ? "not_observed" : "disabled" },
         },
       });
       result.episodeRecord = sealed.episode;
       result.usage = summarizeUsage(sealed.projection.spans);
     }
-    const trace = { events: recorder?.events ?? [], toolCalls: recorder?.calls ?? [], nativeEventTypes: nativeObservations.types, knowledgeMetrics: recordedKnowledgeMetrics, fanoutMetrics: recordedFanoutMetrics, specFeedbackMetrics: recordedSpecFeedbackMetrics, assuranceAuditRecords: [], anomalies: result.anomalies, episodeRecord: result.episodeRecord ?? null };
+    const trace = { events: recorder?.events ?? [], toolCalls: recorder?.calls ?? [], nativeEventTypes: nativeObservations.types, knowledgeMetrics: recordedKnowledgeMetrics, fanoutMetrics: recordedFanoutMetrics, assuranceAuditRecords: [], anomalies: result.anomalies, episodeRecord: result.episodeRecord ?? null };
     const writes = [
       writeFile(path.join(caseRoot, "result.json"), JSON.stringify(result, null, 2), "utf8"),
       writeFile(path.join(caseRoot, "trace.json"), JSON.stringify(trace, null, 2), "utf8"),
@@ -1020,8 +978,9 @@ async function currentBaselineSurface(config) {
     runtimeBuildProvenanceSha256: await sha256File(path.join(projectRoot, "packages", "runtime", "dist", "build-provenance.json")),
     skillsSha256: await sha256Tree(path.join(projectRoot, ".agents", "skills")),
     evaluationSkillsSha256: await sha256Tree(path.join(here, "skills")),
-    sqliteMcpSha256: await sha256File(path.join(projectRoot, "apps", "server", "dist", "reference-sqlite-mcp.js")),
-    queryExecutorSha256: await sha256File(path.join(projectRoot, "apps", "server", "dist", "mcp-query-executor.js")),
+    // The launcher at apps/server/dist/reference-sqlite-mcp.js only imports this server and its CLI.
+    sqliteMcpSha256: await sha256Tree(path.join(projectRoot, "packages", "mcp-sqlite", "dist")),
+    queryExecutorSha256: await sha256File(path.join(projectRoot, "packages", "database", "dist", "mcp-query-executor.js")),
     serverSourceSha256: await sha256Tree(path.join(projectRoot, "apps", "server", "src")),
     serverBuildProvenanceSha256: await sha256File(path.join(projectRoot, "apps", "server", "dist", "build-provenance.json")),
     evaluationAdapter: {
@@ -1098,11 +1057,6 @@ async function assertFormalCompatibility(config) {
   if (!result.ok || result.datasetSha256 !== datasetSha256 || result.evaluatorSha256 !== evaluatorSha256) {
     throw new Error("FORMAL_RUN_BLOCKED_BY_GOLD_INCOMPATIBILITY");
   }
-}
-
-/** Advisory Spec coverage feedback (Jev) is on when the config asks for it or the legacy env flag is set. */
-function specFeedbackRequested(config) {
-  return config.specFeedback === true || process.env.TYPESAFE_SPEC_ALIGNMENT === "1";
 }
 
 function resumeStatusesFromOptions(options) {
@@ -1558,7 +1512,7 @@ async function preflightCommand(config, options) {
     path.join(config.evaluationSuite, "evaluate.py"),
     path.join(config.evaluationSuite, "gold", "spider2lite_eval.jsonl"),
     path.join(projectRoot, "packages", "runtime", "dist", "index.js"),
-    path.join(projectRoot, "apps", "server", "dist", "mcp-query-executor.js"),
+    path.join(projectRoot, "packages", "database", "dist", "mcp-query-executor.js"),
     path.join(projectRoot, "apps", "server", "dist", "reference-sqlite-mcp.js"),
   ];
   const missing = [];

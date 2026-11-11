@@ -173,7 +173,7 @@ function isSemanticSpecAblation(control, treatment, hookDifferences) {
   if (!sameValue(controlFixedCapabilities, treatmentFixedCapabilities)) return false;
   if (!control.baselineLockSha256 || !treatment.baselineLockSha256 || control.baselineLockSha256 === treatment.baselineLockSha256) return false;
   if (!sameValue(control.assuranceObserver ?? {}, treatment.assuranceObserver ?? {})) return false;
-  if (control.capabilities?.specFeedback?.resolved !== false || treatment.capabilities?.specFeedback?.resolved !== false) return false;
+  if (control.capabilities?.specFeedback?.resolved === true || treatment.capabilities?.specFeedback?.resolved === true) return false;
   const manifests = [control, treatment];
   for (const manifest of manifests) {
     const mode = semanticSpecMode(manifest);

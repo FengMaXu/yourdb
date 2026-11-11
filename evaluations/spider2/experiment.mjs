@@ -17,7 +17,7 @@ const TOP_LEVEL_KEYS = new Set([
   "__path", "spider2Repo", "runsRoot", "spider2LiteRoot", "datasetPath", "evaluationSuite", "pythonExecutable",
   "localDatabasePackSha256", "concurrency", "scoreWorkers", "assurance", "llm", "modelProfiles", "selectedModelProfile",
   "limits", "backends", "answering", "queryTask", "delegation", "attemptPolicy", "comparisonPolicy", "scoring", "inputs",
-  "enableSubagents", "enableWidgets", "enableDashboards", "enableClarificationTool", "specFeedback", "hypothesisAdvisor",
+  "enableSubagents", "enableWidgets", "enableDashboards", "enableClarificationTool", "hypothesisAdvisor",
 ]);
 const LIMIT_KEYS = new Set(["timeoutMs", "providerTimeoutMs", "maxTurns", "maxToolCalls", "maxExploratoryQueries"]);
 const INLINE_SECRET_KEYS = /(?:api[_-]?key|password|secret|authorization|credential|token)/i;
@@ -171,16 +171,13 @@ function capability(config, configured, resolved = configured) {
 
 function configuredCapabilities(config, activeTools, semanticSpecMode) {
   const assurance = config.assurance ?? {};
-  const specFeedback = config.specFeedback ?? assurance.specFeedback;
   const advisor = config.hypothesisAdvisor ?? assurance.enumerator ?? assurance.plannerLlm;
   const jevAvailable = Boolean(process.env.TYPESAFE_API_KEY?.trim());
-  const specFeedbackResolved = semanticSpecMode === "required" && jevAvailable && process.env.TYPESAFE_SPEC_ALIGNMENT === "1";
   const fanoutEnabled = config.answering?.fanout?.enabled !== false;
   return {
     tools: capability(config, [...activeTools], [...activeTools]),
     semanticSpec: capability(config, semanticSpecMode, semanticSpecMode),
     fanout: capability(config, fanoutEnabled, fanoutEnabled),
-    specFeedback: capability(config, semanticSpecMode === "required" && Boolean(specFeedback || specFeedbackResolved), specFeedbackResolved),
     hypothesisAdvisor: capability(config, Boolean(advisor || jevAvailable), jevAvailable),
     delegation: capability(config, config.enableSubagents !== false, config.enableSubagents !== false),
     clarification: capability(config, config.enableClarificationTool !== false, config.enableClarificationTool !== false),

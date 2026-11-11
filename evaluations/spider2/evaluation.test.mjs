@@ -32,7 +32,7 @@ test("core report exposes format, process, capability, categorized usage, and sp
     coverage: { state: "complete" },
     deliveryRequirement: { format: "csv", satisfied: true },
     process: { turns: 2, toolCalls: 3, revisions: 1, explorationQueries: 1, resultQueries: 1, fanoutProbes: 2 },
-    capabilities: { fanout: { configured: true, executed: true, coverage: "observed" }, specFeedback: { configured: true, executed: false, coverage: "not_observed" } },
+    capabilities: { fanout: { configured: true, executed: true, coverage: "observed" } },
     usage: {
       state: "known",
       mainUsage: { totalTokens: 10, cost: { total: 0.1 } },

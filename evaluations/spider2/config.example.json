@@ -4,7 +4,6 @@
   "pythonExecutable": "python",
   "localDatabasePackSha256": null,
   "concurrency": 3,
-  "specFeedback": false,
   "scoreWorkers": 4,
   "answering": {
     "semanticSpecMode": "required",

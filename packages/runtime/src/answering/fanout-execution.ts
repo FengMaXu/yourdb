@@ -10,7 +10,7 @@ import {
 } from "./model.js";
 import { assertTaskAccess } from "./answering-store.js";
 import { AnsweringError } from "./errors.js";
-import { reserveAttempt, taskBudget, updateAttempt } from "./budget.js";
+import { reserveAttempt, settleAttempt, taskBudget } from "./budget.js";
 import { checkFanout, hasPotentialFanout, type FanoutProbeRequest, type FanoutProbeResult, type FanoutSchema } from "./fanout-check.js";
 import { SqlExecutionError, type AnsweringSqlExecutor } from "./sql-execution.js";
 import { asRecord, now } from "./support.js";
@@ -124,11 +124,11 @@ async function runFanoutProbe(
       if (budget.observedRows + observedRows > budget.policy.maxObservedRows) {
         const charged = { ...current, budget: { ...budget, observedRows: budget.observedRows + observedRows }, updatedAt: now() };
         tx.putTask(charged);
-        updateAttempt(tx, attempt, "failed", "succeeded", true, "budget_exhausted");
+        settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "budget_exhausted" });
         return true;
       }
       tx.putTask({ ...current, budget: { ...budget, observedRows: budget.observedRows + observedRows }, updatedAt: now() });
-      updateAttempt(tx, attempt, "succeeded", "succeeded", true);
+      settleAttempt(tx, attempt, { state: "succeeded", outcome: "succeeded", sqlExecuted: true });
       return false;
     }, context);
     if (post) throw new Error("probe_budget_exhausted");
@@ -140,7 +140,9 @@ async function runFanoutProbe(
     await deps.store.transact((tx) => {
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
-      updateAttempt(tx, attempt, unknown ? "unknown" : "failed", unknown ? "unknown" : "failed", sqlStarted, unknown ? "execution_outcome_unknown" : /budget/i.test(error instanceof Error ? error.message : String(error)) ? "budget_exhausted" : "technical_failure");
+      settleAttempt(tx, attempt, unknown
+        ? { state: "unknown", outcome: "unknown", sqlExecuted: true, obstacleKind: "execution_outcome_unknown" }
+        : { state: "failed", outcome: "failed", sqlExecuted: sqlStarted, obstacleKind: /budget/i.test(error instanceof Error ? error.message : String(error)) ? "budget_exhausted" : "technical_failure" });
     }, context).catch(() => undefined);
     throw error;
   }

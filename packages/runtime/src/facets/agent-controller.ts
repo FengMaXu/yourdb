@@ -8,6 +8,7 @@ import type {
   WatchHandle,
 } from "@earendil-works/pi-agent-core";
 import type { Context } from "@earendil-works/pi-agent-core/harness/context";
+import { driveUntilSettled } from "../agent/drive-until-settled.js";
 
 export interface AgentControllerContext {
   readonly pi: Context;
@@ -104,20 +105,26 @@ export class PiAgentController implements AgentController {
   }
 
   /**
-   * Drives the operation to a terminal result. Pi reports a scheduled retry
-   * (or other deferred work) as `waiting`; the retry only happens when the
-   * caller drives again, so keep driving until the operation settles.
+   * Continues an operation restored from the Session (recovery after a stop of
+   * the host): binds it as an accepted one, then drives it until it settles,
+   * like a prompt's operation. An operation that is no prompted run (e.g. a
+   * compaction) has no request message to bind and is driven as it is.
    */
-  private async drive(admission: OperationAdmission, context: AgentControllerContext): Promise<DriveOutcome | undefined> {
-    const lane = await this.lane();
-    let driven = await lane.drive({ operationId: admission.operationId }, context.pi);
-    while (driven.ok && driven.value.kind === "waiting") {
-      const delay = driven.value.reason === "retry"
-        ? Math.max(0, driven.value.notBefore - Date.now())
-        : Math.max(10, driven.value.deferred.pollAfterMs ?? 250);
-      await new Promise<void>((resolve) => setTimeout(resolve, Math.min(delay, 1_000)));
-      driven = await lane.drive({ operationId: admission.operationId }, context.pi);
+  async recover(operationId: string, context: AgentControllerContext, stop?: AbortSignal): Promise<DriveOutcome | undefined> {
+    const admission = { operationId } as OperationAdmission;
+    try {
+      await this.onAccepted?.(admission, context);
+    } catch {
+      // Nothing to bind: the operation keeps the request it already had.
     }
+    return this.drive(admission, context, stop);
+  }
+
+  /** Drives the operation to a terminal result (see driveUntilSettled). */
+  private async drive(admission: OperationAdmission, context: AgentControllerContext, stop?: AbortSignal): Promise<DriveOutcome | undefined> {
+    const lane = await this.lane();
+    const driven = await driveUntilSettled(lane, admission.operationId, context.pi, stop ? { stop } : {});
+    if (stop?.aborted) return undefined;
     if (!driven.ok) {
       const error = new AgentControllerError("DRIVE_REJECTED", resultError(driven));
       this.onDriveError?.(error);

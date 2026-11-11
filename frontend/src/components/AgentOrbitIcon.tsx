@@ -1,4 +1,5 @@
 import React from 'react';
+import { cn } from '@/lib/utils';
 
 interface AgentOrbitIconProps {
     size?: number | string;
@@ -6,48 +7,44 @@ interface AgentOrbitIconProps {
     className?: string;
 }
 
+/** One electron: a soft glow and a core, which blink in and out together while the agent works. */
+const Electron: React.FC<{ cx: number; cy: number; glow: number; core: number; float: string; phase: string; animated: boolean }> = ({ cx, cy, glow, core, float, phase, animated }) => {
+    const part = cn(animated && phase, 'motion-reduce:animate-none');
+    const origin = { transformOrigin: `${cx}px ${cy}px` };
+    return (
+        <g className={cn('origin-[50px_50px]', animated && float, 'motion-reduce:animate-none')}>
+            <circle className={cn('fill-current opacity-16', part)} style={origin} cx={cx} cy={cy} r={glow} />
+            <circle className={cn('fill-current', part)} style={origin} cx={cx} cy={cy} r={core} />
+        </g>
+    );
+};
+
+/** The agent's mark: a nucleus and three electrons; alive while the agent works. */
 const AgentOrbitIcon: React.FC<AgentOrbitIconProps> = ({
     size = 24,
     animated = false,
     className = '',
-}) => {
-    const svgClassName = ['agent-orbit-icon', animated ? 'is-animated' : '', className]
-        .filter(Boolean)
-        .join(' ');
+}) => (
+    <svg
+        viewBox="0 0 100 100"
+        width={size}
+        height={size}
+        className={cn('block overflow-hidden text-current', animated && 'drop-shadow-[0_0_8px_rgba(194,65,12,0.18)]', className)}
+        aria-hidden="true"
+        focusable="false"
+    >
+        <g transform="translate(50 50) scale(1.34) translate(-50 -50)">
+            <Electron cx={67} cy={35} glow={7.2} core={4.2} float="animate-electron-float-1" phase="animate-electron-phase-1" animated={animated} />
+            <Electron cx={33} cy={66} glow={6.8} core={3.9} float="animate-electron-float-2" phase="animate-electron-phase-2" animated={animated} />
+            <Electron cx={74} cy={63} glow={5.9} core={3.2} float="animate-electron-float-3" phase="animate-electron-phase-3" animated={animated} />
 
-    return (
-        <svg
-            viewBox="0 0 100 100"
-            width={size}
-            height={size}
-            className={svgClassName}
-            aria-hidden="true"
-            focusable="false"
-        >
-            <g className="agent-orbit-artwork" transform="translate(50 50) scale(1.34) translate(-50 -50)">
-                <g className="agent-orbit-electron-group electron-1">
-                    <circle className="agent-orbit-electron-glow" cx="67" cy="35" r="7.2" />
-                    <circle className="agent-orbit-electron-core" cx="67" cy="35" r="4.2" />
-                </g>
-
-                <g className="agent-orbit-electron-group electron-2">
-                    <circle className="agent-orbit-electron-glow" cx="33" cy="66" r="6.8" />
-                    <circle className="agent-orbit-electron-core" cx="33" cy="66" r="3.9" />
-                </g>
-
-                <g className="agent-orbit-electron-group electron-3">
-                    <circle className="agent-orbit-electron-glow" cx="74" cy="63" r="5.9" />
-                    <circle className="agent-orbit-electron-core" cx="74" cy="63" r="3.2" />
-                </g>
-
-                <g className="agent-orbit-nucleus">
-                    <circle className="agent-orbit-nucleus-glow" cx="50" cy="50" r="18" />
-                    <circle className="agent-orbit-nucleus-core" cx="50" cy="50" r="10.5" />
-                    <circle className="agent-orbit-nucleus-highlight" cx="46.5" cy="46.5" r="2.8" />
-                </g>
+            <g className={cn('origin-[50px_50px]', animated && 'animate-orbit-nucleus motion-reduce:animate-none')}>
+                <circle className="fill-current opacity-12" cx="50" cy="50" r="18" />
+                <circle className="fill-current opacity-96" cx="50" cy="50" r="10.5" />
+                <circle className="fill-white/82" cx="46.5" cy="46.5" r="2.8" />
             </g>
-        </svg>
-    );
-};
+        </g>
+    </svg>
+);
 
 export default AgentOrbitIcon;

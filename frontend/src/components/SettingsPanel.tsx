@@ -1,17 +1,30 @@
 import React, { useEffect, useState } from 'react';
+import { UI } from './workspace-ui';
+import { cn } from '@/lib/utils';
 import ChannelsSettings from './ChannelsSettings';
 import {
     Settings as SettingsIcon,
-    User, Link, Eye, ExternalLink, Loader2, Terminal
-} from './icons/Typicons';
-import { RiCloud, RiKey2, RiUsb } from './icons/RemixIcons';
+    User, Link, Eye, ExternalLink, Loader2, Terminal, Database
+} from 'lucide-react';
+import { Cloud, KeyRound, Usb } from 'lucide-react';
 import {
     type AIConfig,
+    type DatabaseDriver,
     type PythonRuntimeConfig,
     type PythonRuntimeUpdate,
 } from '../api/client';
 import { getConfigViaRuntime, saveConfigViaRuntime, testDbViaRuntime, testPythonRuntimeViaRuntime } from '../api/runtime-client';
 import { useLanguage } from '../context/LanguageContext';
+
+/** Server databases; SQLite is a file and has no host, port or user. */
+type ServerDatabaseDriver = Exclude<DatabaseDriver, 'sqlite'>;
+
+const DB_DRIVER_DEFAULTS: Record<ServerDatabaseDriver, { port: number; user: string }> = {
+    mysql: { port: 3306, user: 'root' },
+    postgres: { port: 5432, user: 'postgres' },
+};
+
+const DB_DRIVERS: readonly DatabaseDriver[] = ['mysql', 'postgres', 'sqlite'];
 
 export type SettingsSection = 'model' | 'database' | 'environment' | 'channels';
 
@@ -123,11 +136,16 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     const [isSavingLLM, setIsSavingLLM] = useState(false);
 
     // DB states
+    const [dbDriver, setDbDriver] = useState<DatabaseDriver>('mysql');
+    // The network fields keep the last server driver's defaults while SQLite is chosen.
+    const [serverDriver, setServerDriver] = useState<ServerDatabaseDriver>('mysql');
     const [dbHost, setDbHost] = useState('localhost');
-    const [dbPort, setDbPort] = useState(3306);
-    const [dbUser, setDbUser] = useState('root');
+    const [dbPort, setDbPort] = useState(DB_DRIVER_DEFAULTS.mysql.port);
+    const [dbUser, setDbUser] = useState(DB_DRIVER_DEFAULTS.mysql.user);
     const [dbPassword, setDbPassword] = useState('');
-    const [dbName, setDbName] = useState('my_database');
+    const [dbName, setDbName] = useState('');
+    // A SQLite file is not a database name: each keeps its own value while the other driver is chosen.
+    const [dbFile, setDbFile] = useState('');
     const [isTestingDB, setIsTestingDB] = useState(false);
     const [isSavingDB, setIsSavingDB] = useState(false);
     const [dbTestResult, setDbTestResult] = useState<{ success: boolean, message: string } | null>(null);
@@ -144,11 +162,17 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
             try {
                 const initialConfig: AIConfig = await getConfigViaRuntime() as unknown as AIConfig;
                 setConfig(initialConfig);
+                const driver: DatabaseDriver = DB_DRIVERS.includes(initialConfig.driver as DatabaseDriver) ? initialConfig.driver as DatabaseDriver : 'mysql';
+                // Under SQLite the saved port tells which server driver the network fields were last filled for.
+                const server: ServerDatabaseDriver = driver !== 'sqlite' ? driver : initialConfig.port === DB_DRIVER_DEFAULTS.postgres.port ? 'postgres' : 'mysql';
+                setDbDriver(driver);
+                setServerDriver(server);
                 setDbHost(initialConfig.host || 'localhost');
-                setDbPort(initialConfig.port || 3306);
-                setDbUser(initialConfig.user || 'root');
+                setDbPort(initialConfig.port || DB_DRIVER_DEFAULTS[server].port);
+                setDbUser(initialConfig.user || DB_DRIVER_DEFAULTS[server].user);
                 setDbPassword(initialConfig.password || '');
-                setDbName(initialConfig.database || '');
+                if (driver === 'sqlite') setDbFile(initialConfig.database || '');
+                else setDbName(initialConfig.database || '');
                 const runtime = initialConfig.python_runtime || { mode: 'bundled' as const };
                 setPythonRuntime(runtime);
                 setPythonExecutable(runtime.executable || '');
@@ -287,16 +311,29 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
 
 
+    // Switching between server databases moves the port and user along only while they still hold the previous defaults.
+    const changeDbDriver = (driver: DatabaseDriver) => {
+        if (driver !== 'sqlite') {
+            const previous = DB_DRIVER_DEFAULTS[serverDriver];
+            if (dbPort === previous.port) setDbPort(DB_DRIVER_DEFAULTS[driver].port);
+            if (dbUser === previous.user) setDbUser(DB_DRIVER_DEFAULTS[driver].user);
+            setServerDriver(driver);
+        }
+        setDbDriver(driver);
+        setDbTestResult(null);
+    };
+
     const handleTestDB = async () => {
         setIsTestingDB(true);
         setDbTestResult(null);
         try {
             const res = await testDbViaRuntime({
+                driver: dbDriver,
                 host: dbHost,
                 port: dbPort,
                 user: dbUser,
                 password: dbPassword,
-                database: dbName
+                database: dbDriver === 'sqlite' ? dbFile : dbName
             });
             setDbTestResult(res);
         } catch (e: unknown) {
@@ -311,11 +348,12 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
         setIsSavingDB(true);
         try {
             await saveConfigViaRuntime({
+                driver: dbDriver,
                 host: dbHost,
                 port: dbPort,
                 user: dbUser,
                 password: dbPassword,
-                database: dbName
+                database: dbDriver === 'sqlite' ? dbFile : dbName
             });
             setDbTestResult({ success: true, message: t('settings.dbSaveSuccess') });
         } catch (e: unknown) {
@@ -371,192 +409,164 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     };
 
     return (
-        <section className="workspace-page" aria-labelledby="settings-page-title">
-            <header className="workspace-page-header">
+        <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="settings-page-title">
+            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
                 <h1 id="settings-page-title">{t(`settings.${section}`)}</h1>
             </header>
 
-            <div className={`workspace-page-body scrollable-area ${activeMenu === '模型' ? 'is-split' : ''}`}>
+            <div className={cn('scrollable-area flex min-h-0 flex-auto flex-col overflow-y-auto', activeMenu === '模型' ? 'overflow-hidden p-0' : 'p-8 max-[720px]:p-4 [&>*]:w-full')}>
                 {/* 模型 (Model) */}
                 {activeMenu === '模型' && (
-                    <div className="settings-model-layout">
+                    <div className="flex min-h-0 flex-1 max-[720px]:flex-col">
                         {/* Internal Sidebar for Model */}
-                        <div className="settings-provider-nav">
+                        <nav className="flex w-[216px] flex-[0_0_216px] flex-col gap-px overflow-y-auto border-r border-border bg-paper px-3 py-4 max-[720px]:max-h-40 max-[720px]:w-full max-[720px]:flex-none max-[720px]:flex-row max-[720px]:gap-1 max-[720px]:overflow-x-auto max-[720px]:border-r-0 max-[720px]:border-b max-[720px]:p-2" aria-label={t('settings.providers')}>
                             <button
-                                className={`modal-nav-item ${modelProvider === '模型设置' ? 'active' : ''}`}
+                                type="button"
+                                className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap mb-3.5 max-[720px]:mb-0', modelProvider === '模型设置' && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
+                                aria-current={modelProvider === '模型设置' ? 'page' : undefined}
                                 onClick={() => setModelProvider('模型设置')}
-                                style={{ marginBottom: '16px' }}
                             >
-                                <SettingsIcon size={16} className="modal-nav-icon" />
+                                <SettingsIcon size={16} />
                                 <span>{t('settings.modelSettings')}</span>
                             </button>
 
-                            <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '8px', paddingLeft: '8px' }}>{t('settings.providers')}</div>
+                            <div className="px-2.5 pb-1.5 font-mono text-[0.7rem] text-faint before:content-['--_'] max-[720px]:hidden">{t('settings.providers')}</div>
                             {providers.map(p => (
                                 <button
                                     key={p.id}
-                                    className={`modal-nav-item ${modelProvider === p.id ? 'active' : ''}`}
+                                    type="button"
+                                    className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap', modelProvider === p.id && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
+                                    aria-current={modelProvider === p.id ? 'page' : undefined}
                                     onClick={() => setModelProvider(p.id)}
-                                    style={{ padding: '8px 16px', fontSize: '0.85rem' }}
                                 >
-                                    <span style={{ fontFamily: 'inherit' }}>{p.label}</span>
+                                    <span className="size-1.5 flex-none rounded-full bg-border-strong transition-colors data-[on=true]:bg-success data-[on=true]:shadow-[0_0_0_3px_rgba(4,120,87,0.12)]" data-on={providerConfigs[p.id]?.enabled ? 'true' : undefined} aria-hidden="true" />
+                                    <span>{p.label}</span>
                                 </button>
                             ))}
-                        </div>
+                        </nav>
 
                         {/* Model Content */}
-                        <div className="settings-provider-content">
+                        <div className="min-w-0 flex-1 overflow-y-auto px-9 pt-7 pb-10 max-[720px]:p-4 [&>*]:max-w-[720px]">
                             {modelProvider === '模型设置' ? (
-                                <>
-                                    <h3 className="settings-section-title" style={{ fontSize: '1rem', color: '#6b7280', marginBottom: '24px', fontWeight: 500 }}>{t('settings.defaultModelTitle')}</h3>
+                                <div key="overview" className={cn(UI.stack, UI.enter, 'max-w-[640px] gap-6')}>
+                                    <p className={UI.lead}>{t('settings.defaultModelTitle')}</p>
 
-                                    <label className="settings-section-title" htmlFor="settings-default-model" style={{ marginBottom: '2px' }}>{t('settings.defaultModelSubtitle')}</label>
-
-                                    <div className="settings-input-wrapper" style={{ padding: '8px 16px', cursor: 'not-allowed', background: '#f9fafb', marginBottom: '8px' }}>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-default-model">{t('settings.defaultModelSubtitle')}</label>
                                         <input
                                             id="settings-default-model"
-                                            style={{ flex: 1, fontSize: '0.9rem', border: 'none', outline: 'none', background: 'transparent', cursor: 'not-allowed', color: '#6b7280' }}
+                                            className={cn(UI.input, UI.mono)}
                                             value={config?.model || ''}
                                             readOnly
                                             placeholder={t('settings.notSet')}
                                         />
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '32px' }}>
-                                        {t('settings.defaultModelHint')}
+                                        <p className={UI.hint}>{t('settings.defaultModelHint')}</p>
                                     </div>
 
-                                    <h4 className="settings-section-title" style={{ marginBottom: '16px' }}>{t('settings.historyLimitTitle')}</h4>
-
-                                    <div style={{ marginBottom: '24px' }}>
-                                        <label className="settings-section-title" htmlFor="settings-max-turns" style={{ marginBottom: '4px', fontSize: '0.85rem' }}>{t('settings.maxTurns')}</label>
-                                        <p className="settings-section-desc" style={{ fontSize: '0.8rem', marginBottom: '8px' }}>{t('settings.maxTurnsSubtitle')}</p>
-                                        <div className="settings-input-wrapper" style={{ background: '#fff' }}>
-                                            <input id="settings-max-turns" type="number" value="20" readOnly />
+                                    <div className={cn(UI.stack, 'gap-3.5 border-t border-border pt-6')}>
+                                        <h4 className={UI.subhead}>{t('settings.historyLimitTitle')}</h4>
+                                        <div className={UI.grid2}>
+                                            <div className={UI.field}>
+                                                <label className={UI.label} htmlFor="settings-max-turns">{t('settings.maxTurns')}</label>
+                                                <input id="settings-max-turns" className={UI.input} type="number" value="20" readOnly />
+                                                <p className={UI.hint}>{t('settings.maxTurnsSubtitle')}</p>
+                                            </div>
+                                            <div className={UI.field}>
+                                                <label className={UI.label} htmlFor="settings-max-tokens">{t('settings.maxTokens')}</label>
+                                                <input id="settings-max-tokens" className={UI.input} type="number" value="2000" readOnly />
+                                                <p className={UI.hint}>{t('settings.maxTokensSubtitle')}</p>
+                                            </div>
                                         </div>
                                     </div>
-
-                                    <div>
-                                        <label className="settings-section-title" htmlFor="settings-max-tokens" style={{ marginBottom: '4px', fontSize: '0.85rem' }}>{t('settings.maxTokens')}</label>
-                                        <p className="settings-section-desc" style={{ fontSize: '0.8rem', marginBottom: '8px' }}>{t('settings.maxTokensSubtitle')}</p>
-                                        <div className="settings-input-wrapper" style={{ background: '#fff' }}>
-                                            <input id="settings-max-tokens" type="number" value="2000" readOnly />
-                                        </div>
-                                    </div>
-                                </>
+                                </div>
                             ) : (
-                                <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                                <div key={modelProvider} className={cn(UI.stack, UI.enter, 'max-w-[640px] gap-6')}>
                                     {/* Header */}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '16px', borderBottom: '1px solid #f3f4f6', marginBottom: '24px' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <h3 style={{ fontSize: '1.05rem', fontWeight: 600, color: '#1f2937', margin: 0 }}>
+                                    <div className={cn(UI.cardHead, 'border-b border-border pb-5')}>
+                                        <div>
+                                            <h3 className={UI.cardTitle}>
                                                 {providers.find(p => p.id === modelProvider)?.label || modelProvider}
+                                                <span className={UI.pill} data-tone={providerConfigs[modelProvider]?.enabled ? 'ok' : 'idle'}>
+                                                    {providerConfigs[modelProvider]?.enabled ? t('settings.providerEnabled') : t('settings.providerDisabled')}
+                                                </span>
                                             </h3>
                                             {saveFeedback && providerConfigs[modelProvider]?.enabled && (
-                                                <span role="status" aria-live="polite" style={{ fontSize: '0.8rem', color: saveFeedback.startsWith('✗') ? '#b91c1c' : '#047857', marginLeft: '8px' }}>
+                                                <span role="status" aria-live="polite" className={cn('mt-1.5 block text-[0.8rem]', saveFeedback.startsWith('✗') ? 'text-destructive' : 'text-success')}>
                                                     {saveFeedback}
                                                 </span>
                                             )}
                                         </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: providerConfigs[modelProvider]?.enabled ? '#10b981' : '#d1d5db' }}></div>
-                                            <span style={{ fontSize: '0.85rem', color: providerConfigs[modelProvider]?.enabled ? '#047857' : '#6b7280', marginRight: '4px' }}>
-                                                {providerConfigs[modelProvider]?.enabled ? t('settings.providerEnabled') : t('settings.providerDisabled')}
-                                            </span>
-                                            {/* Custom Toggle Switch */}
-                                            <button
-                                                type="button"
-                                                role="switch"
-                                                aria-checked={!!providerConfigs[modelProvider]?.enabled}
-                                                aria-label={providerConfigs[modelProvider]?.enabled ? '停用提供商' : '启用提供商'}
-                                                onClick={() => toggleProvider(modelProvider)}
-                                                disabled={isSavingLLM}
-                                                style={{ 
-                                                    width: '36px', 
-                                                    height: '20px', 
-                                                    backgroundColor: providerConfigs[modelProvider]?.enabled ? '#10b981' : '#d1d5db', 
-                                                    borderRadius: '12px', 
-                                                    position: 'relative', 
-                                                    cursor: isSavingLLM ? 'not-allowed' : 'pointer',
-                                                    transition: 'background-color 0.2s',
-                                                    border: 'none',
-                                                    padding: 0
-                                                }}
-                                            >
-                                                <div style={{ 
-                                                    width: '16px', 
-                                                    height: '16px', 
-                                                    backgroundColor: '#fff', 
-                                                    borderRadius: '50%', 
-                                                    position: 'absolute', 
-                                                    top: '2px', 
-                                                    left: providerConfigs[modelProvider]?.enabled ? '18px' : '2px', 
-                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                                                    transition: 'left 0.2s'
-                                                }}></div>
-                                            </button>
-                                        </div>
+                                        <button
+                                            type="button"
+                                            role="switch"
+                                            className={UI.switch}
+                                            aria-checked={!!providerConfigs[modelProvider]?.enabled}
+                                            aria-label={providerConfigs[modelProvider]?.enabled ? '停用提供商' : '启用提供商'}
+                                            onClick={() => toggleProvider(modelProvider)}
+                                            disabled={isSavingLLM}
+                                        />
                                     </div>
 
                                     {/* API Key */}
-                                    <div style={{ marginBottom: '24px' }}>
-                                        <label className="settings-section-title" htmlFor="settings-api-key" style={{ fontSize: '0.9rem', marginBottom: '12px' }}>{t('settings.apiKeyTitle')}</label>
-                                        <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between' }}>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-api-key">{t('settings.apiKeyTitle')}</label>
+                                        <div className={UI.inputGroup}>
                                             <input
                                                 id="settings-api-key"
+                                                className={cn(UI.input, UI.mono)}
                                                 type={showPassword ? 'text' : 'password'}
+                                                autoComplete="off"
+                                                spellCheck={false}
                                                 placeholder={t('settings.apiKeyPlaceholder')}
-                                                style={{ fontSize: '0.95rem', width: '100%' }}
                                                 value={providerConfigs[modelProvider]?.apiKey || ''}
                                                 onChange={e => updateProviderConfig(modelProvider, { apiKey: e.target.value })}
                                             />
                                             <button
                                                 type="button"
+                                                data-adorn
+                                                className={UI.inputAdorn}
                                                 onClick={() => setShowPassword(prev => !prev)}
                                                 aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px', display: 'flex', alignItems: 'center' }}
+                                                aria-pressed={showPassword}
                                             >
-                                                <Eye size={18} color="#9ca3af" />
+                                                <Eye size={16} />
                                             </button>
                                         </div>
-                                        <a href={providers.find(p => p.id === modelProvider)?.apiKeyUrl || '#'} target="_blank" rel="noreferrer" style={{ fontSize: '0.8rem', color: '#9a3412', textDecoration: 'underline', textUnderlineOffset: '2px', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '12px' }}>
-                                            {t('settings.howToGetToken')} <ExternalLink size={14} />
+                                        <a className={UI.link} href={providers.find(p => p.id === modelProvider)?.apiKeyUrl || '#'} target="_blank" rel="noreferrer">
+                                            {t('settings.howToGetToken')} <ExternalLink size={13} />
                                         </a>
                                     </div>
 
                                     {/* API Base URL */}
-                                    <div style={{ marginBottom: '32px' }}>
-                                        <label className="settings-section-title" htmlFor="settings-api-base-url" style={{ fontSize: '0.9rem', marginBottom: '12px' }}>{t('settings.apiBaseUrl')}</label>
-                                        <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb' }}>
-                                            <input
-                                                id="settings-api-base-url"
-                                                type="text"
-                                                style={{ fontSize: '0.95rem', width: '100%' }}
-                                                value={providerConfigs[modelProvider]?.baseUrl || ''}
-                                                onChange={e => updateProviderConfig(modelProvider, { baseUrl: e.target.value })}
-                                                placeholder="例如: https://api.openai.com/v1"
-                                            />
-                                        </div>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-api-base-url">{t('settings.apiBaseUrl')}</label>
+                                        <input
+                                            id="settings-api-base-url"
+                                            className={cn(UI.input, UI.mono)}
+                                            type="text"
+                                            spellCheck={false}
+                                            value={providerConfigs[modelProvider]?.baseUrl || ''}
+                                            onChange={e => updateProviderConfig(modelProvider, { baseUrl: e.target.value })}
+                                            placeholder="例如: https://api.openai.com/v1"
+                                        />
                                     </div>
 
                                     {/* Model */}
-                                    <div style={{ marginBottom: '24px' }}>
-                                        <label className="settings-section-title" htmlFor="settings-model-name" style={{ fontSize: '0.9rem', marginBottom: '12px' }}>{t('settings.modelName')}</label>
-                                        <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '12px 16px', background: '#fff', border: '1px solid #e5e7eb' }}>
-                                            <input
-                                                id="settings-model-name"
-                                                type="text"
-                                                style={{ fontSize: '0.95rem', width: '100%' }}
-                                                value={providerConfigs[modelProvider]?.selectedModel || ''}
-                                                onChange={e => updateProviderConfig(modelProvider, { selectedModel: e.target.value })}
-                                                placeholder="例如: deepseek-chat"
-                                            />
-                                        </div>
+                                    <div className={UI.field}>
+                                        <label className={UI.label} htmlFor="settings-model-name">{t('settings.modelName')}</label>
+                                        <input
+                                            id="settings-model-name"
+                                            className={cn(UI.input, UI.mono)}
+                                            type="text"
+                                            spellCheck={false}
+                                            value={providerConfigs[modelProvider]?.selectedModel || ''}
+                                            onChange={e => updateProviderConfig(modelProvider, { selectedModel: e.target.value })}
+                                            placeholder="例如: deepseek-chat"
+                                        />
                                     </div>
 
-                                    <div style={{ flex: 1 }} />
-                                    <div style={{ marginTop: '24px', fontSize: '0.85rem', color: '#4b5563', display: 'flex', alignItems: 'flex-start', gap: '8px', background: '#f9fafb', padding: '12px', borderRadius: '8px' }}>
-                                        <SettingsIcon size={16} style={{ flexShrink: 0, marginTop: '2px' }} aria-hidden="true" />
-                                        <span>{t('settings.configLocalHint')}</span>
+                                    <div className={cn(UI.alert, '[&_span]:inline-flex [&_span]:items-start [&_span]:gap-2 [&_svg]:mt-1 [&_svg]:flex-none [&_svg]:text-faint')}>
+                                        <span><SettingsIcon size={14} aria-hidden="true" /> {t('settings.configLocalHint')}</span>
                                     </div>
                                 </div>
                             )}
@@ -566,91 +576,104 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                 {/* 数据库 (Database) */}
                 {activeMenu === '数据库' && (
-                    <div className="settings-tab-content" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                        <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', border: '1px solid #f3f4f6', flex: 1 }}>
+                    <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
+                        <section className={cn(UI.card, UI.stack, 'gap-5')} aria-labelledby="settings-db-heading">
+                            <div className={UI.cardHead}>
+                                <div className={UI.cardTitle} id="settings-db-heading">
+                                    <span className={UI.cardIcon} aria-hidden="true"><Database size={18} /></span>
+                                    <div className="grid min-w-0 gap-0.5">
+                                        <div>{t('settings.database')}</div>
+                                        <div className={cn(UI.caption, 'truncate')}>-- {dbDriver === 'sqlite' ? `sqlite:///${dbFile}` : `${dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://${dbHost || 'localhost'}:${dbPort}`}</div>
+                                    </div>
+                                </div>
+                            </div>
 
-                            {/* Row 1 */}
-                            <div className="settings-form-row" style={{ display: 'flex', gap: '24px', marginBottom: '24px' }}>
-                                <div style={{ flex: 1 }}>
-                                    <label htmlFor="settings-db-host" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 600, color: '#1f2937' }}>
-                                        <RiCloud size={18} aria-hidden="true" />
+                            <div className={UI.field}>
+                                <label className={UI.label} htmlFor="settings-db-driver">
+                                    <Database size={15} aria-hidden="true" />
+                                    <span>{t('settings.dbDriver')}</span>
+                                </label>
+                                <select id="settings-db-driver" className={cn(UI.input, UI.select)} value={dbDriver} onChange={e => changeDbDriver(e.target.value as DatabaseDriver)}>
+                                    <option value="mysql">MySQL</option>
+                                    <option value="postgres">PostgreSQL</option>
+                                    <option value="sqlite">SQLite</option>
+                                </select>
+                            </div>
+
+                            {dbDriver !== 'sqlite' && (<>
+                            <div className={cn(UI.grid2, 'max-[720px]:gap-4')}>
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-host">
+                                        <Cloud size={15} aria-hidden="true" />
                                         <span>{t('settings.dbHost')}</span>
                                     </label>
-                                    <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '14px 16px' }}>
-                                        <input id="settings-db-host" type="text" placeholder="localhost" value={dbHost} onChange={e => setDbHost(e.target.value)} style={{ fontSize: '0.95rem' }} />
-                                    </div>
+                                    <input id="settings-db-host" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} placeholder="localhost" value={dbHost} onChange={e => setDbHost(e.target.value)} />
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <label htmlFor="settings-db-port" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 600, color: '#1f2937' }}>
-                                        <RiUsb size={18} aria-hidden="true" />
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-port">
+                                        <Usb size={15} aria-hidden="true" />
                                         <span>{t('settings.dbPort')}</span>
                                     </label>
-                                    <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '14px 16px' }}>
-                                        <input id="settings-db-port" type="number" placeholder="3306" value={dbPort} onChange={e => setDbPort(parseInt(e.target.value) || 3306)} style={{ fontSize: '0.95rem' }} />
-                                    </div>
+                                    <input id="settings-db-port" className={cn(UI.input, UI.mono)} type="number" placeholder={String(DB_DRIVER_DEFAULTS[serverDriver].port)} value={dbPort} onChange={e => setDbPort(parseInt(e.target.value) || DB_DRIVER_DEFAULTS[serverDriver].port)} />
                                 </div>
                             </div>
 
-                            {/* Row 2 */}
-                            <div className="settings-form-row" style={{ display: 'flex', gap: '24px', marginBottom: '24px' }}>
-                                <div style={{ flex: 1 }}>
-                                    <label htmlFor="settings-db-user" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 600, color: '#1f2937' }}>
-                                        <User size={18} aria-hidden="true" />
+                            <div className={cn(UI.grid2, 'max-[720px]:gap-4')}>
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-user">
+                                        <User size={15} aria-hidden="true" />
                                         <span>{t('settings.dbUser')}</span>
                                     </label>
-                                    <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '14px 16px' }}>
-                                        <input id="settings-db-user" type="text" placeholder="root" value={dbUser} onChange={e => setDbUser(e.target.value)} style={{ fontSize: '0.95rem' }} />
-                                    </div>
+                                    <input id="settings-db-user" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} placeholder={DB_DRIVER_DEFAULTS[serverDriver].user} value={dbUser} onChange={e => setDbUser(e.target.value)} />
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <label htmlFor="settings-db-password" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 600, color: '#1f2937' }}>
-                                        <RiKey2 size={18} aria-hidden="true" />
+                                <div className={UI.field}>
+                                    <label className={UI.label} htmlFor="settings-db-password">
+                                        <KeyRound size={15} aria-hidden="true" />
                                         <span>{t('settings.dbPassword')}</span>
                                     </label>
-                                    <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '14px 16px', background: '#eef2ff' }}>
-                                        <input id="settings-db-password" type="password" placeholder="••••••••" value={dbPassword} onChange={e => setDbPassword(e.target.value)} style={{ fontSize: '0.95rem' }} />
-                                    </div>
+                                    <input id="settings-db-password" className={cn(UI.input, UI.mono)} type="password" placeholder="••••••••" value={dbPassword} onChange={e => setDbPassword(e.target.value)} />
                                 </div>
                             </div>
 
-                            {/* Row 3 */}
-                            <div style={{ marginBottom: '32px' }}>
-                                <label htmlFor="settings-db-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', fontSize: '0.9rem', fontWeight: 600, color: '#1f2937' }}>
-                                    <Link size={18} aria-hidden="true" />
-                                    <span>{t('settings.dbDatabase')}</span>
+                            </>)}
+
+                            <div className={UI.field}>
+                                <label className={UI.label} htmlFor="settings-db-name">
+                                    <Link size={15} aria-hidden="true" />
+                                    <span>{t(dbDriver === 'sqlite' ? 'settings.dbFile' : 'settings.dbDatabase')}</span>
                                 </label>
-                                <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '14px 16px', border: '2px solid #a5b4fc', outline: '4px solid #eef2ff' }}>
-                                    <input id="settings-db-name" type="text" placeholder="my_database" value={dbName} onChange={e => setDbName(e.target.value)} style={{ fontSize: '0.95rem' }} />
-                                </div>
+                                <input
+                                    id="settings-db-name"
+                                    className={cn(UI.input, UI.mono)}
+                                    type="text"
+                                    spellCheck={false}
+                                    placeholder={dbDriver === 'sqlite' ? 'C:\\data\\sales.sqlite' : t('settings.dbDatabasePlaceholder')}
+                                    aria-describedby={dbDriver === 'sqlite' ? 'settings-db-file-help' : undefined}
+                                    value={dbDriver === 'sqlite' ? dbFile : dbName}
+                                    onChange={e => (dbDriver === 'sqlite' ? setDbFile : setDbName)(e.target.value)}
+                                />
+                                {dbDriver === 'sqlite' && <div id="settings-db-file-help" className={UI.caption}>{t('settings.dbFileHelp')}</div>}
                             </div>
 
                             {/* Test Result Alert */}
                             {dbTestResult && (
-                                <div role={dbTestResult.success ? 'status' : 'alert'} aria-live={dbTestResult.success ? 'polite' : 'assertive'} style={{ padding: '16px', borderRadius: '8px', background: dbTestResult.success ? '#ecfdf5' : '#fef2f2', border: `1px solid ${dbTestResult.success ? '#6ee7b7' : '#fca5a5'}`, color: dbTestResult.success ? '#065f46' : '#991b1b', marginBottom: '24px' }}>
-                                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{dbTestResult.success ? `✓ ${t('settings.dbTestSuccess')}` : `✗ ${t('settings.dbTestFailed')}`}</div>
-                                    <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{dbTestResult.message}</div>
+                                <div className={UI.alert} data-tone={dbTestResult.success ? 'ok' : 'error'} role={dbTestResult.success ? 'status' : 'alert'} aria-live={dbTestResult.success ? 'polite' : 'assertive'}>
+                                    <strong>{dbTestResult.success ? `✓ ${t('settings.dbTestSuccess')}` : `✗ ${t('settings.dbTestFailed')}`}</strong>
+                                    <div className={UI.alertDetail}>{dbTestResult.message}</div>
                                 </div>
                             )}
 
-                            {/* Buttons at bottom right */}
-                            <div className="settings-action-row form-action-row">
-                                <button type="button"
-                                    className="form-action-btn"
-                                    onClick={handleTestDB}
-                                    disabled={isTestingDB}>
-                                    {isTestingDB ? <Loader2 size={16} className="animate-spin" /> : null}
+                            <div className={cn(UI.actions, 'max-[720px]:flex-wrap max-[720px]:[&>button]:w-[min(180px,100%)] max-[720px]:[&>button]:flex-[1_1_120px]')}>
+                                <button type="button" className={UI.btn} onClick={handleTestDB} disabled={isTestingDB}>
+                                    {isTestingDB ? <Loader2 size={15} className="animate-spin" /> : null}
                                     {isTestingDB ? t('settings.testing') : t('settings.dbTest')}
                                 </button>
-                                <button type="button"
-                                    className="form-action-btn"
-                                    onClick={handleSaveDB}
-                                    disabled={isSavingDB}>
-                                    {isSavingDB ? <Loader2 size={16} className="animate-spin" /> : null}
+                                <button type="button" className={cn(UI.btn, UI.btnPrimary)} onClick={handleSaveDB} disabled={isSavingDB}>
+                                    {isSavingDB ? <Loader2 size={15} className="animate-spin" /> : null}
                                     {t('settings.save')}
                                 </button>
                             </div>
-
-                        </div>
+                        </section>
                     </div>
                 )}
 
@@ -660,37 +683,39 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                 {/* 环境 (Environment) */}
                 {activeMenu === '环境' && (
-                    <div className="settings-tab-content" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-                        <div style={{ background: '#fff', borderRadius: '16px', padding: '32px', border: '1px solid #f3f4f6', flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
-                                <Terminal size={22} aria-hidden="true" />
+                    <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
+                        <section className={cn(UI.card, UI.stack, 'gap-5')} aria-labelledby="settings-python-heading">
+                            <div className={UI.cardHead}>
                                 <div>
-                                    <h3 className="settings-section-title" style={{ margin: 0 }}>{t('settings.python')}</h3>
-                                    <p className="settings-section-desc" style={{ margin: '4px 0 0' }}>{t('settings.pythonHint')}</p>
+                                    <h3 className={UI.cardTitle} id="settings-python-heading">
+                                        <span className={UI.cardIcon} aria-hidden="true"><Terminal size={18} /></span>
+                                        {t('settings.python')}
+                                    </h3>
+                                    <p className={UI.cardDesc}>{t('settings.pythonHint')}</p>
                                 </div>
                             </div>
-                            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                                <button type="button" aria-pressed={pythonRuntime.mode === 'bundled'} onClick={() => { setPythonRuntime({ mode: 'bundled' }); setPythonTestResult(null); }} style={{ padding: '10px 14px', borderRadius: '10px', border: pythonRuntime.mode === 'bundled' ? '2px solid #2563eb' : '1px solid #e5e7eb', background: pythonRuntime.mode === 'bundled' ? '#eff6ff' : '#fff', fontWeight: 600, cursor: 'pointer' }}>{t('settings.bundledPython')}</button>
-                                <button type="button" aria-pressed={pythonRuntime.mode === 'external'} onClick={() => { setPythonRuntime({ mode: 'external', executable: pythonExecutable }); setPythonTestResult(null); }} style={{ padding: '10px 14px', borderRadius: '10px', border: pythonRuntime.mode === 'external' ? '2px solid #2563eb' : '1px solid #e5e7eb', background: pythonRuntime.mode === 'external' ? '#eff6ff' : '#fff', fontWeight: 600, cursor: 'pointer' }}>{t('settings.externalPython')}</button>
+                            <div className={UI.segmented} role="group" aria-label={t('settings.python')}>
+                                <button type="button" aria-pressed={pythonRuntime.mode === 'bundled'} onClick={() => { setPythonRuntime({ mode: 'bundled' }); setPythonTestResult(null); }}>{t('settings.bundledPython')}</button>
+                                <button type="button" aria-pressed={pythonRuntime.mode === 'external'} onClick={() => { setPythonRuntime({ mode: 'external', executable: pythonExecutable }); setPythonTestResult(null); }}>{t('settings.externalPython')}</button>
                             </div>
-                            <div style={{ marginBottom: '24px' }}>
-                                <label className="settings-section-title" htmlFor="settings-python-executable" style={{ fontSize: '0.9rem', marginBottom: '12px' }}>{t('settings.pythonExecutable')}</label>
-                                <div className="settings-input-wrapper" style={{ margin: 0, borderRadius: '12px', padding: '12px 16px', background: pythonRuntime.mode === 'bundled' ? '#f9fafb' : '#fff', border: '1px solid #e5e7eb', display: 'flex', gap: '8px' }}>
-                                    <input id="settings-python-executable" type="text" value={pythonRuntime.mode === 'bundled' ? (pythonRuntime.label || t('settings.bundledPython')) : pythonExecutable} onChange={e => setPythonExecutable(e.target.value)} readOnly={pythonRuntime.mode === 'bundled'} placeholder="例如: D:\\data_agent\\.venv\\Scripts\\python.exe" style={{ fontSize: '0.95rem', width: '100%' }} />
-                                    <button type="button" onClick={handleChoosePython} disabled={pythonRuntime.mode !== 'external'} style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #e5e7eb', background: '#fff', cursor: pythonRuntime.mode !== 'external' ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>{t('settings.choose')}</button>
+                            <div className={UI.field}>
+                                <label className={UI.label} htmlFor="settings-python-executable">{t('settings.pythonExecutable')}</label>
+                                <div className={UI.inputGroup}>
+                                    <input id="settings-python-executable" className={cn(UI.input, UI.mono)} type="text" spellCheck={false} value={pythonRuntime.mode === 'bundled' ? (pythonRuntime.label || t('settings.bundledPython')) : pythonExecutable} onChange={e => setPythonExecutable(e.target.value)} readOnly={pythonRuntime.mode === 'bundled'} placeholder="例如: D:\\data_agent\\.venv\\Scripts\\python.exe" />
+                                    <button type="button" className={UI.btn} onClick={handleChoosePython} disabled={pythonRuntime.mode !== 'external'}>{t('settings.choose')}</button>
                                 </div>
                             </div>
                             {pythonTestResult && (
-                                <div role={pythonTestResult.success ? 'status' : 'alert'} aria-live={pythonTestResult.success ? 'polite' : 'assertive'} style={{ padding: '16px', borderRadius: '8px', background: pythonTestResult.success ? '#ecfdf5' : '#fef2f2', border: `1px solid ${pythonTestResult.success ? '#6ee7b7' : '#fca5a5'}`, color: pythonTestResult.success ? '#065f46' : '#991b1b', marginBottom: '24px' }}>
-                                    <div style={{ fontWeight: 600, marginBottom: '4px' }}>{pythonTestResult.success ? `✓ ${t('settings.saveSuccess')}` : `✗ ${t('settings.saveFailed')}`}</div>
-                                    <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{pythonTestResult.message}</div>
+                                <div className={UI.alert} data-tone={pythonTestResult.success ? 'ok' : 'error'} role={pythonTestResult.success ? 'status' : 'alert'} aria-live={pythonTestResult.success ? 'polite' : 'assertive'}>
+                                    <strong>{pythonTestResult.success ? `✓ ${t('settings.saveSuccess')}` : `✗ ${t('settings.saveFailed')}`}</strong>
+                                    <div className={UI.alertDetail}>{pythonTestResult.message}</div>
                                 </div>
                             )}
-                            <div className="settings-action-row form-action-row">
-                                <button type="button" onClick={handleTestPython} className="form-action-btn" disabled={isTestingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isTestingPython ? <Loader2 size={16} className="animate-spin" /> : null}{isTestingPython ? t('settings.testingPython') : t('settings.testPython')}</button>
-                                <button type="button" onClick={handleSavePython} className="form-action-btn" disabled={isSavingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isSavingPython ? <Loader2 size={16} className="animate-spin" /> : null}{t('settings.savePython')}</button>
+                            <div className={cn(UI.actions, 'max-[720px]:flex-wrap max-[720px]:[&>button]:w-[min(180px,100%)] max-[720px]:[&>button]:flex-[1_1_120px]')}>
+                                <button type="button" onClick={handleTestPython} className={UI.btn} disabled={isTestingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isTestingPython ? <Loader2 size={15} className="animate-spin" /> : null}{isTestingPython ? t('settings.testingPython') : t('settings.testPython')}</button>
+                                <button type="button" onClick={handleSavePython} className={cn(UI.btn, UI.btnPrimary)} disabled={isSavingPython || (pythonRuntime.mode === 'external' && !pythonExecutable.trim())}>{isSavingPython ? <Loader2 size={15} className="animate-spin" /> : null}{t('settings.savePython')}</button>
                             </div>
-                        </div>
+                        </section>
                     </div>
                 )}
 

@@ -1,4 +1,5 @@
 import { Type, type Static } from "typebox";
+import { rebindCall } from "../answering/report.js";
 import { Value } from "typebox/value";
 import type { JsonValue } from "@earendil-works/chord";
 import type {
@@ -8,7 +9,6 @@ import type {
   Context,
 } from "@earendil-works/pi-agent-core";
 import { AnsweringError, FIELD_FORMS, FIELD_PATHS } from "../answering/public.js";
-import { renderSpecFeedback } from "../answering/spec-feedback.js";
 import { renderEntityIdentity } from "../answering/entity-identity.js";
 import { renderCalendarCoverage } from "../answering/calendar-coverage.js";
 import type {
@@ -166,10 +166,10 @@ function fanoutText(view: Awaited<ReturnType<Answering["execute"]>>): string {
   return `[FANOUT_CHECK] status=${report.status}${reason}\n${findings.length ? `Observed source-key duplication: ${findings.join("; ")}. This is a bounded metric-copy observation, not a business-semantic verdict.` : "No source-key duplication was observed within the supported probe coverage."}`;
 }
 
-/** Fields that settle who is counted; answer-fields asks the user about them before following the advice. */
+/** Fields that settle who is counted; the spec Skill asks the user about them before following the advice. */
 const POPULATION_DECISION = /^population\.(entity|eligibility|conditions)$/;
 
-/** How the model reads the Runtime's advice on an open field (answer-fields 决定与澄清); advice is never evidence. */
+/** How the model reads the Runtime's advice on an open field (spec Skill 的决定与澄清); advice is never evidence. */
 function adviceText(path: string, advice: AdviceView): string {
   // Rule 2 of 决定与澄清: a population field is asked about before any advice is followed.
   const askFirst = POPULATION_DECISION.test(path)
@@ -243,6 +243,9 @@ export function fieldStateTable(view: AnswerRevisionView): string {
   const lines: string[] = [];
   const report = view.role === "report";
   if (report) lines.push("- 报告任务：只设共享字段（population.* 与 measures.<名字>），本身不出结果；每张图用 parentTaskId 建一个图表查询");
+  if (view.staleChartQueries && view.staleChartQueries.length > 0) {
+    lines.push(`- 这些图表查询仍绑定修改前的报告任务，查询前先逐个 rebind：${view.staleChartQueries.map((taskId) => rebindCall(taskId)).join("；")}`);
+  }
   if (view.parent) {
     lines.push(`- 报告任务 ${view.parent.taskId}：继承自 ${view.parent.revisionId}${view.parent.current ? "" : "；报告任务已修改，先用 rebind: true 重新绑定"}`);
     if (view.measureRef) lines.push(`- 度量取自报告任务的 measures.${view.measureRef}`);
@@ -310,7 +313,6 @@ function setSpecTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
       const stale = before && view.revisionId !== before.task.currentRevisionId && before.candidate && before.publication?.candidateId !== before.candidate.candidateId
         ? [`- 失效: 上一版的结果候选 ${before.candidate.candidateId} 未发布，已不能发布`]
         : [];
-      const feedback = renderSpecFeedback(view.specFeedback);
       const identity = renderEntityIdentity(view.entityIdentity);
       const calendar = renderCalendarCoverage(view.calendarCoverage);
       const changed = !before || view.revisionId !== before.task.currentRevisionId;
@@ -323,7 +325,6 @@ function setSpecTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
         ...stale,
         ...(identity ? [identity] : []),
         ...(calendar ? [calendar] : []),
-        ...(feedback ? [feedback] : []),
         fieldsJson(view),
       ].join("\n"), view);
     },
@@ -438,7 +439,7 @@ export function createAnsweringAgentToolDefinitions(
         "字段写法：\"n/a\"；直接写值（视为假定，发布时披露）；{value, basis:\"request\", quote}（原题逐字片段）；{value, cite:[{source, quote}]}（source 为 knowledge:<id>、schema:<表.列>、clarification:<id> 或 message）；{value, evidenceIds}（query_database 返回的观测证据）；{value, basis:\"assumed\", rationale}；{open:[候选,…]}。",
         "必须声明：population.entity、population.eligibility、population.conditions、population.time、measure.formula、grouping、selection、output（不适用写 \"n/a\"）；measure.formula 的 op 为计数、平均、比率类时还要 measure.countGrain，平均与比率类要 measure.denominator，cumulative/rolling 要 measure.window；selection 不是 n/a 时要 selection.ties；population.source 有多张表时要 population.joinMultiplicity。返回的「未声明」列出还缺的字段。",
         "measure.formula 是逐层表达式 {op, per?, of | numerator+denominator | from+to}；嵌套顺序就是聚合顺序，多于一层时每个内层都写 per（最外层按 grouping 计算，可省略）。op 取 count、count_distinct、sum、avg、median、min、max、ratio、percentage、difference、change_rate、pp_difference、cumulative、rolling；以上都不适用时用 custom 并写 description。",
-        "待定字段先用 query_database 的 probe={path, alternativeId} 跑每个候选（alternativeId 见返回的状态表），无法单独执行的候选写 {notProbeable:{<alternativeId>: 理由}}；输出全部相同时系统视为等价；不同时系统在最后一个探针返回时附上比较建议（[ADVICE]），再按 answer-fields 的「决定与澄清」处理：有能排除其他候选的依据时引用它决定；统计总体字段或建议无倾向时，能询问用户就先用 ask_user_clarification 询问；其余按建议的倾向写 {value:<候选原值>, rationale, evidenceIds?} 决定。建议不是证据；偏离建议的明显倾向须附 adviceOverride（理由与能确定该字段的证据）；建议不可用时照常决定（发布时披露未经比较），不要改写为假定。其他字段改动后，此前的探针作废（状态表显示 stale），须重跑。",
+        "待定字段先用 query_database 的 probe={path, alternativeId} 跑每个候选（alternativeId 见返回的状态表），无法单独执行的候选写 {notProbeable:{<alternativeId>: 理由}}；输出全部相同时系统视为等价；不同时系统在最后一个探针返回时附上比较建议（[ADVICE]），再按 spec Skill 的「决定与澄清」处理：有能排除其他候选的依据时引用它决定；统计总体字段或建议无倾向时，能询问用户就先用 ask_user_clarification 询问；其余按建议的倾向写 {value:<候选原值>, rationale, evidenceIds?} 决定。建议不是证据；偏离建议的明显倾向须附 adviceOverride（理由与能确定该字段的证据）；建议不可用时照常决定（发布时披露未经比较），不要改写为假定。其他字段改动后，此前的探针作废（状态表显示 stale），须重跑。",
         "改写已设置的字段须附 reason；每个路径独立生效，失败的路径不影响其他路径，按返回的 ✗ 原因只重发失败的路径。",
         "报告和看板：先用 report: true 建一个报告任务，写共享的 population.* 和各度量定义 measures.<名字>（value 为 {formula, countGrain?, denominator?, window?}）；再为每张图用 parentTaskId 建图表查询，写 measure.formula: {ref:\"<名字>\"}、grouping、selection、output 等。图表查询改 population.* 须附 reason（记为偏离并披露）；报告任务修改后，图表查询先 rebind: true 再查询。",
       ],
