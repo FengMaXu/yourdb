@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "yourdb desktop client",
   "author": "OpenAI Codex",
   "type": "module",
