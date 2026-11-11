@@ -31,4 +31,21 @@ export default defineConfig([
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     },
   },
+  {
+    // Colours come from the theme tokens (src/styles/theme.css, DESIGN.md), never a raw hex.
+    files: ['src/**/*.{ts,tsx}'],
+    ignores: ['src/**/*.test.{ts,tsx}', 'src/**/__tests__/**', 'src/components/dev/**'],
+    rules: {
+      'no-restricted-syntax': ['error',
+        {
+          selector: 'Literal[value=/#[0-9a-fA-F]{3,8}(?![0-9a-zA-Z-])/]',
+          message: 'Use a theme token (text-body, bg-success-soft, var(--brand), …) instead of a raw hex colour. See DESIGN.md.',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/#[0-9a-fA-F]{3,8}(?![0-9a-zA-Z-])/]',
+          message: 'Use a theme token (text-body, bg-success-soft, var(--brand), …) instead of a raw hex colour. See DESIGN.md.',
+        },
+      ],
+    },
+  },
 ])

@@ -1,2 +1,0 @@
-/* The landing page's own styles, loaded with it, in its own layer, below the utilities (styles/app.css). */
-@import "./landing.css" layer(landing);

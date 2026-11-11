@@ -57,7 +57,7 @@ function Required() {
 
 function Configured({ children }: { children: React.ReactNode }) {
     return (
-        <span className="inline-flex h-5 items-center gap-[3px] rounded-full bg-[#ecfdf5] pr-[7px] pl-[5px] text-[0.72rem] font-[550] whitespace-nowrap text-[#047857]">
+        <span className="inline-flex h-5 items-center gap-[3px] rounded-full bg-success-soft pr-[7px] pl-[5px] text-[0.72rem] font-[550] whitespace-nowrap text-success">
             <Check className="size-3" aria-hidden="true" />{children}
         </span>
     );
@@ -70,12 +70,12 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
     return (
         // overflow-clip, not hidden: the footer below must stick to the page's scroller.
         <div className={cn('grid min-h-0 flex-1 grid-cols-1 overflow-clip rounded-2xl border border-border bg-white min-[761px]:grid-cols-[232px_minmax(0,1fr)]', REDUCED_MOTION)}>
-            <aside className="flex min-h-0 flex-col gap-0.5 overflow-y-auto border-b border-border bg-[#fafaf9] px-2.5 py-3 min-[761px]:border-r min-[761px]:border-b-0" aria-label={t('plugins.listTitle')}>
+            <aside className="flex min-h-0 flex-col gap-0.5 overflow-y-auto border-b border-border bg-paper px-2.5 py-3 min-[761px]:border-r min-[761px]:border-b-0" aria-label={t('plugins.listTitle')}>
                 <div className="flex items-center justify-between pt-0.5 pr-1 pb-2 pl-2 text-xs font-semibold text-muted-foreground">
                     <span>{t('plugins.listTitle')}</span>
                     <button
                         type="button"
-                        className={cn('inline-grid size-[26px] place-items-center rounded-[7px] text-muted-foreground transition-[background-color,color,transform] hover:bg-[#efeeec] hover:text-foreground active:scale-[0.92] focus-visible:outline-offset-1', BRAND_FOCUS)}
+                        className={cn('inline-grid size-[26px] place-items-center rounded-md text-muted-foreground transition-[background-color,color,transform] hover:bg-muted hover:text-foreground active:scale-[0.92] focus-visible:outline-offset-1', BRAND_FOCUS)}
                         onClick={onAdd}
                         aria-label={t('plugins.add')}
                         title={t('plugins.add')}
@@ -92,14 +92,14 @@ const McpSettings: React.FC<McpSettingsProps> = (props) => {
                                 <button
                                     type="button"
                                     className={cn(
-                                        'relative flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-[9px] text-left transition-[background-color,box-shadow] hover:bg-[#f2f1ef] focus-visible:outline-offset-1',
+                                        'relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-[9px] text-left transition-[background-color,box-shadow] hover:bg-hover focus-visible:outline-offset-1',
                                         'aria-[current=true]:bg-white aria-[current=true]:shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)]',
                                         BRAND_FOCUS,
                                     )}
                                     aria-current={selected === index ? 'true' : undefined}
                                     onClick={() => onSelect(index)}
                                 >
-                                    <McpDot color={item.enabled ? (status?.fg ?? '#a8a29e') : '#d6d3d1'} live={item.enabled && status?.live} />
+                                    <McpDot color={item.enabled ? (status?.fg ?? 'var(--faint)') : 'var(--border-strong)'} live={item.enabled && status?.live} />
                                     <span className="grid min-w-0 gap-px">
                                         <span className="truncate text-sm font-semibold text-foreground">{item.preset?.title ?? (item.name || t('plugins.unnamedSrv'))}</span>
                                         <span className="text-xs text-muted-foreground">{subtitle(item, t)}</span>
@@ -142,7 +142,7 @@ const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: numb
                         id={switchId}
                         checked={server.enabled}
                         onCheckedChange={(checked) => onField(index, 'enabled', checked)}
-                        className="data-[size=default]:h-5 data-[size=default]:w-9 data-checked:bg-brand data-unchecked:bg-[#d6d3d1] hover:data-unchecked:bg-[#cfccc9] focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+                        className="data-[size=default]:h-5 data-[size=default]:w-9 data-checked:bg-brand data-unchecked:bg-border-strong hover:data-unchecked:bg-border-strong focus-visible:border-transparent focus-visible:ring-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                     />
                     <label htmlFor={switchId} className="cursor-pointer text-[0.85rem] text-foreground select-none">{t('plugins.enableServer')}</label>
                 </div>
@@ -155,10 +155,10 @@ const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: numb
             </div>
 
             {/* Flush with the page scroller's edge, past its bottom padding (32px, 16px on a narrow screen). */}
-            <footer className="sticky -bottom-4 z-[1] flex flex-wrap items-center gap-2.5 border-t border-border bg-[#fafaf9]/92 px-4 py-3.5 backdrop-blur-[8px] min-[721px]:-bottom-8 min-[761px]:flex-nowrap min-[761px]:px-7">
+            <footer className="sticky -bottom-4 z-[1] flex flex-wrap items-center gap-2.5 border-t border-border bg-paper/92 px-4 py-3.5 backdrop-blur-[8px] min-[721px]:-bottom-8 min-[761px]:flex-nowrap min-[761px]:px-7">
                 <div className="min-w-0 flex-1 basis-full text-[0.82rem] min-[761px]:basis-auto" role={testResult ? (testResult.success ? 'status' : 'alert') : undefined} aria-live="polite">
                     {testResult && (
-                        <span className={cn('inline-flex animate-rise-sm items-center gap-[5px] break-words [animation-duration:260ms]', testResult.success ? 'text-[#047857]' : 'text-[#b91c1c]')}>
+                        <span className={cn('inline-flex animate-rise-sm items-center gap-[5px] break-words [animation-duration:260ms]', testResult.success ? 'text-success' : 'text-destructive')}>
                             {testResult.success ? <Check className="size-3.5" aria-hidden="true" /> : null}
                             {testResult.message}
                         </span>
@@ -191,7 +191,7 @@ const TextField: React.FC<{ presetId: string; field: MCPPresetField; server: MCP
                 {secret && field.configured && <Configured>{t('plugins.secretConfigured')}</Configured>}
                 {field.link && (
                     <a
-                        className={cn('group/link ml-auto inline-flex items-center gap-1 rounded-[4px] text-[0.8rem] font-medium whitespace-nowrap text-brand no-underline hover:underline hover:underline-offset-[3px] focus-visible:outline-offset-2', BRAND_FOCUS)}
+                        className={cn('group/link ml-auto inline-flex items-center gap-1 rounded-sm text-[0.8rem] font-medium whitespace-nowrap text-brand no-underline hover:underline hover:underline-offset-[3px] focus-visible:outline-offset-2', BRAND_FOCUS)}
                         href={field.link.url}
                         target="_blank"
                         rel="noreferrer"
@@ -232,8 +232,8 @@ const ChoiceField: React.FC<{ field: MCPPresetField; server: MCPServerConfig; in
                             key={choice.value}
                             data-checked={on ? 'true' : undefined}
                             className={cn(
-                                'group/choice relative flex cursor-pointer items-start gap-2.5 rounded-[11px] border border-input bg-white p-3 transition-[border-color,background-color,box-shadow,transform] hover:border-[#d6d3d1] hover:bg-[#fafaf9] active:scale-[0.985]',
-                                'data-[checked=true]:border-brand/50 data-[checked=true]:bg-[#fffbf7] data-[checked=true]:shadow-[inset_0_0_0_0.5px_rgba(194,65,12,0.5)]',
+                                'group/choice relative flex cursor-pointer items-start gap-2.5 rounded-lg border border-input bg-white p-3 transition-[border-color,background-color,box-shadow,transform] hover:border-border-strong hover:bg-paper active:scale-[0.985]',
+                                'data-[checked=true]:border-brand/50 data-[checked=true]:bg-brand-soft data-[checked=true]:shadow-[inset_0_0_0_0.5px_rgba(194,65,12,0.5)]',
                             )}
                         >
                             <input
@@ -243,7 +243,7 @@ const ChoiceField: React.FC<{ field: MCPPresetField; server: MCPServerConfig; in
                                 onChange={(e) => onPresetValue(index, field.key, e.target.checked ? [...chosen, choice.value] : chosen.filter((value) => value !== choice.value), false)}
                             />
                             <span
-                                className="mt-px grid size-4 flex-none place-items-center rounded-[5px] border-[1.5px] border-[#d6d3d1] bg-white text-transparent transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand group-data-[checked=true]/choice:animate-pop group-data-[checked=true]/choice:border-brand group-data-[checked=true]/choice:bg-brand group-data-[checked=true]/choice:text-white"
+                                className="mt-px grid size-4 flex-none place-items-center rounded-[5px] border-[1.5px] border-border-strong bg-white text-transparent transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand group-data-[checked=true]/choice:animate-pop group-data-[checked=true]/choice:border-brand group-data-[checked=true]/choice:bg-brand group-data-[checked=true]/choice:text-white"
                                 aria-hidden="true"
                             >
                                 <Check className="size-[11px]" />
@@ -293,7 +293,7 @@ const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: Mc
                 {text('mcp-server-name', t('plugins.name'), 'name', 'my-server', true)}
                 <div className={FIELD}>
                     <div className={FIELD_HEAD}><span id="mcp-transport-label">{t('plugins.transport')}</span></div>
-                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-[#f5f5f4] p-1" role="radiogroup" aria-labelledby="mcp-transport-label">
+                    <div className="grid grid-cols-3 gap-1 rounded-xl bg-muted p-1" role="radiogroup" aria-labelledby="mcp-transport-label">
                         {TRANSPORTS.map((option) => (
                             <button
                                 key={option.value}
@@ -301,7 +301,7 @@ const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: Mc
                                 role="radio"
                                 aria-checked={server.transport === option.value || (option.value === 'http' && server.transport === 'streamable-http')}
                                 className={cn(
-                                    'grid gap-0.5 rounded-[9px] p-2 text-center transition-[background-color,box-shadow] focus-visible:outline-offset-1',
+                                    'grid gap-0.5 rounded-md p-2 text-center transition-[background-color,box-shadow] focus-visible:outline-offset-1',
                                     'not-aria-checked:hover:bg-white/55 aria-checked:bg-white aria-checked:shadow-[0_1px_2px_rgba(28,25,23,0.08),0_0_0_1px_var(--border)]',
                                     BRAND_FOCUS,
                                 )}
@@ -346,7 +346,7 @@ const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: Mc
 
             <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen} className="border-t border-border pt-[18px]">
                 <CollapsibleTrigger
-                    className={cn('group/adv inline-flex w-fit items-center gap-1.5 rounded-[4px] text-[0.85rem] font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-offset-[3px]', BRAND_FOCUS)}
+                    className={cn('group/adv inline-flex w-fit items-center gap-1.5 rounded-sm text-[0.85rem] font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-offset-[3px]', BRAND_FOCUS)}
                 >
                     <ChevronRight className="size-3.5 transition-transform group-data-panel-open/adv:rotate-90" aria-hidden="true" />
                     {t('plugins.sectionAdvanced')}
@@ -360,7 +360,7 @@ const CustomForm: React.FC<{ server: MCPServerConfig; index: number; onField: Mc
                         </div>
                         <button
                             type="button"
-                            className="self-start rounded-[4px] border-0 bg-transparent p-0 text-[0.82rem] font-medium text-[#b91c1c] hover:underline hover:underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b91c1c]"
+                            className="self-start rounded-sm border-0 bg-transparent p-0 text-[0.82rem] font-medium text-destructive hover:underline hover:underline-offset-[3px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-destructive"
                             onClick={() => onRemove(index)}
                         >
                             {t('plugins.deleteConfig')}

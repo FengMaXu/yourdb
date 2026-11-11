@@ -29,7 +29,7 @@ const AgentOrbitIcon: React.FC<AgentOrbitIconProps> = ({
         viewBox="0 0 100 100"
         width={size}
         height={size}
-        className={cn('block overflow-hidden text-current', animated && 'drop-shadow-[0_0_8px_rgba(240,68,56,0.18)]', className)}
+        className={cn('block overflow-hidden text-current', animated && 'drop-shadow-[0_0_8px_rgba(194,65,12,0.18)]', className)}
         aria-hidden="true"
         focusable="false"
     >

@@ -98,7 +98,7 @@ function renderFileActions(
             <a
                 href={resolved}
                 download={title}
-                className="max-w-[min(100%,560px)] min-w-0 truncate font-semibold text-[#2563eb] underline decoration-[#bfdbfe] underline-offset-2 hover:text-[#1d4ed8] hover:decoration-current focus-visible:text-[#1d4ed8] focus-visible:decoration-current focus-visible:outline-none"
+                className="max-w-[min(100%,560px)] min-w-0 truncate font-semibold text-link underline decoration-link-border underline-offset-2 hover:text-link hover:decoration-current focus-visible:text-link focus-visible:decoration-current focus-visible:outline-none"
                 {...linkProps}
             >
                 {children}
@@ -150,7 +150,7 @@ export const createMarkdownComponents = (
         return (
             <button
                 type="button"
-                className="group/image relative my-2.5 inline-flex max-h-80 max-w-[min(100%,720px)] cursor-zoom-in overflow-hidden rounded-lg border border-[#dbe3ec] bg-[#f8fafc] p-0 text-left align-top [font:inherit] transition-[border-color,box-shadow] hover:border-[#94a3b8] hover:shadow-[0_8px_22px_-18px_rgba(15,23,42,0.85)] focus-visible:border-[#94a3b8] focus-visible:shadow-[0_8px_22px_-18px_rgba(15,23,42,0.85)] focus-visible:outline-none [&_img]:block [&_img]:h-auto [&_img]:max-h-80 [&_img]:w-auto [&_img]:max-w-full [&_img]:object-contain"
+                className="group/image relative my-2.5 inline-flex max-h-80 max-w-[min(100%,720px)] cursor-zoom-in overflow-hidden rounded-lg border border-border-strong bg-paper p-0 text-left align-top [font:inherit] transition-[border-color,box-shadow] hover:border-faint hover:shadow-[0_8px_22px_-18px_rgba(28,25,23,0.85)] focus-visible:border-faint focus-visible:shadow-[0_8px_22px_-18px_rgba(28,25,23,0.85)] focus-visible:outline-none [&_img]:block [&_img]:h-auto [&_img]:max-h-80 [&_img]:w-auto [&_img]:max-w-full [&_img]:object-contain"
                 onClick={(event) => {
                     event.stopPropagation();
                     openPreview(resolvedSrc, title, fileType);
@@ -159,7 +159,7 @@ export const createMarkdownComponents = (
                 title={title}
             >
                 {image}
-                <span className="absolute right-2 bottom-2 inline-flex size-[30px] translate-y-[3px] items-center justify-center rounded-full bg-[rgba(15,23,42,0.78)] text-white opacity-0 transition-[opacity,transform] group-hover/image:translate-y-0 group-hover/image:opacity-100 group-focus-visible/image:translate-y-0 group-focus-visible/image:opacity-100" aria-hidden="true">
+                <span className="absolute right-2 bottom-2 inline-flex size-[30px] translate-y-[3px] items-center justify-center rounded-full bg-[rgba(28,25,23,0.78)] text-white opacity-0 transition-[opacity,transform] group-hover/image:translate-y-0 group-hover/image:opacity-100 group-focus-visible/image:translate-y-0 group-focus-visible/image:opacity-100" aria-hidden="true">
                     <Eye size={16} strokeWidth={2} />
                 </span>
             </button>

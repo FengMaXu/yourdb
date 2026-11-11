@@ -104,7 +104,7 @@ function rewriteHtmlAssets(html: string, sourceUrl: string): string {
 /** A white page inside the preview body, for Markdown, CSV and text. */
 const SHEET = 'box-border min-h-full bg-white px-8 pt-7 pb-12';
 /** Bordered table cells with a tinted header row. */
-const CELLS = '[&_td]:border [&_td]:border-[#e5e7eb] [&_td]:px-[11px] [&_td]:py-[9px] [&_td]:text-left [&_td]:align-top [&_th]:border [&_th]:border-[#e5e7eb] [&_th]:bg-[#f8fafc] [&_th]:px-[11px] [&_th]:py-[9px] [&_th]:text-left [&_th]:align-top [&_th]:font-bold [&_th]:text-[#334155]';
+const CELLS = '[&_td]:border [&_td]:border-border [&_td]:px-[11px] [&_td]:py-[9px] [&_td]:text-left [&_td]:align-top [&_th]:border [&_th]:border-border [&_th]:bg-paper [&_th]:px-[11px] [&_th]:py-[9px] [&_th]:text-left [&_th]:align-top [&_th]:font-bold [&_th]:text-foreground';
 
 const GlobalPreviewModal: React.FC = () => {
     const { isOpen, url, title, fileType, closePreview, emitPreviewMessage } = usePreview();
@@ -298,13 +298,13 @@ const GlobalPreviewModal: React.FC = () => {
                     <thead><tr>{headers.map((header, index) => <th key={index}>{header || t('preview.csvColumn').replace('{number}', String(index + 1))}</th>)}</tr></thead>
                     <tbody>{rows.slice(1, 201).map((row, rowIndex) => <tr key={rowIndex}>{headers.map((_, columnIndex) => <td key={columnIndex}>{row[columnIndex] || ''}</td>)}</tr>)}</tbody>
                 </table>
-                {rows.length > 201 && <div className="pt-3 text-xs text-[#64748b]">{t('preview.csvLimit')}</div>}
+                {rows.length > 201 && <div className="pt-3 text-xs text-muted-foreground">{t('preview.csvLimit')}</div>}
             </div>
         );
     };
 
     const renderMarkdown = () => (
-        <article className={cn(SHEET, CELLS, 'mx-auto max-w-[1000px] leading-[1.72] text-[#1f2937] [&_img]:mx-auto [&_img]:my-[18px] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-md [&_img]:border [&_img]:border-[#e5e7eb] [&_table]:w-full [&_table]:border-collapse [&_table]:text-[13px]', MARKDOWN_DOCUMENT)}>
+        <article className={cn(SHEET, CELLS, 'mx-auto max-w-[1000px] leading-[1.72] text-foreground [&_img]:mx-auto [&_img]:my-[18px] [&_img]:block [&_img]:h-auto [&_img]:max-w-full [&_img]:rounded-md [&_img]:border [&_img]:border-border [&_table]:w-full [&_table]:border-collapse [&_table]:text-[13px]', MARKDOWN_DOCUMENT)}>
             <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -319,33 +319,33 @@ const GlobalPreviewModal: React.FC = () => {
 
     if (!isOpen || !url) return null;
 
-    const ICON_BUTTON = 'inline-flex size-[34px] items-center justify-center rounded-lg border border-transparent bg-transparent text-[#475569] transition-[background-color,border-color,color,transform] hover:border-[var(--border-light)] hover:bg-white hover:text-[#111827] active:scale-[0.96]';
-    const STATE = 'grid min-h-full place-items-center p-7 text-center text-[0.92rem] text-[var(--text-secondary)]';
+    const ICON_BUTTON = 'inline-flex size-[34px] items-center justify-center rounded-lg border border-transparent bg-transparent text-body transition-[background-color,border-color,color,transform] hover:border-border hover:bg-white hover:text-foreground active:scale-[0.96]';
+    const STATE = 'grid min-h-full place-items-center p-7 text-center text-[0.92rem] text-body';
     const ready = !loading && !loadError;
 
     return (
         <div className="pointer-events-none fixed inset-0 z-[2200] p-0 min-[721px]:p-6" role="dialog" aria-modal="false" aria-label={title || t('preview.title')}>
             <section
-                className="pointer-events-auto fixed inset-0 flex h-screen w-screen animate-rise-sm [animation-duration:220ms] flex-col overflow-hidden rounded-none border border-white/72 bg-white shadow-[0_34px_90px_-42px_rgba(17,24,39,0.78)] motion-reduce:animate-none min-[721px]:inset-auto min-[721px]:h-auto min-[721px]:min-h-[420px] min-[721px]:w-auto min-[721px]:rounded-[10px]"
+                className="pointer-events-auto fixed inset-0 flex h-screen w-screen animate-rise-sm [animation-duration:220ms] flex-col overflow-hidden rounded-none border border-white/72 bg-white shadow-[0_34px_90px_-42px_rgba(28,25,23,0.78)] motion-reduce:animate-none min-[721px]:inset-auto min-[721px]:h-auto min-[721px]:min-h-[420px] min-[721px]:w-auto min-[721px]:rounded-lg"
                 style={narrow ? undefined : { width: rect.width, height: rect.height, left: rect.left, top: rect.top }}
             >
                 <header
-                    className="flex min-h-14 cursor-move touch-none items-center justify-between gap-4 border-b border-[var(--border-light)] bg-[#f8fafc] py-2.5 pr-2.5 pl-3.5 select-none min-[721px]:min-h-[58px] min-[721px]:py-3 min-[721px]:pr-3.5 min-[721px]:pl-[18px]"
+                    className="flex min-h-14 cursor-move touch-none items-center justify-between gap-4 border-b border-border bg-paper py-2.5 pr-2.5 pl-3.5 select-none min-[721px]:min-h-[58px] min-[721px]:py-3 min-[721px]:pr-3.5 min-[721px]:pl-[18px]"
                     onPointerDown={(event) => { if (!narrow) startPointerInteraction('move', event); }}
                 >
                     <div className="flex min-w-0 flex-col gap-1">
-                        <div className="max-w-[calc(100vw-172px)] truncate text-[0.98rem] font-extrabold text-[#111827] min-[721px]:max-w-[62vw]">{title || t('preview.title')}</div>
-                        <div className="text-[0.78rem] font-bold text-[#64748b] uppercase">{normalizedType || t('preview.file')}</div>
+                        <div className="max-w-[calc(100vw-172px)] truncate text-[0.98rem] font-extrabold text-foreground min-[721px]:max-w-[62vw]">{title || t('preview.title')}</div>
+                        <div className="text-[0.78rem] font-bold text-muted-foreground uppercase">{normalizedType || t('preview.file')}</div>
                     </div>
                     <div className="flex flex-none cursor-default items-center gap-1.5" onPointerDown={(event) => event.stopPropagation()}>
                         <button type="button" className={ICON_BUTTON} onClick={handleOpenExternal} aria-label={t('preview.openExternal')} title={t('preview.openExternal')}><ExternalLink className="size-[18px]" /></button>
                         <button type="button" className={ICON_BUTTON} onClick={closePreview} aria-label={t('preview.close')} title={t('preview.close')}><X className="size-[19px]" strokeWidth={2} /></button>
                     </div>
                 </header>
-                <div ref={bodyRef} className={cn('relative min-h-0 flex-1 overflow-auto bg-[#eef2f7]', isImage && 'grid place-items-center p-6')}>
+                <div ref={bodyRef} className={cn('relative min-h-0 flex-1 overflow-auto bg-muted', isImage && 'grid place-items-center p-6')}>
                     {loading && <div className={STATE} role="status">{t('preview.loading')}</div>}
-                    {!loading && loadError && <div className={cn(STATE, 'text-[#b91c1c]')} role="alert" aria-live="assertive">{loadError}</div>}
-                    {ready && isImage && <img className="block max-h-full max-w-full bg-white object-contain shadow-[0_12px_30px_-24px_rgba(15,23,42,0.72)]" src={url} alt={title || t('preview.file')} />}
+                    {!loading && loadError && <div className={cn(STATE, 'text-destructive')} role="alert" aria-live="assertive">{loadError}</div>}
+                    {ready && isImage && <img className="block max-h-full max-w-full bg-white object-contain shadow-[0_12px_30px_-24px_rgba(28,25,23,0.72)]" src={url} alt={title || t('preview.file')} />}
                     {ready && isHtml && (
                         <div className="absolute top-0 left-0 origin-top-left" style={{ width: iframeWidth, height: iframeHeight, transform: `scale(${iframeScale})` }}>
                             <iframe ref={iframeRef} srcDoc={htmlContent} title={title || t('preview.title')} className="block border-0 bg-white" sandbox="allow-scripts allow-downloads allow-forms allow-popups" style={{ width: iframeWidth, height: iframeHeight }} />
@@ -353,12 +353,12 @@ const GlobalPreviewModal: React.FC = () => {
                     )}
                     {ready && isMarkdown && renderMarkdown()}
                     {ready && isCsv && renderCsv()}
-                    {ready && isText && <pre className={cn(SHEET, 'm-0 overflow-auto font-mono text-[13px] leading-[1.65] break-words whitespace-pre-wrap text-[#334155]')}>{fileContent}</pre>}
+                    {ready && isText && <pre className={cn(SHEET, 'm-0 overflow-auto font-mono text-[13px] leading-[1.65] break-words whitespace-pre-wrap text-foreground')}>{fileContent}</pre>}
                     {ready && !isImage && !isHtml && !isMarkdown && !isCsv && !isText && <div className={STATE} role="status">{t('preview.unsupported')}</div>}
                 </div>
                 {!narrow && (
                     <div
-                        className="absolute right-0 bottom-0 size-[22px] cursor-nwse-resize touch-none after:absolute after:right-1.5 after:bottom-1.5 after:size-2.5 after:border-r-2 after:border-b-2 after:border-[rgba(71,85,105,0.52)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)]"
+                        className="absolute right-0 bottom-0 size-[22px] cursor-nwse-resize touch-none after:absolute after:right-1.5 after:bottom-1.5 after:size-2.5 after:border-r-2 after:border-b-2 after:border-[rgba(87,83,78,0.52)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
                         role="button"
                         tabIndex={0}
                         aria-label={t('preview.resize')}
