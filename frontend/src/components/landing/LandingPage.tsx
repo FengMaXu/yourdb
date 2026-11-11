@@ -544,7 +544,7 @@ const LandingPage: React.FC = () => {
                     <h1 className="mx-auto mt-5 max-w-[16ch] text-[clamp(2.4rem,6vw,4.5rem)] leading-[1.05] font-bold tracking-[-0.04em] text-foreground">
                         Anytime, anywhere, it&apos;s <span className="text-brand">yourdb</span>.
                     </h1>
-                    <p className="mx-auto mt-6 max-w-[42ch] text-[1.1rem] leading-relaxed text-body">{t('landing.hero.lead')}</p>
+                    <p className="mx-auto mt-6 max-w-[640px] text-[1.1rem] leading-relaxed text-balance text-body">{t('landing.hero.lead')}</p>
                     <div className="mt-9 flex flex-wrap justify-center gap-3">
                         {getStarted('h-11 gap-2 px-5 text-[0.95rem]', <>{t('landing.hero.primary')}<ArrowRight /></>)}
                         <a href="#what" className={cn(buttonVariants({ variant: 'outline' }), 'h-11 gap-2 px-5 text-[0.95rem]')}>
