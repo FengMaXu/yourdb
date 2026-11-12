@@ -3,7 +3,7 @@ import { MemorySessionRepo, TODO_CONTEXT } from "@earendil-works/pi-agent-core";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { WorkspaceStore } from "../workspace.js";
-import { composeKnowledgeCatalogPrompt, composeSubagentSystemPrompt, createDataAgentSessionHost, type DataAgentModelProfile } from "./session-runtime.js";
+import { canonicalPrompt, composeKnowledgeCatalogPrompt, composeSubagentSystemPrompt, createDataAgentSessionHost, TASK_SCOPE_PROMPT, type DataAgentModelProfile } from "./session-runtime.js";
 import type { BusinessContext } from "../answering/model.js";
 import { KnowledgeIndex } from "../knowledge.js";
 import { ClarificationManager } from "../clarification.js";
@@ -94,6 +94,21 @@ describe("Session Runtime scoped query composition", () => {
       expect(wrong.outcomes?.find((item) => item.path === "population.entity")).toMatchObject({ status: "rejected", code: "EVIDENCE_REJECTED" });
     } finally {
       await host.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("starts every prompt with the data-only task scope, even when a knowledge base replaces SYSTEM.md", async () => {
+    const root = await mkdtemp(path.join(process.cwd(), ".tmp-session-runtime-scope-"));
+    try {
+      const fs = await import("node:fs/promises");
+      await fs.mkdir(path.join(root, ".pi"), { recursive: true });
+      await fs.writeFile(path.join(root, ".pi", "SYSTEM.md"), "A user's own copy that says nothing about scope.", "utf8");
+      const prompt = await canonicalPrompt({ systemPromptRoots: [root] });
+      expect(prompt.startsWith(TASK_SCOPE_PROMPT)).toBe(true);
+      expect(prompt).toContain("A user's own copy that says nothing about scope.");
+      expect(TASK_SCOPE_PROMPT).toMatch(/^<task_scope>[\s\S]*拒绝执行[\s\S]*<\/task_scope>$/);
+    } finally {
       await rm(root, { recursive: true, force: true });
     }
   });
