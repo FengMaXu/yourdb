@@ -171,7 +171,7 @@ function tokenize(text: string): string[] {
   return [...ascii, ...bigrams];
 }
 
-function scalar(value: string): string {
+function unquoted(value: string): string {
   const trimmed = value.trim();
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1).trim();
@@ -192,7 +192,7 @@ function parseFrontmatter(text: string, relativePath: string, requireMetadata: b
   for (const line of lines.slice(1, closing)) {
     const match = /^([A-Za-z][A-Za-z0-9_-]*):\s*(.*)$/.exec(line);
     if (!match) throw new Error(`KNOWLEDGE_METADATA_INVALID:${relativePath}`);
-    values.set(match[1]!, scalar(match[2]!));
+    values.set(match[1]!, unquoted(match[2]!));
   }
   for (const field of ["knowledgeId", "name", "description"] as const) {
     if (!values.has(field)) throw new MissingKnowledgeMetadataError(relativePath, field);

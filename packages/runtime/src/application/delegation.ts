@@ -12,7 +12,8 @@ import type {
   TrustedDelegationContext,
 } from "../delegation/index.js";
 import { processExplorationConcurrency } from "../delegation/concurrency.js";
-import { defineDataAgentTool, type DataAgentToolDefinition } from "../tools/tool-definition.js";
+import { defineDataAgentTool, textResult, type DataAgentToolDefinition } from "../tools/tool-definition.js";
+import { truncateUtf8 } from "../bounded-read.js";
 import { bigintSafeJson } from "../primitives.js";
 
 const explorationParameters = Type.Object({
@@ -36,11 +37,8 @@ const readParameters = Type.Object({
 const MAX_CHILD_TOOL_BYTES = 16 * 1024;
 
 function boundedChildText(content: string): { readonly content: string; readonly truncated: boolean } {
-  const bytes = Buffer.from(content, "utf8");
-  if (bytes.byteLength <= MAX_CHILD_TOOL_BYTES) return { content, truncated: false };
-  let end = MAX_CHILD_TOOL_BYTES;
-  while (end > 0 && end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end -= 1;
-  return { content: `${bytes.subarray(0, end).toString("utf8")}\n[truncated]`, truncated: true };
+  const bounded = truncateUtf8(content, MAX_CHILD_TOOL_BYTES);
+  return bounded.truncated ? { content: `${bounded.content}\n[truncated]`, truncated: true } : bounded;
 }
 
 function normalizeKnowledgePath(value: string): string {
@@ -49,12 +47,9 @@ function normalizeKnowledgePath(value: string): string {
   return normalized;
 }
 
-function text(content: string, details?: unknown): AgentToolResult<unknown> {
-  const bounded = boundedChildText(content);
-  return {
-    content: [{ type: "text", text: `UNTRUSTED_TOOL_OUTPUT\n${bounded.content}\nEND_UNTRUSTED_TOOL_OUTPUT` }],
-    details: details ?? null,
-  };
+/** Child tool output, bounded and fenced as untrusted text. */
+function untrustedText(content: string, details?: unknown): AgentToolResult<unknown> {
+  return textResult(`UNTRUSTED_TOOL_OUTPUT\n${boundedChildText(content).content}\nEND_UNTRUSTED_TOOL_OUTPUT`, details);
 }
 
 function requestText(entry: any): string {
@@ -233,7 +228,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
               // The statement must end by the child's wrap-up; MySQL stops it there.
               ...(toolContext?.wrapUpAt ? { deadlineAt: toolContext.wrapUpAt } : {}),
             });
-            return text(bigintSafeJson({ columns: result.columns, columnTypes: result.columnTypes, rows: result.rows, rowCount: result.rows.length, truncated: result.truncated }));
+            return untrustedText(bigintSafeJson({ columns: result.columns, columnTypes: result.columnTypes, rows: result.rows, rowCount: result.rows.length, truncated: result.truncated }));
           } finally {
             lease.release();
           }
@@ -256,7 +251,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
             const schema = await getSchema(childContext.abortSignal);
             const tables = schema.tables.filter((table) => !wanted || wanted.includes(table.name.toLowerCase()));
             const typed = await withColumnTypes(sql, schema.dialect, tables, `${run.childSessionId}:${invocation.invocationId}`, childContext.abortSignal);
-            return text(bigintSafeJson({ dialect: schema.dialect, tables: typed.tables, ...(typed.notes.length > 0 ? { notes: typed.notes } : {}) }));
+            return untrustedText(bigintSafeJson({ dialect: schema.dialect, tables: typed.tables, ...(typed.notes.length > 0 ? { notes: typed.notes } : {}) }));
           },
         }, {
           promptSnippet: "列出表、列名与类型及主键、唯一键、外键；可按表名缩小范围。",
@@ -285,7 +280,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
           );
           for (const hit of hits) knowledgeChecks.set(hit.knowledgeId, () => knowledge.isCurrent(hit.knowledgeId));
           const formatted = formatKnowledgeSearchResults(hits, requestedResults);
-          return text(bigintSafeJson(formatted), formatted);
+          return untrustedText(bigintSafeJson(formatted), formatted);
         },
       }, {
         promptSnippet: "检索知识来源中的相关章节和有界正文。",
@@ -309,7 +304,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
           if (!knowledgeAllowed(document.path)) throw new Error("SUBAGENT_KNOWLEDGE_PATH_NOT_AUTHORIZED");
           const read = knowledge.read(value);
           knowledgeChecks.set(value.knowledgeId, () => knowledge.isCurrent(value.knowledgeId));
-          return text(bigintSafeJson(read), read);
+          return untrustedText(bigintSafeJson(read), read);
         },
       }, {
         promptSnippet: "读取短知识文档或指定章节。",

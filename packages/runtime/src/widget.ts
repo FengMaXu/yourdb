@@ -1,3 +1,5 @@
+import { isRecord } from "./primitives.js";
+
 export type WidgetKind = "kpi" | "chart" | "table" | "steps";
 
 /**
@@ -33,13 +35,9 @@ export type WidgetValidationResult = {
   error: string;
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> => (
-  typeof value === "object" && value !== null && !Array.isArray(value)
-);
-
 /** Minimum server-side validation shared by the tool and its event adapter. */
 export function validateWidgetSpec(kind: WidgetKind, value: unknown): WidgetValidationResult {
-  if (!isObject(value)) return { ok: false, error: "spec must be an object" };
+  if (!isRecord(value)) return { ok: false, error: "spec must be an object" };
   if (value.title !== undefined && typeof value.title !== "string") {
     return { ok: false, error: "spec.title must be a string when provided" };
   }
@@ -51,8 +49,8 @@ export function validateWidgetSpec(kind: WidgetKind, value: unknown): WidgetVali
     }
   } else if (kind === "chart" && value.contractVersion === CHART_WIDGET_CONTRACT_VERSION) {
     // A Runtime-built ChartSpec widget: the spec plus the published rows it was resolved against.
-    const dataset = isObject(value.dataset) ? value.dataset : undefined;
-    if (!isObject(value.chartSpec) || !dataset || !Array.isArray(dataset.columns) || !Array.isArray(dataset.rows)) {
+    const dataset = isRecord(value.dataset) ? value.dataset : undefined;
+    if (!isRecord(value.chartSpec) || !dataset || !Array.isArray(dataset.columns) || !Array.isArray(dataset.rows)) {
       return { ok: false, error: "chart widget requires chartSpec and a resolved dataset" };
     }
   } else if (!Array.isArray(value.data) && !(kind === "chart" && Array.isArray(value.series))) {
@@ -67,7 +65,7 @@ function isWidgetKind(value: unknown): value is WidgetKind {
 }
 
 function isWidgetPayload(value: unknown): value is WidgetPayload {
-  if (!isObject(value)) return false;
+  if (!isRecord(value)) return false;
   return typeof value.widget_id === "string"
     && isWidgetKind(value.kind)
     && typeof value.title === "string"
@@ -76,7 +74,7 @@ function isWidgetPayload(value: unknown): value is WidgetPayload {
 
 /** Guard for the details of a finished show_widget call, as the Pi event stream reports them. */
 export function isWidgetLifecycleDetails(value: unknown): value is WidgetLifecycleDetails {
-  if (!isObject(value)) return false;
+  if (!isRecord(value)) return false;
   if (value.widgetEvent !== "widget") return false;
   if (typeof value.widgetId !== "string" || value.widgetId.length === 0) return false;
   if (typeof value.toolCallId !== "string" || value.toolCallId.length === 0) return false;

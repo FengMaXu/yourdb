@@ -70,6 +70,15 @@ async function system(options: { groupChats?: readonly string[] } = {}) {
   return { runtime, clarifications, prompts, emit, calls, handlers, settle, setBusy: (value: boolean) => { busy = value; } };
 }
 
+/** Waits for a fire-and-forget outcome, failing after a few seconds. */
+async function until(condition: () => boolean): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("condition not reached");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 const message = (eventId: string, text: string, chat: { chatType?: "p2p" | "group"; sender?: string; mentions?: unknown[] } = {}) => ({
   event_id: eventId,
   tenant_key: "tenant-1",
@@ -129,6 +138,8 @@ describe("Feishu channel through the hub", () => {
     await handlers.message!(message("evt-1", "@_user_1 销售额", { chatType: "group", mentions: [mention] }));
     await handlers.message!(message("evt-2", "@_user_1 订单量", { chatType: "group", mentions: [mention], sender: "ou_bob" }));
     await settle();
+    // Submissions are fire-and-forget; each makes several metadata round trips before its prompt.
+    await until(() => prompts.length === 2);
     const [alice, bob] = prompts;
     expect(alice!.sessionId).not.toBe(bob!.sessionId);
     const asked = runtime.clarificationManager.ask(alice!.sessionId!, "含税吗？", ["含税"]);

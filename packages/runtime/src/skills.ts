@@ -52,7 +52,7 @@ function isWithinRoot(root: string, candidate: string): boolean {
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-function scalar(frontmatter: string, key: string): string | undefined {
+function frontmatterValue(frontmatter: string, key: string): string | undefined {
   const match = new RegExp(`^${key}\\s*:\\s*(.+)$`, "mi").exec(frontmatter);
   return match?.[1]?.trim().replace(/^['"]|['"]$/g, "");
 }
@@ -91,7 +91,7 @@ function parseToolMetadata(frontmatter: string, filePath: string): { allowedTool
   const diagnostics: SkillDiagnostic[] = [];
   const allowedTools = parseToolList(frontmatter, ["allowed-tools", "allowedTools"], "allowed-tools", filePath, diagnostics);
   const requiredTools = parseToolList(frontmatter, ["requires-tools", "requiredTools"], "requires-tools", filePath, diagnostics);
-  const disabled = scalar(frontmatter, "disable-model-invocation") ?? scalar(frontmatter, "disableModelInvocation");
+  const disabled = frontmatterValue(frontmatter, "disable-model-invocation") ?? frontmatterValue(frontmatter, "disableModelInvocation");
   return {
     ...(allowedTools ? { allowedTools } : {}),
     ...(requiredTools ? { requiredTools } : {}),
@@ -107,12 +107,12 @@ function parseSkill(raw: string, filePath: string): { skill?: SkillDefinition; d
   const marker = normalized.indexOf("\n---", 4);
   if (marker < 0) return { diagnostics: [diagnostic(filePath, "unterminated frontmatter", "invalid_metadata")] };
   const frontmatter = normalized.slice(4, marker);
-  const name = scalar(frontmatter, "name");
-  const description = scalar(frontmatter, "description");
+  const name = frontmatterValue(frontmatter, "name");
+  const description = frontmatterValue(frontmatter, "description");
   if (!name || !description) return { diagnostics: [diagnostic(filePath, "name and description are required", "invalid_metadata")] };
   const metadata = parseToolMetadata(frontmatter, filePath);
   diagnostics.push(...metadata.diagnostics);
-  const whenToUse = scalar(frontmatter, "when_to_use") ?? scalar(frontmatter, "whenToUse");
+  const whenToUse = frontmatterValue(frontmatter, "when_to_use") ?? frontmatterValue(frontmatter, "whenToUse");
   const body = normalized.slice(marker + 4).replace(/^\n/, "").trim();
   return {
     skill: {

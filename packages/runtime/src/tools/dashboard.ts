@@ -13,7 +13,7 @@ import { ChartDataResolver, describeSource } from "../facets/chart-data.js";
 import type { DerivedDatasets } from "../facets/derived-datasets.js";
 import type { WorkspaceStore } from "../workspace.js";
 import { trustedContext, type DataAgentToolContext } from "./answering.js";
-import { MAX_WIDGET_ROWS, jsonSafeRows, semanticChecks } from "./charts.js";
+import { MAX_WIDGET_ROWS, declaredFields, jsonSafeRows, semanticChecks } from "./charts.js";
 import { defineDataAgentTool, type DataAgentToolDefinition } from "./tool-definition.js";
 
 export const GENERATE_DASHBOARD_PARAMETERS = Type.Object({
@@ -47,9 +47,8 @@ async function defaultEchartsSource(): Promise<string | undefined> {
   return assetPath ? readEchartsSource(assetPath) : undefined;
 }
 
-function declaredFields(spec: DashboardSpec): string[] {
-  const names = spec.views.flatMap((view) => Object.keys((view.type === "chart" ? view.chart.fields : view.fields) ?? {}));
-  return [...new Set(names)];
+function declaredViewFields(spec: DashboardSpec): string[] {
+  return [...new Set(spec.views.flatMap((view) => declaredFields(view.type === "chart" ? view.chart : view)))];
 }
 
 function generateDashboardTool(options: DashboardToolOptions): AgentHarnessTool<DataAgentToolContext> {
@@ -94,7 +93,7 @@ function generateDashboardTool(options: DashboardToolOptions): AgentHarnessTool<
       // Validated on the same JSON-safe rows the page reads.
       const validated = validateDashboard(spec, datasets);
       if (!validated.ok) throw new Error(formatDashboardErrors(validated.errors));
-      const declared = declaredFields(spec);
+      const declared = declaredViewFields(spec);
       const checks: Record<string, SemanticsCheck[]> = {};
       for (const view of spec.views) {
         const found = semanticChecks(view.type === "chart" ? view.chart.fields : view.fields, profiles[datasetKey(dashboardViewData(view))]);
