@@ -30,14 +30,6 @@ interface AppShellProps {
   onModelMissing: () => void;
 }
 
-const DESKTOP_MENU_ITEMS = [
-  { id: 'file', labelKey: 'desktop.file' },
-  { id: 'edit', labelKey: 'desktop.edit' },
-  { id: 'view', labelKey: 'desktop.view' },
-  { id: 'window', labelKey: 'desktop.window' },
-  { id: 'help', labelKey: 'desktop.help' },
-];
-
 const TOOL_PANEL_MIN_WIDTH = 300;
 const DEFAULT_CHAT_RATIO = 0.64;
 const CHAT_PANEL_MIN_WIDTH = 560;
@@ -84,7 +76,6 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   // While the chat pane is resized, a full-window layer carries the cursor and keeps text from being selected.
   const [isResizingChat, setIsResizingChat] = useState(false);
   const [chatPaneWidth, setChatPaneWidth] = useState<number | null>(null);
-  const isDesktop = typeof window !== 'undefined' && Boolean(window.dataAgent);
 
   const scheduleSidebarPeek = useCallback((peek: boolean) => {
     if (sidebarPeekTimerRef.current) clearTimeout(sidebarPeekTimerRef.current);
@@ -243,28 +234,6 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
     <SessionProvider>
       <div className="flex h-full min-h-0 w-full flex-col bg-transparent">
         <SkipLink href="#main-content">{t('accessibility.skipToContent')}</SkipLink>
-        {isDesktop && (
-          <div className="flex h-[34px] shrink-0 items-center gap-0.5 border-b border-[rgba(120,53,15,0.08)] bg-[rgba(255,250,242,0.66)] px-2.5 text-foreground backdrop-blur-[18px] max-[720px]:hidden" role="menubar" aria-label={t('desktop.menu')}>
-            {DESKTOP_MENU_ITEMS.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className="h-7 cursor-pointer rounded-md border-0 bg-transparent px-2.5 text-[0.86rem] text-inherit transition-[background-color,transform] active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100 pointer-fine:hover:bg-white/64"
-                role="menuitem"
-                onClick={(event) => {
-                  const rect = event.currentTarget.getBoundingClientRect();
-                  void window.dataAgent?.showMenu(item.id, {
-                    x: Math.round(rect.left),
-                    y: Math.round(rect.bottom),
-                  });
-                }}
-              >
-                {t(item.labelKey)}
-              </button>
-            ))}
-          </div>
-        )}
-
         <SetupBanner isChatView={activeView.kind === 'chat'} hidden={activeView.kind === 'settings'} />
 
         {/* The framed workspace: inset on a wide window, edge to edge on a phone. */}
