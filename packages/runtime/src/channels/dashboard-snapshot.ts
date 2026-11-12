@@ -70,6 +70,27 @@ async function connect(url: string): Promise<Cdp> {
 }
 
 /**
+ * The browser writes its DevTools port to a file in the profile. On Windows the file can exist
+ * while the browser still holds it open (EBUSY), or before the port line is in it, so it is read
+ * until a port comes out, for up to 30 s.
+ */
+async function readDevToolsPort(portFile: string): Promise<string> {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    if (existsSync(portFile)) {
+      try {
+        const port = (await readFile(portFile, "utf8")).split("\n")[0]?.trim();
+        if (port && /^\d+$/.test(port)) return port;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EBUSY" && code !== "EPERM") throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error("DASHBOARD_SNAPSHOT_NO_DEVTOOLS_PORT");
+}
+
+/**
  * Renders a self-contained dashboard page to PNG with a headless browser over
  * the DevTools protocol. Each call uses its own browser and profile, so a
  * failed render leaves nothing behind for the next one.
@@ -88,9 +109,7 @@ export function createDashboardSnapshotter(options: DashboardSnapshotOptions = {
     let cdp: Cdp | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const capture = async (): Promise<Uint8Array> => {
-      const portFile = path.join(profile, "DevToolsActivePort");
-      for (let attempt = 0; attempt < 300 && !existsSync(portFile); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 100));
-      const [port] = (await readFile(portFile, "utf8")).split("\n");
+      const port = await readDevToolsPort(path.join(profile, "DevToolsActivePort"));
       const { webSocketDebuggerUrl } = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json() as { webSocketDebuggerUrl: string };
       cdp = await connect(webSocketDebuggerUrl);
       const { targetId } = await cdp.send("Target.createTarget", { url: "about:blank" });
