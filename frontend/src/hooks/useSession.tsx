@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import {
     type SessionSnapshotMessage,
 } from '../api/client';
-import { createTaskWithIdViaRuntime, getTranscriptViaRuntime, prepareSessionViaRuntime } from '../api/runtime-client';
+import { createTaskWithIdViaRuntime, getTranscriptViaRuntime, prepareSessionViaRuntime, subscribeRuntimeEvents } from '../api/runtime-client';
 import { createSessionViaRuntime, deleteSessionViaRuntime, deleteTaskViaRuntime, listSessionsViaRuntime, listTasksViaRuntime, renameSessionViaRuntime, renameTaskViaRuntime } from '../api/runtime-client';
 import { useLanguage } from '../context/LanguageContext';
 import { cleanSessionTitle } from '../utils/session-title';
@@ -52,6 +52,20 @@ interface SessionContextType {
     toggleAttachedFile: (filePath: string) => void;
     clearAttachedFiles: (options?: { persist?: boolean }) => void;
     isFileAttached: (filePath: string) => boolean;
+    /**
+     * The latest run that started or finished in any session, whoever ran it: this view, another
+     * window, or a phone through a message channel. The chat view uses it to follow a run it did
+     * not start. Null until one is seen.
+     */
+    runActivity: RunActivity | null;
+}
+
+/** A run starting (its first message) or finishing in a session, as the event stream reports it. */
+export interface RunActivity {
+    readonly sessionId: string;
+    readonly phase: 'started' | 'finished';
+    /** Increases with each report, so the same session and phase twice still reads as new. */
+    readonly seq: number;
 }
 
 const SessionContext = createContext<SessionContextType | undefined>(undefined);
@@ -89,6 +103,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const [currentSessionId, setCurrentSessionId] = useState('');
     const [transcriptsBySession, setTranscriptsBySession] = useState<SessionTranscriptStore>({});
     const [attachedFilesBySession, setAttachedFilesBySession] = useState<SessionAttachedFilesStore>({});
+    const [runActivity, setRunActivity] = useState<RunActivity | null>(null);
     const attachedFilesRef = useRef<SessionAttachedFilesStore>({});
     const conversationVersionsRef = useRef<Record<string, number>>({});
     const transcriptSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
@@ -142,6 +157,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         transcriptSaveTimersRef.current = {};
     }, []);
 
+    const toTask = useCallback((task: { id: string; name: string; createdAt?: number; updatedAt?: number }): Task => ({
+        id: task.id,
+        name: DEFAULT_TASK_NAMES.has(task.name) ? defaultTaskName : task.name,
+        createdAt: new Date(task.createdAt ?? Date.now()).toISOString(),
+        updatedAt: new Date(task.updatedAt ?? Date.now()).toISOString(),
+    }), [defaultTaskName]);
+    const toSession = useCallback((session: { id: string; taskId?: string; name: string }): Session => ({
+        id: session.id,
+        taskId: session.taskId ?? '',
+        name: DEFAULT_SESSION_NAMES.has(session.name) ? defaultSessionName : session.name,
+        createdAt: new Date().toISOString(),
+        conversationVersion: 1,
+    }), [defaultSessionName]);
+
     useEffect(() => {
         let cancelled = false;
 
@@ -153,19 +182,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 ]);
                 if (cancelled) return;
 
-                const loadedTasks: Task[] = runtimeTasks.map((task) => ({
-                    id: task.id,
-                    name: DEFAULT_TASK_NAMES.has(task.name) ? defaultTaskName : task.name,
-                    createdAt: new Date(task.createdAt ?? Date.now()).toISOString(),
-                    updatedAt: new Date(task.updatedAt ?? Date.now()).toISOString(),
-                }));
-                const loadedSessions: Session[] = runtimeSessions.map((session) => ({
-                    id: session.id,
-                    taskId: session.taskId ?? '',
-                    name: DEFAULT_SESSION_NAMES.has(session.name) ? defaultSessionName : session.name,
-                    createdAt: new Date().toISOString(),
-                    conversationVersion: 1,
-                }));
+                const loadedTasks: Task[] = runtimeTasks.map(toTask);
+                const loadedSessions: Session[] = runtimeSessions.map(toSession);
 
                 loadedSessions.forEach((session) => {
                     conversationVersionsRef.current[session.id] = session.conversationVersion;
@@ -215,7 +233,62 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return () => {
             cancelled = true;
         };
-    }, [defaultSessionName, defaultTaskName, warmSession]);
+    }, [toSession, toTask, warmSession]);
+
+    /*
+     * Conversations also change outside this view: a phone through Feishu or WeChat, or another
+     * window. One standing subscription to the user's events keeps the view current: a session it
+     * does not list reloads the task and session lists, a finished run drops the cached transcript
+     * of a session in the background so opening it reloads, and every run start or finish is
+     * reported (runActivity) so the chat view can follow a run in the open session.
+     * Only run starts and finishes are read; streamed tokens are left to the chat view.
+     */
+    const sessionsRef = useRef(sessions);
+    sessionsRef.current = sessions;
+    const currentSessionIdRef = useRef(currentSessionId);
+    currentSessionIdRef.current = currentSessionId;
+    useEffect(() => {
+        if (!isLoaded) return;
+        let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+        let seq = 0;
+        const refreshLists = async () => {
+            try {
+                const [runtimeTasks, runtimeSessions] = await Promise.all([listTasksViaRuntime(), listSessionsViaRuntime()]);
+                const known = new Map(sessionsRef.current.map((session) => [session.id, session]));
+                setTasks(runtimeTasks.map(toTask));
+                setFoundNoTasks(runtimeTasks.length === 0);
+                // Sessions already listed keep their local state (conversation version, created time).
+                setSessions(runtimeSessions.map((session) => known.get(session.id) ?? toSession(session)));
+            } catch (error) {
+                console.warn('Failed to refresh tasks and sessions:', error);
+            }
+        };
+        const scheduleRefresh = () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            refreshTimer = setTimeout(() => void refreshLists(), 400);
+        };
+        const unsubscribe = subscribeRuntimeEvents((raw) => {
+            const envelope = raw as { sessionId?: unknown; event?: { type?: unknown } } | null;
+            const sessionId = typeof envelope?.sessionId === 'string' ? envelope.sessionId : undefined;
+            const type = envelope?.event?.type;
+            if (!sessionId || (type !== 'agent.message_started' && type !== 'agent.completed')) return;
+            if (!sessionsRef.current.some((session) => session.id === sessionId)) scheduleRefresh();
+            if (type === 'agent.completed' && sessionId !== currentSessionIdRef.current) {
+                setTranscriptsBySession((prev) => {
+                    if (prev[sessionId] === undefined) return prev;
+                    const next = { ...prev };
+                    delete next[sessionId];
+                    return next;
+                });
+            }
+            seq += 1;
+            setRunActivity({ sessionId, phase: type === 'agent.completed' ? 'finished' : 'started', seq });
+        }, undefined, { onResync: scheduleRefresh });
+        return () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
+            unsubscribe();
+        };
+    }, [isLoaded, toSession, toTask]);
 
     const currentTask = useMemo(
         () => tasks.find((task) => task.id === currentTaskId) || null,
@@ -465,6 +538,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             toggleAttachedFile,
             clearAttachedFiles,
             isFileAttached,
+            runActivity,
         }}>
             {children}
         </SessionContext.Provider>

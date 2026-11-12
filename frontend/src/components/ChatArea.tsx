@@ -89,6 +89,8 @@ interface ChatAreaProps {
 
 /** Starter questions an empty session offers; a click puts one in the input to edit before sending. */
 const STARTER_PROMPTS = ['query', 'trend', 'dashboard', 'report'] as const;
+/** How long after this view saw its own run end a run-finished report is taken to be that run's. */
+const FOLLOWED_RUN_END_WINDOW_MS = 10_000;
 
 const STAGE_ORDER: AgentProgressStage[] = [
     'sent',
@@ -252,6 +254,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         setAttachedFiles,
         clearAttachedFiles,
         setCurrentTranscript,
+        runActivity,
     } = useSession();
 
     const { t } = useLanguage();
@@ -324,22 +327,17 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         }
     }, [replaceWithSnapshot]);
 
-    useEffect(() => {
-        // Stop following the previous session's run; it keeps running on the server.
-        streamHandleRef.current?.detach();
-        streamHandleRef.current = null;
-        isRestoringRef.current = true;
-        currentSessionIdRef.current = currentSession.id;
-        replaceWithSnapshot(currentTranscript);
-        dispatchRun({ type: 'session_reset' });
-        setClarificationInput('');
-        onUpdateToolsRef.current?.([]);
+    /** The last run this view followed to its end, so its run-finished report is not mistaken for another device's. */
+    const followedRunEndRef = useRef<{ sessionId: string; at: number } | null>(null);
 
-        // A run may still be going (or waiting on a clarification): resume following it.
-        const sessionId = currentSession.id;
-        let superseded = false;
+    /**
+     * Reads the session's state on the server and, when a run is in progress there, shows what it has
+     * committed and follows the rest live; a clarification it waits on is shown either way.
+     * Nothing happens once `superseded` says the view moved on or a stream is already followed.
+     */
+    const resumeServerRun = (sessionId: string, superseded: () => boolean) => {
         void getSessionStateViaRuntime(sessionId).then((state) => {
-            if (superseded || currentSessionIdRef.current !== sessionId || streamHandleRef.current) return;
+            if (superseded() || currentSessionIdRef.current !== sessionId || streamHandleRef.current) return;
             const clarification = state.pendingClarification ? {
                 clarification_id: state.pendingClarification.clarificationId,
                 question: state.pendingClarification.question,
@@ -357,8 +355,43 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 attachRunViaRuntime(runId, { sequence: state.eventSequence, ...(state.eventInstance ? { instance: state.eventInstance } : {}) }, onEvent, onError, onFinish, streamSessionId, stream)
             ), true);
         }).catch((error) => console.error('Failed to read the session state', error));
+    };
+
+    useEffect(() => {
+        // Stop following the previous session's run; it keeps running on the server.
+        streamHandleRef.current?.detach();
+        streamHandleRef.current = null;
+        isRestoringRef.current = true;
+        currentSessionIdRef.current = currentSession.id;
+        replaceWithSnapshot(currentTranscript);
+        dispatchRun({ type: 'session_reset' });
+        setClarificationInput('');
+        onUpdateToolsRef.current?.([]);
+
+        // A run may still be going (or waiting on a clarification): resume following it.
+        const sessionId = currentSession.id;
+        let superseded = false;
+        resumeServerRun(sessionId, () => superseded);
         return () => { superseded = true; };
     }, [currentSession.id, replaceWithSnapshot]);
+
+    // A run this view did not follow (a phone through a message channel, another window) began or
+    // ended in the open session: follow it as on opening the session, or load what it committed.
+    // The end of a run this view followed itself is skipped: followRun already showed all of it.
+    useEffect(() => {
+        if (!runActivity || runActivity.sessionId !== currentSession.id || streamHandleRef.current) return;
+        const sessionId = currentSession.id;
+        if (runActivity.phase === 'finished') {
+            const followed = followedRunEndRef.current;
+            followedRunEndRef.current = null;
+            if (followed && followed.sessionId === sessionId && Date.now() - followed.at < FOLLOWED_RUN_END_WINDOW_MS) return;
+            void resyncFromServer(sessionId);
+            return;
+        }
+        let superseded = false;
+        resumeServerRun(sessionId, () => superseded);
+        return () => { superseded = true; };
+    }, [runActivity]);
 
     useEffect(() => {
         if (isRestoringRef.current) {
@@ -934,6 +967,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             activeAgentMessageIdRef.current = null;
             pendingAgentMessageIdRef.current = null;
             streamHandleRef.current = null;
+            followedRunEndRef.current = { sessionId: runSessionId, at: Date.now() };
             return true;
         }
         streamHandleRef.current = handle;
