@@ -213,7 +213,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 const known = new Map(sessionsRef.current.map((session) => [session.id, session]));
                 setTasks(runtimeTasks.map(toTask));
                 setFoundNoTasks(runtimeTasks.length === 0);
-                // Sessions already listed keep their local state (conversation version, created time).
+                // Sessions already listed keep their local state (name, created time).
                 setSessions(runtimeSessions.map((session) => known.get(session.id) ?? toSession(session)));
             } catch (error) {
                 console.warn('Failed to refresh tasks and sessions:', error);

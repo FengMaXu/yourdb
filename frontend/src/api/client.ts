@@ -1,6 +1,6 @@
 /**
- * Data Agent API Client
- * 用于连接后端 FastAPI 服务，处理 REST API 和 SSE 流
+ * HTTP client for the Web Host: authentication, uploads, publications and the
+ * chat event stream, plus the wire types the renderer shares with them.
  */
 
 import type { SubagentChildProgress } from '@data-agent/contracts';
@@ -150,7 +150,6 @@ export type PythonRuntimeUpdate = {
     executable?: string;
 };
 
-
 export interface LLMProfile {
     id: string;
     name: string;
@@ -167,7 +166,6 @@ export interface LLMProfilesResponse {
     default_profile_id: string;
     profiles: LLMProfile[];
 }
-
 
 export type DBConfigUpdate = {
     host?: string;
@@ -192,12 +190,6 @@ export interface DatabaseConnectionRegistry {
     default_connection_id: string | null;
     connections: DatabaseConnection[];
 }
-
-export type DatabaseConnectionUpdate = DBConfigUpdate & {
-    id?: string;
-    name?: string;
-    driver?: 'mysql';
-};
 
 export interface MCPMappingSummary {
     configured: boolean;
@@ -265,7 +257,6 @@ export type MCPServerRequest = Omit<MCPServerConfig, 'headers' | 'env' | 'args_i
     env?: Record<string, string>;
 };
 
-
 export interface MCPServerStatus extends MCPServerConfig {
     status?: 'disabled' | 'disconnected' | 'connected' | 'connecting' | 'error' | 'stopped';
     connected?: boolean;
@@ -274,7 +265,6 @@ export interface MCPServerStatus extends MCPServerConfig {
     tool_prefix?: string;
     host_managed?: boolean;
 }
-
 
 export interface MCPToolInfo {
     server: string;
@@ -302,7 +292,6 @@ export interface SkillInfo {
     allowed_tools?: string[];
     model?: string | null;
 }
-
 
 export interface WidgetSpec {
     widget_id: string;
@@ -369,7 +358,6 @@ export interface SessionSnapshotAgentToolCall {
     status: 'calling' | 'running' | 'done' | 'error';
 }
 
-
 export interface SessionSnapshotMessage {
     id: string;
     role: 'user' | 'agent';
@@ -408,7 +396,6 @@ export interface ChatTask {
     sessions?: ChatSession[];
 }
 
-
 export async function createTask(task: { id: string; name: string }): Promise<ChatTask> {
     const res = await apiFetch(`${API_BASE_URL}/tasks`, {
         method: 'POST',
@@ -435,15 +422,6 @@ export async function deleteTask(taskId: string): Promise<void> {
     });
     if (!res.ok) throw new Error('Failed to delete task');
 }
-
-
-
-
-
-
-
-
-
 
 export interface ClarificationRequest {
     clarification_id: string;
@@ -472,9 +450,6 @@ export type SSEEvent =
     | { type: 'error'; session_id?: string; error: string }
     | { type: 'done'; session_id?: string; run_id?: string; reason: 'completed' | 'stopped' | 'error' };
 
-
-
-
 export async function answerClarification(
     clarificationId: string,
     answer: string,
@@ -500,45 +475,11 @@ export async function answerClarification(
     return response.json();
 }
 
-
-
-
 export async function getConfig(): Promise<AIConfig> {
     const res = await fetch(`${API_BASE_URL}/settings/config`);
     if (!res.ok) throw new Error('Failed to fetch config');
     return res.json();
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-export interface WorkspaceFile {
-    name: string;
-    relative_path: string;
-    size: number;
-    modified_at: string;
-}
-
-
-
 
 export interface WorkspaceUploadResponse {
     filename: string;
@@ -564,7 +505,6 @@ export async function uploadWorkspaceFile(file: File, sessionId: string = ''): P
     return res.json();
 }
 
-
 export interface KnowledgeFile {
     name: string;
     path: string;
@@ -580,11 +520,4 @@ export interface KnowledgeFile {
     /** False for a placeholder with frontmatter but no content yet. */
     hasContent?: boolean;
 }
-
-
-
-
-
-
-
 

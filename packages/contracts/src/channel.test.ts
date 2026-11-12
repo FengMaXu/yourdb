@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "typebox/value";
-import { DeliverableSchema, isDataAgentEvent, parseSubmission, RequestContextSchema } from "./index.js";
+import { DataAgentEventSchema, DeliverableSchema, parseSubmission, RequestContextSchema } from "./index.js";
 
 const address = { channel: "feishu", tenant: "t1", chatId: "oc_1", audience: "group" as const };
 const actor = { channel: "feishu", tenant: "t1", externalUserId: "ou_1" };
@@ -17,9 +17,9 @@ describe("channel contracts", () => {
 
   it("carries publication.delivered on the event stream and as a Deliverable", () => {
     const publication = { type: "publication.delivered" as const, receiptId: "p1", taskId: "t1", format: "csv" as const, publicRef: "/api/runtime/publications/p1?session_id=s" };
-    expect(isDataAgentEvent(publication)).toBe(true);
+    expect(Value.Check(DataAgentEventSchema, publication)).toBe(true);
     expect(Value.Check(DeliverableSchema, { kind: "publication", publication })).toBe(true);
-    expect(isDataAgentEvent({ ...publication, rows: [[1]] })).toBe(false);
+    expect(Value.Check(DataAgentEventSchema, { ...publication, rows: [[1]] })).toBe(false);
   });
 
   it("lets channel Hosts identify themselves", () => {

@@ -1,4 +1,5 @@
 import type { ChildReport } from "./index.js";
+import { truncateUtf8 } from "../bounded-read.js";
 
 /** Upper bound for one child report entering the parent context (~10K tokens of output). */
 export const MAX_CHILD_REPORT_BYTES = 32 * 1024;
@@ -9,13 +10,6 @@ function stripOuterFence(text: string): string {
   const trimmed = text.trim();
   const match = /^```(?:markdown|md)?\s*\n([\s\S]*?)\n?```$/i.exec(trimmed);
   return match?.[1]?.trim() ?? trimmed;
-}
-
-function truncateUtf8(value: string, maximum: number): string {
-  const buffer = Buffer.from(value, "utf8");
-  let end = maximum;
-  while (end > 0 && end < buffer.byteLength && (buffer[end]! & 0xc0) === 0x80) end -= 1;
-  return buffer.subarray(0, end).toString("utf8");
 }
 
 /** Drop a conversational preamble ("Let me write the report.") before the first Markdown heading. */
@@ -30,5 +24,5 @@ export function parseChildReport(text: string): ChildReport {
   const markdown = fromFirstHeading(stripOuterFence(text));
   if (!markdown) throw new Error("SUBAGENT_REPORT_EMPTY");
   if (bytes(markdown) <= MAX_CHILD_REPORT_BYTES) return { markdown, truncated: false };
-  return { markdown: `${truncateUtf8(markdown, MAX_CHILD_REPORT_BYTES)}\n\n[报告超出长度上限，已截断]`, truncated: true };
+  return { markdown: `${truncateUtf8(markdown, MAX_CHILD_REPORT_BYTES).content}\n\n[报告超出长度上限，已截断]`, truncated: true };
 }

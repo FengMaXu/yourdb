@@ -26,6 +26,7 @@ import type { TranscriptMessage } from "./facets/transcript.js";
 import { readBoundedFile } from "./bounded-read.js";
 import { ensureSampleDatabase } from "./sample-database.js";
 import type { McpPluginPort } from "./tools/mcp-plugins.js";
+import { asRecord } from "./primitives.js";
 
 export class DataAgentRuntimeError extends Error {
   readonly code: "INVALID_COMMAND" | "UNSUPPORTED_PROTOCOL_VERSION" | "INVALID_CONTEXT" | "SESSION_ACCESS_DENIED" | "SESSION_BUSY" | "CLARIFICATION_SETTLED";
@@ -69,10 +70,6 @@ type RuntimeAgent = {
   refreshDashboard?(request: { path: string; viewIds: readonly string[]; requestId: string }, context?: RuntimeAgentContext): Promise<{ datasets: unknown; sources: unknown; checks: unknown; notices: unknown }>;
 };
 
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return typeof value === "object" && value !== null ? value as Record<string, unknown> : undefined;
-}
-
 const DESKTOP_SECRET_CONFIG_FIELDS = ["api_key", "openai_api_key", "anthropic_api_key"] as const;
 
 function sanitizeConfigForHost(value: unknown, host: RequestContext["host"]): Record<string, unknown> {
@@ -91,8 +88,6 @@ export class DataAgentRuntime implements ApplicationCommandHost {
   private readonly metadata: MetadataStore | undefined;
   /** Auth is owned by the command host and injected into transports through a narrow seam. */
   readonly authService: LocalAuthService;
-  /** Exposed only on the protocol adapter for host-level metadata wiring. */
-  get metadataStore(): MetadataStore | undefined { return this.metadata; }
   private sessions: RuntimeSessionStore | undefined;
   private readonly workspace: WorkspaceStore | undefined;
   private pythonExecutable: string | undefined;
@@ -497,7 +492,6 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       if (c.type === "session.create") {
         const item = await this.metadata.call(c.type, userId, { ...c, idValue: MetadataStore.createId() });
         if (this.sessions?.create) await this.sessions.create({ userId, taskId: c.taskId, sessionId: item.id });
-        await this.metadata.call("outbox.enqueue", userId, { sessionId: item.id, sequence: 0 });
         return this.mutation(command.requestId, "session", item);
       }
       if (c.type === "session.list") return this.list(command.requestId, "session", await this.metadata.call(c.type, userId, c));
@@ -572,15 +566,6 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       }
     }));
   }
-
-  /** Tools call this to suspend the run until the user answers or timeout hits. */
-  askClarification(sessionId: string, question: string, options: string[], timeoutMs?: number): { clarificationId: string; promise: Promise<string> } {
-    // The constructor subscribes the Runtime event stream to the manager;
-    // emitting here as well would duplicate every request.
-    return this.clarifications.ask(sessionId, question, options, timeoutMs);
-  }
-
-  cancelSessionClarifications(sessionId: string): void { this.clarifications.cancel(sessionId, "cancelled"); }
 
   /**
    * The protocol adapter only republishes already-projected Presentation

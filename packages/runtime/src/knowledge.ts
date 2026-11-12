@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFile, readdir, realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { boundTextByLines } from "./bounded-read.js";
+import { boundTextByLines, truncateUtf8 } from "./bounded-read.js";
 
 export const DEFAULT_KNOWLEDGE_RESULTS = 5;
 export const MAX_KNOWLEDGE_RESULTS = 8;
@@ -223,9 +223,10 @@ function fallbackMetadata(relativePath: string, contentLines: readonly string[])
     .replace(/^-+|-+$/g, "")
     .toLowerCase() || "knowledge";
   return {
+    // Evidence cites knowledge ids, so this derived form is fixed: `legacy-` plus the path slug.
     knowledgeId: `legacy-${id}`.slice(0, 64),
     name: heading || path.basename(relativePath, ".md"),
-    description: `Legacy knowledge document ${relativePath}`,
+    description: `Knowledge document ${relativePath}`,
   };
 }
 
@@ -329,14 +330,6 @@ function splitChunks(
   });
   if (current.length > 0) push(contentStartLine + lines.length - 1);
   return chunks;
-}
-
-function truncateUtf8(content: string, maxBytes: number): { readonly content: string; readonly truncated: boolean } {
-  const bytes = Buffer.from(content, "utf8");
-  if (bytes.byteLength <= maxBytes) return { content, truncated: false };
-  let end = maxBytes;
-  while (end > 0 && end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end -= 1;
-  return { content: bytes.subarray(0, end).toString("utf8"), truncated: true };
 }
 
 interface BoundedKnowledgeContent {

@@ -35,7 +35,7 @@ export interface WidgetSpec {
     file_type?: string;
     status?: 'ready' | 'error';
     error?: string;
-    /** Set by the current Runtime; absent on widgets replayed from earlier sessions. */
+    /** Set on every widget the Runtime builds; a transcript widget without it is drawn from its data rows. */
     contractVersion?: number;
     chartSpec?: unknown;
     dataset?: ChartDataset;

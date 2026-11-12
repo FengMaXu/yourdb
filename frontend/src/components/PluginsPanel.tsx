@@ -71,11 +71,9 @@ function RevealButton({ label, onClick, disabled, children }: { label: string; o
 /** MCP and Skills management shown in the main pane; the sidebar picks the tab. */
 const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings }) => {
     const { t } = useLanguage();
-    // States for sub-tabs
     const [mcpTab, setMcpTab] = useState('已安装');
     const [skillsTab, setSkillsTab] = useState('已安装');
 
-    // MCP states
     const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
     const [mcpServers, setMcpServers] = useState<MCPServerStatus[]>([]);
     const [selectedMcpServer, setSelectedMcpServer] = useState<number | null>(null);
@@ -89,7 +87,6 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
     const [pendingToggleServer, setPendingToggleServer] = useState<string | null>(null);
     const [pendingRestartServer, setPendingRestartServer] = useState<string | null>(null);
     
-    // Skills states
     const [skills, setSkills] = useState<SkillInfo[]>([]);
     const [isLoadingSkills, setIsLoadingSkills] = useState(false);
     const [skillsError, setSkillsError] = useState<string | null>(null);

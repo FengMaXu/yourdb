@@ -262,7 +262,7 @@ export interface FieldProbeRecord {
   readonly alternativeId: AlternativeId;
   readonly revisionId: RevisionId;
   readonly evidenceId: EvidenceId;
-  /** probeContext of the other fields when the probe ran; absent on probes recorded before contexts, which are stale. */
+  /** probeContext of the other fields when the probe ran; a probe without one is stale. */
   readonly context?: string;
   readonly rowCount: number;
   readonly outcome:
@@ -446,7 +446,7 @@ export interface PublicationReceipt {
   readonly coverage?: readonly CheckCoverage[];
   /** Immutable fanout evidence is disclosed with the exact published Candidate. */
   readonly fanout?: FanoutReport;
-  /** Observed column facts of the published rows; absent on Receipts published before profiling existed. */
+  /** Observed column facts of the published rows, when the Receipt records them. */
   readonly physicalProfile?: PhysicalProfile;
   /** Set on a refresh: the Receipt whose query this one ran again. That Receipt is unchanged. */
   readonly refreshes?: PublicationId;

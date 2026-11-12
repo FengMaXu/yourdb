@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { KnowledgeWriter, KnowledgeWriteDeniedError, readAuditLog } from "./knowledge-write.js";
+import { KnowledgeWriter, KnowledgeWriteDeniedError } from "./knowledge-write.js";
+
+async function readAuditLog(auditPath: string): Promise<Array<{ operation: string; path: string }>> {
+  return (await readFile(auditPath, "utf8")).trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
 
 describe("KnowledgeWriter", () => {
   it("appends learning and writes drafts atomically with audit", async () => {

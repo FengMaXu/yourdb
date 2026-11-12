@@ -8,7 +8,6 @@ interface Translations {
     };
 }
 
-// Translations dictionary
 const translations: Translations = {
     en: {
         'sidebar.navigation': 'Workspace navigation',

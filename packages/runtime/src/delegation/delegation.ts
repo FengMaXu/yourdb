@@ -14,6 +14,8 @@ import type {
   TrustedDelegationContext,
 } from "./index.js";
 import { parseChildReport } from "./report.js";
+import { awaitWithSignal, errorText } from "./signals.js";
+import { now } from "../primitives.js";
 import { processChildConcurrency, processParentOperationConcurrency, type ConcurrencyLimiter, type ConcurrencyLease, type KeyedConcurrencyLimiter } from "./concurrency.js";
 import {
   acceptedLedgerRecord,
@@ -40,8 +42,6 @@ export interface NativeDelegationOptions {
 /** Cancelled children get one bounded chance to persist their terminal ledger record. */
 const TERMINAL_PERSISTENCE_GRACE_MS = 50;
 
-function now(): string { return new Date().toISOString(); }
-function boundedError(error: unknown): string { return (error instanceof Error ? error.message : String(error)).slice(0, 2048); }
 function byteLength(value: string): number { return Buffer.byteLength(value, "utf8"); }
 
 function abortError(signal: AbortSignal): Error {
@@ -50,21 +50,6 @@ function abortError(signal: AbortSignal): Error {
 
 function isDeadlineAbort(signal?: AbortSignal): boolean {
   return signal?.reason instanceof Error && signal.reason.message === "SUBAGENT_DEADLINE_EXCEEDED";
-}
-
-async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) {
-    void promise.catch(() => undefined);
-    throw abortError(signal);
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(abortError(signal));
-    signal.addEventListener("abort", onAbort, { once: true });
-    void promise.then(
-      (value) => { signal.removeEventListener("abort", onAbort); resolve(value); },
-      (error) => { signal.removeEventListener("abort", onAbort); reject(error); },
-    );
-  });
 }
 
 function validateTask(task: SubagentTask, keys: Set<string>): void {
@@ -102,13 +87,13 @@ export class NativeDelegation implements Delegation {
     );
     initializationDeadline.unref?.();
     this.initialized = (async () => {
-      const records = await awaitWithSignal(options.ledger.list(initializationController.signal), initializationController.signal);
+      const records = await awaitWithSignal(options.ledger.list(initializationController.signal), initializationController.signal, "SUBAGENT_DELEGATION_ABORTED");
       if (this.isClosing()) return;
       const recovery = options.executor.reconcile
-        ? await awaitWithSignal(options.executor.reconcile(records, initializationController.signal), initializationController.signal)
+        ? await awaitWithSignal(options.executor.reconcile(records, initializationController.signal), initializationController.signal, "SUBAGENT_DELEGATION_ABORTED")
         : undefined;
       if (this.isClosing()) return;
-      await awaitWithSignal(options.ledger.reconcile(recovery, initializationController.signal), initializationController.signal);
+      await awaitWithSignal(options.ledger.reconcile(recovery, initializationController.signal), initializationController.signal, "SUBAGENT_DELEGATION_ABORTED");
       this.serviceState = transitionDelegationService(this.serviceState, "initialized");
     })().finally(() => {
       clearTimeout(initializationDeadline);
@@ -131,7 +116,7 @@ export class NativeDelegation implements Delegation {
   private async appendTerminal(base: DelegationLedgerRecord, outcome: ChildOutcome, signal: AbortSignal): Promise<void> {
     const record = terminalLedgerRecord(base, outcome, now());
     if (!signal.aborted) {
-      await awaitWithSignal(this.options.ledger.append(record, signal), signal);
+      await awaitWithSignal(this.options.ledger.append(record, signal), signal, "SUBAGENT_DELEGATION_ABORTED");
       return;
     }
     if (this.isClosing()) return;
@@ -143,7 +128,7 @@ export class NativeDelegation implements Delegation {
     );
     deadline.unref?.();
     try {
-      await awaitWithSignal(this.options.ledger.append(record, persistenceController.signal), persistenceController.signal);
+      await awaitWithSignal(this.options.ledger.append(record, persistenceController.signal), persistenceController.signal, "SUBAGENT_DELEGATION_ABORTED");
     } catch {
       // The execution outcome still returns when best-effort terminal persistence is unavailable.
     } finally {
@@ -206,6 +191,7 @@ export class NativeDelegation implements Delegation {
       await awaitWithSignal(
         this.options.ledger.reserve(context.parentOperationId, assigned.map((item) => item.base), this.maxChildrenPerOperation, effectiveSignal),
         effectiveSignal,
+        "SUBAGENT_DELEGATION_ABORTED",
       );
     } catch (error) {
       if (effectiveSignal.aborted) return beforeAdmission();
@@ -228,6 +214,7 @@ export class NativeDelegation implements Delegation {
           await awaitWithSignal(
             context.memo.set("subagent-runs", assigned.map(({ task, base }) => ({ key: task.key, role: task.role, runId: base.runId, childSessionId: base.childSessionId }))),
             effectiveSignal,
+            "SUBAGENT_DELEGATION_ABORTED",
           );
         } catch (error) {
           if (effectiveSignal.aborted) return beforeAdmission();
@@ -255,7 +242,7 @@ export class NativeDelegation implements Delegation {
             status: "failed" as const,
             terminalConfirmed: false,
             usage: { inputTokens: null, outputTokens: null, cost: null },
-            error: boundedError(error),
+            error: errorText(error),
           });
         }
       }));
@@ -333,20 +320,20 @@ export class NativeDelegation implements Delegation {
           onToolStarted: (toolName) => progress({ key: task.key, type: "tool_started", toolName, at: Date.now() }),
           onAccepted: async (operationId, acceptedSignal) => {
             await this.options.ledger.append(acceptedLedgerRecord(base, operationId, now()), acceptedSignal);
-            if (context.memo) await awaitWithSignal(context.memo.set(`subagent-${base.runId}`, { childSessionId: base.childSessionId, operationId }), acceptedSignal);
+            if (context.memo) await awaitWithSignal(context.memo.set(`subagent-${base.runId}`, { childSessionId: base.childSessionId, operationId }), acceptedSignal, "SUBAGENT_DELEGATION_ABORTED");
           },
         });
       } finally {
         lease.release();
       }
-      const target = await awaitWithSignal(resolved.checkTarget(delegatedSignal), delegatedSignal)
-        .catch((error) => ({ state: "unavailable" as const, reasons: [boundedError(error)] }));
+      const target = await awaitWithSignal(resolved.checkTarget(delegatedSignal), delegatedSignal, "SUBAGENT_DELEGATION_ABORTED")
+        .catch((error) => ({ state: "unavailable" as const, reasons: [errorText(error)] }));
       let status: ChildOutcomeStatus = stoppedOutcomeStatus(stopState, ["timeout", "close", "cancel"]) ?? raw.status;
       let report;
       let error = raw.error;
       if (status === "completed") {
         try { report = parseChildReport(raw.text ?? ""); }
-        catch (parseError) { status = "invalid_output"; error = boundedError(parseError); }
+        catch (parseError) { status = "invalid_output"; error = errorText(parseError); }
       }
       const outcome: ChildOutcome = {
         key: task.key,
@@ -368,6 +355,7 @@ export class NativeDelegation implements Delegation {
         await awaitWithSignal(
           context.memo.set(`subagent-${base.runId}-result`, { status: outcome.status, targetRef: outcome.targetRef, targetState: outcome.targetState }),
           delegatedSignal,
+          "SUBAGENT_DELEGATION_ABORTED",
         ).catch(() => undefined);
       }
       return outcome;
@@ -377,7 +365,7 @@ export class NativeDelegation implements Delegation {
         targetState: "unavailable", staleReasons: ["target resolution, admission or child creation failed"],
         status: stoppedOutcomeStatus(stopState, ["timeout", "close", "cancel"]) ?? "failed",
         terminalConfirmed: true,
-        usage: { inputTokens: null, outputTokens: null, cost: null }, error: boundedError(error),
+        usage: { inputTokens: null, outputTokens: null, cost: null }, error: errorText(error),
       };
       if (!(terminalWriteStarted && delegatedSignal.aborted)) await this.appendTerminal(base, outcome, delegatedSignal);
       return outcome;

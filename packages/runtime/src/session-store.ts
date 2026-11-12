@@ -21,19 +21,9 @@ export class PiApplicationSession {
     return branch.appendMessage(message, TODO_CONTEXT);
   }
 
-  async appendSessionName(name: string): Promise<void> {
-    await this.native.setName(name, TODO_CONTEXT);
-  }
-
   async getEntries(): Promise<readonly Entry[]> {
     return this.native.findEntries(undefined, TODO_CONTEXT);
   }
-
-  async getMetadata(): Promise<unknown> {
-    return this.metadata;
-  }
-
-  getNative(): Session<any> { return this.native; }
 }
 
 export type SessionInput = Session<any> | PiApplicationSession;

@@ -1,8 +1,8 @@
 export type WidgetKind = "kpi" | "chart" | "table" | "steps";
 
 /**
- * Widgets built by the current Runtime carry this version. Widgets without it
- * are replays of earlier sessions and keep their original rendering (ADR-0008 decision 11).
+ * Every widget the Runtime builds carries this version. A transcript widget
+ * without it is drawn from its own data rows (ADR-0008 decision 11).
  */
 export const CHART_WIDGET_CONTRACT_VERSION = 2;
 

@@ -13,6 +13,7 @@ import type {
 } from "../delegation/index.js";
 import { processExplorationConcurrency } from "../delegation/concurrency.js";
 import { defineDataAgentTool, type DataAgentToolDefinition } from "../tools/tool-definition.js";
+import { bigintSafeJson } from "../primitives.js";
 
 const explorationParameters = Type.Object({
   sql: Type.String({ minLength: 1, maxLength: 32 * 1024 }),
@@ -40,10 +41,6 @@ function boundedChildText(content: string): { readonly content: string; readonly
   let end = MAX_CHILD_TOOL_BYTES;
   while (end > 0 && end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end -= 1;
   return { content: `${bytes.subarray(0, end).toString("utf8")}\n[truncated]`, truncated: true };
-}
-
-function json(value: unknown): string {
-  return JSON.stringify(value, (_key, item) => typeof item === "bigint" ? { __type: "bigint", value: item.toString() } : item);
 }
 
 function normalizeKnowledgePath(value: string): string {
@@ -236,7 +233,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
               // The statement must end by the child's wrap-up; MySQL stops it there.
               ...(toolContext?.wrapUpAt ? { deadlineAt: toolContext.wrapUpAt } : {}),
             });
-            return text(json({ columns: result.columns, columnTypes: result.columnTypes, rows: result.rows, rowCount: result.rows.length, truncated: result.truncated }));
+            return text(bigintSafeJson({ columns: result.columns, columnTypes: result.columnTypes, rows: result.rows, rowCount: result.rows.length, truncated: result.truncated }));
           } finally {
             lease.release();
           }
@@ -259,7 +256,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
             const schema = await getSchema(childContext.abortSignal);
             const tables = schema.tables.filter((table) => !wanted || wanted.includes(table.name.toLowerCase()));
             const typed = await withColumnTypes(sql, schema.dialect, tables, `${run.childSessionId}:${invocation.invocationId}`, childContext.abortSignal);
-            return text(json({ dialect: schema.dialect, tables: typed.tables, ...(typed.notes.length > 0 ? { notes: typed.notes } : {}) }));
+            return text(bigintSafeJson({ dialect: schema.dialect, tables: typed.tables, ...(typed.notes.length > 0 ? { notes: typed.notes } : {}) }));
           },
         }, {
           promptSnippet: "列出表、列名与类型及主键、唯一键、外键；可按表名缩小范围。",
@@ -288,7 +285,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
           );
           for (const hit of hits) knowledgeChecks.set(hit.knowledgeId, () => knowledge.isCurrent(hit.knowledgeId));
           const formatted = formatKnowledgeSearchResults(hits, requestedResults);
-          return text(json(formatted), formatted);
+          return text(bigintSafeJson(formatted), formatted);
         },
       }, {
         promptSnippet: "检索知识来源中的相关章节和有界正文。",
@@ -312,7 +309,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
           if (!knowledgeAllowed(document.path)) throw new Error("SUBAGENT_KNOWLEDGE_PATH_NOT_AUTHORIZED");
           const read = knowledge.read(value);
           knowledgeChecks.set(value.knowledgeId, () => knowledge.isCurrent(value.knowledgeId));
-          return text(json(read), read);
+          return text(bigintSafeJson(read), read);
         },
       }, {
         promptSnippet: "读取短知识文档或指定章节。",

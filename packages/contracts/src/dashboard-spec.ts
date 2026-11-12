@@ -4,15 +4,14 @@ import { ChartSpecSchema, DatasetRefSchema, FieldMetaSchema, checkChartSpec, typ
 
 /**
  * DashboardSpec v1 (ADR-0008 step 4): a snapshot dashboard whose views are
- * ChartSpecs, tables, KPI cards and findings. Every view reads one Dataset Reference;
- * a live binding is added later as another DatasetRef kind, not a new spec.
+ * ChartSpecs, tables, KPI cards and findings. Every view reads one Dataset Reference.
  */
 export const DASHBOARD_SPEC_VERSION = 1 as const;
 
 const Strict = { additionalProperties: false } as const;
 const Name = Type.String({ minLength: 1 });
 const ViewId = Type.String({ pattern: "^[A-Za-z0-9_\\-]{1,64}$" });
-/** Placement used only when the spec has no `layout`: kept so dashboards built before rows still open and refresh. */
+/** Placement used only when the spec has no `layout`, so a saved dashboard without rows still opens and refreshes. */
 const Width = Type.Optional(Type.Union([Type.Literal("half"), Type.Literal("full")]));
 const Fields = Type.Optional(Type.Record(Type.String(), FieldMetaSchema));
 

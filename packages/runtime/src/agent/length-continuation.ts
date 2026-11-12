@@ -13,8 +13,8 @@ interface MessageLike {
 /**
  * Pi finishes a run when a reply fills the output limit without a tool call
  * (the limit was genuinely reached, so it is neither an error nor an
- * overflow). A reasoning model can spend the whole limit thinking; such a run
- * ended silently mid-task. This decides whether the run should continue.
+ * overflow). A reasoning model can spend the whole limit thinking, and the run
+ * would end silently mid-task. This decides whether the run should continue.
  */
 export function endedByOutputLimit(messages: readonly unknown[]): boolean {
   const last = messages[messages.length - 1] as MessageLike | undefined;

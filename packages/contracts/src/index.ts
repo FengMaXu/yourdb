@@ -188,7 +188,6 @@ export type DataAgentEvent = Static<typeof DataAgentEventSchema>;
 export const DataAgentEventEnvelopeSchema = Type.Object({ protocolVersion: Type.Literal(ProtocolVersion), sequence: Type.Integer({ minimum: 1 }), requestId: Type.String({ minLength: 1 }), sessionId: Type.Optional(Type.String()), runId: Type.Optional(Type.String()), timestamp: Type.Integer({ minimum: 0 }), event: DataAgentEventSchema });
 export type DataAgentEventEnvelope = Static<typeof DataAgentEventEnvelopeSchema>;
 export function isDataAgentCommandEnvelope(value: unknown): value is DataAgentCommandEnvelope { return Value.Check(DataAgentCommandEnvelopeSchema, value); }
-export function isDataAgentEvent(value: unknown): value is DataAgentEvent { return Value.Check(DataAgentEventSchema, value); }
 export function isDataAgentEventEnvelope(value: unknown): value is DataAgentEventEnvelope { return Value.Check(DataAgentEventEnvelopeSchema, value); }
 export function parseDataAgentCommandEnvelope(value: unknown): DataAgentCommandEnvelope { if (!isDataAgentCommandEnvelope(value)) throw new TypeError("Invalid DataAgent command envelope"); return value; }
 export function parseDataAgentResponseEnvelope(value: unknown): DataAgentResponseEnvelope { if (!Value.Check(DataAgentResponseEnvelopeSchema, value)) throw new TypeError("Invalid DataAgent response envelope"); return value; }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Value } from "typebox/value";
-import { DataAgentEventSchema, isDataAgentEvent, isToolProgress, parseDataAgentCommandEnvelope } from "./index.js";
+import { DataAgentEventSchema, isToolProgress, parseDataAgentCommandEnvelope } from "./index.js";
 
 describe("agent tool event contract", () => {
   const base = {
@@ -16,14 +16,14 @@ describe("agent tool event contract", () => {
   });
 
   it("rejects malformed events before they cross the transport boundary", () => {
-    expect(isDataAgentEvent({ type: "agent.text_delta", delta: 42 })).toBe(false);
-    expect(isDataAgentEvent({ type: "agent.tool_finished", ...base })).toBe(true);
+    expect(Value.Check(DataAgentEventSchema, { type: "agent.text_delta", delta: 42 })).toBe(false);
+    expect(Value.Check(DataAgentEventSchema, { type: "agent.tool_finished", ...base })).toBe(true);
   });
 
   it("accepts bounded subagent progress and rejects extra or unknown fields", () => {
     const child = { key: "schema", role: "explorer", task: "列出列", currentTool: "describe_table", toolCalls: 2, startedAt: 1, status: "running", output: "pending" };
     const progress = { kind: "subagent", children: [child] };
-    expect(isDataAgentEvent({ type: "agent.tool_progress", toolCallId: "call-1", toolName: "subagent", progress })).toBe(true);
+    expect(Value.Check(DataAgentEventSchema, { type: "agent.tool_progress", toolCallId: "call-1", toolName: "subagent", progress })).toBe(true);
     expect(isToolProgress({ kind: "subagent", children: [{ ...child, endedAt: 5, status: "completed", output: "produced", currentTool: null }] })).toBe(true);
     expect(isToolProgress({ kind: "subagent", children: [{ ...child, sql: "select 1" }] })).toBe(false);
     expect(isToolProgress({ kind: "subagent", children: [1, 2, 3, 4, 5].map((index) => ({ ...child, key: `k${index}` })) })).toBe(false);

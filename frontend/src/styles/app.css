@@ -5,7 +5,6 @@
  *   components shadcn/ui components
  *   utilities  Tailwind utilities
  * Nothing may be left outside a layer: unlayered CSS beats every layer.
- * See docs/前端迁移计划-Tailwind与shadcn.md.
  */
 @layer theme, base, components, utilities;
 

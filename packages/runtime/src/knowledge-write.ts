@@ -68,7 +68,3 @@ export class KnowledgeWriter {
     await appendFile(this.auditPath, `${JSON.stringify({ id: randomUUID(), timestamp: Date.now(), operation, path: relativePath })}\n`, "utf8");
   }
 }
-
-export async function readAuditLog(auditPath: string): Promise<Array<{ id: string; timestamp: number; operation: string; path: string }>> {
-  try { return (await readFile(auditPath, "utf8")).trim().split("\n").filter(Boolean).map(line => JSON.parse(line)); } catch { return []; }
-}

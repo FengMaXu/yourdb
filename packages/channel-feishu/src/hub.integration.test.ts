@@ -88,7 +88,7 @@ describe("Feishu channel through the hub", () => {
     expect(prompts).toHaveLength(1);
     const sessionId = prompts[0]!.sessionId!;
 
-    const asked = runtime.askClarification(sessionId, "销售额是否含税？", ["含税", "不含税"]);
+    const asked = runtime.clarificationManager.ask(sessionId, "销售额是否含税？", ["含税", "不含税"]);
     await settle();
     expect(calls.at(-1)).toMatchObject({ op: "send", args: ["chat_id", "oc_1", "interactive", expect.stringContaining("销售额是否含税？"), expect.any(String)] });
 
@@ -131,7 +131,7 @@ describe("Feishu channel through the hub", () => {
     await settle();
     const [alice, bob] = prompts;
     expect(alice!.sessionId).not.toBe(bob!.sessionId);
-    const asked = runtime.askClarification(alice!.sessionId!, "含税吗？", ["含税"]);
+    const asked = runtime.clarificationManager.ask(alice!.sessionId!, "含税吗？", ["含税"]);
     await settle();
     const response = await handlers.cardAction!({ event_id: "evt-3", tenant_key: "tenant-1", operator: { open_id: "ou_bob" }, context: { open_chat_id: "oc_1" }, action: { value: { kind: "answer", clarificationId: asked.clarificationId, text: "含税", audience: "group" } } });
     expect(response).toMatchObject({ toast: { type: "success" } });

@@ -122,7 +122,7 @@ function recordingWrites(state: AnsweringTransaction, written: Map<string, JsonV
  * Every record is its own Session Value, and a write commits only the records
  * the transaction changed: one Answer Spec field changes one revision record,
  * instead of rewriting every task, revision, evidence item and candidate of
- * the session (which grew a session file by tens of megabytes). A session
+ * the session (which would grow a session file by tens of megabytes). A session
  * held in the single-Value form is read from it and split into records on its
  * first write.
  *

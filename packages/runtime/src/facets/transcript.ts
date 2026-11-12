@@ -5,6 +5,7 @@ import { isWidgetLifecycleDetails, validateWidgetSpec, type WidgetPayload } from
 import { splitPromptAttachments } from "../attachments.js";
 import { isRuntimeInjected } from "../runtime-injected.js";
 import { infrastructureFailureOf } from "../agent/infrastructure-failure.js";
+import { asRecord } from "../primitives.js";
 
 export interface ProjectedOperation {
   readonly requestId: string;
@@ -78,10 +79,6 @@ interface OperationProjectionState {
   toolArgs: Map<string, unknown>;
   /** A lost database seen in a tool result; the Runtime then stops the run (harness-factory). */
   infrastructureFailure?: string | undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
 function textFromContent(content: unknown): string {
