@@ -108,6 +108,9 @@ describe("Session Runtime scoped query composition", () => {
       expect(prompt.startsWith(TASK_SCOPE_PROMPT)).toBe(true);
       expect(prompt).toContain("A different SYSTEM.md that says nothing about scope.");
       expect(TASK_SCOPE_PROMPT).toMatch(/^<task_scope>[\s\S]*拒绝执行[\s\S]*<\/task_scope>$/);
+      // Data work the refusal list must not catch: SQL for the user's data, and the concepts to read it.
+      expect(TASK_SCOPE_PROMPT).toContain("为查询用户数据编写或解释 SQL");
+      expect(TASK_SCOPE_PROMPT).toContain("与用户数据无关的编程");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
