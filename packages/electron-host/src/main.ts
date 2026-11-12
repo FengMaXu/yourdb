@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { createConfiguredQueryExecutor, testDatabaseConnection, type DatabaseServers } from "@data-agent/database";
+import { feishuProvider } from "@data-agent/channel-feishu";
+import { weixinProvider } from "@data-agent/channel-weixin";
 import { createMcpPluginSupervisor, databaseHostServer } from "@data-agent/mcp-plugins";
 
 /**
@@ -40,7 +42,10 @@ export function resolveRuntimePaths(options: { userDataDir: string; appDir?: str
 export interface MainDeps {
   app: {
     whenReady(): Promise<void>;
-    getPath(name: "userData"): string;
+    getPath(name: "userData" | "appData"): string;
+    setPath?(name: "userData", value: string): void;
+    /** True in the installed app; false when run from the repository. */
+    isPackaged?: boolean;
     quit(): void;
     requestSingleInstanceLock?(): boolean;
     on?(event: string, listener: (...args: unknown[]) => void): void;
@@ -372,12 +377,26 @@ export interface ElectronHostHandle {
   dispose(): Promise<void>;
 }
 
+/** The folder under the OS app-data dir that holds the installed app's data, as it did in 0.1.0. */
+export const PACKAGED_DATA_FOLDER = "yourdb";
+
+/**
+ * Electron names the data folder after package.json's "name", which is "frontend", so 0.1.1 would
+ * have started from an empty folder beside 0.1.0's. The installed app uses <appData>/yourdb; runs
+ * from the repository keep Electron's default so they never touch an installed app's data.
+ * Call before anything reads userData (the single-instance lock does).
+ */
+export function usePackagedDataFolder(app: MainDeps["app"]): void {
+  if (!app.isPackaged || !app.setPath) return;
+  app.setPath("userData", path.join(app.getPath("appData"), PACKAGED_DATA_FOLDER));
+}
+
 export async function startElectronHost(deps: MainDeps, overrides: Partial<ElectronMainRuntimePaths> = {}): Promise<ElectronHostHandle> {
   deps.protocol?.registerSchemesAsPrivileged?.([{
     scheme: "data-agent",
     privileges: { secure: true, standard: true, supportFetchAPI: true, stream: true },
   }]);
-  const { createDataAgentApplication } = await import("@data-agent/runtime");
+  const { createDataAgentApplication, createDashboardSnapshotter } = await import("@data-agent/runtime");
   const { registerElectronRuntimeIpc } = await import("./index.js");
 
   const paths = resolveRuntimePaths({ userDataDir: deps.app.getPath("userData") });
@@ -465,6 +484,18 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
     hostServers: [databaseHostServer(() => queryExecutor.check())],
   });
   application.setMcpPlugins(mcpPlugins);
+  // Message channels (ADR-0011), as the web host has them: Feishu and personal WeChat, each connected
+  // by scanning in Settings → Channels. Dashboards reach phones as a picture rendered by Edge or Chrome
+  // (Edge ships with Windows 10/11); without one, only the page is sent.
+  const channelError = (name: string) => (error: unknown) => console.error(`[yourdb] ${name}:`, error instanceof Error ? error.message : error);
+  await application.enableChannels([
+    feishuProvider({ onError: channelError("feishu") }),
+    weixinProvider({ onError: channelError("weixin") }),
+  ], {
+    snapshot: createDashboardSnapshotter(),
+    // A chat's next message after two quiet hours starts a new conversation; "/new" starts one at any time.
+    idleSessionMs: 120 * 60_000,
+  });
   const unregisterDesktopCapabilities = registerDesktopCapabilities(deps.ipcMain as DesktopIpcLike, {
     userDataDir: paths.userDataDir,
     safeStorage: deps.safeStorage,
@@ -525,6 +556,7 @@ if (process.env.VITEST !== "true" && process.env.NODE_ENV !== "test") void (asyn
   try {
     const electronModule = "electron";
     const electron = (await import(/* @vite-ignore */ electronModule)) as never as MainDeps;
+    usePackagedDataFolder(electron.app);
     if (electron.app.requestSingleInstanceLock?.() === false) {
       electron.app.quit();
       return;

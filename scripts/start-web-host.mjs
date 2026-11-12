@@ -112,7 +112,7 @@ console.log(`[data-agent-web] knowledge dir: ${knowledgeRoot} (${application.kno
 // when its chat id is listed in FEISHU_GROUP_DELIVERY_CHATS; otherwise they go to the asker privately.
 const { feishuProvider } = await import(toUrl(path.join(root, "packages/channel-feishu/dist/index.js")));
 const { weixinProvider } = await import(toUrl(path.join(root, "packages/channel-weixin/dist/index.js")));
-const { createDashboardSnapshotter } = await import(toUrl(path.join(root, "apps/server/dist/dashboard-snapshot.js")));
+const { createDashboardSnapshotter } = await import(toUrl(path.join(root, "packages/runtime/dist/index.js")));
 const groupChats = new Set((process.env.FEISHU_GROUP_DELIVERY_CHATS ?? "").split(",").map((chatId) => chatId.trim()).filter(Boolean));
 // A chat's next message after this much quiet starts a new conversation; "/new" starts one at any time.
 const idleMinutes = Number(process.env.DATA_AGENT_CHANNEL_IDLE_MINUTES ?? 120);
