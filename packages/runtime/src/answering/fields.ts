@@ -447,3 +447,21 @@ export function requiredPaths(inputs: NecessityInputs): readonly FieldPath[] {
 
 /** Report Tasks answer only for the shared population (ADR-0009). */
 export const REPORT_REQUIRED: readonly FieldPath[] = ["population.entity", "population.eligibility", "population.conditions", "population.time"];
+
+export type Grain = "year" | "quarter" | "month" | "week" | "day" | "hour";
+
+/** Words that name a calendar grain, checked in this order: "quarter" before "year", "month" before "day". */
+const GRAIN_WORDS: readonly [Grain, RegExp][] = [
+  ["quarter", /quarter|季/],
+  ["month", /month|月/],
+  ["week", /week|周|星期/],
+  ["hour", /hour|小时/],
+  ["year", /year|年/],
+  ["day", /\bday|daily|\bdate\b|日|天/],
+];
+
+/** The calendar grain a field's text names, or undefined when it names none. */
+export function grainOf(text: string): Grain | undefined {
+  const lower = text.toLowerCase();
+  return GRAIN_WORDS.find(([, pattern]) => pattern.test(lower))?.[0];
+}

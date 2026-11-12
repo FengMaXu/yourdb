@@ -13,3 +13,9 @@ export function trimmedText(value: unknown): string | undefined {
 export function bigintSafeJson(value: unknown): string {
   return JSON.stringify(value, (_key, item) => typeof item === "bigint" ? { __type: "bigint", value: item.toString() } : item);
 }
+
+/** Whitespace collapsed to single spaces; cut with an ellipsis past `max` characters. */
+export function oneLine(value: string, max = Infinity): string {
+  const line = value.replace(/\s+/g, " ").trim();
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}

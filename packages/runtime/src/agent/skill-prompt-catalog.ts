@@ -1,3 +1,5 @@
+import { oneLine } from "../primitives.js";
+
 export interface SkillCatalogEntry {
   readonly name: string;
   readonly description: string;
@@ -13,10 +15,6 @@ export interface SkillCatalogEntry {
  */
 export function isSkillAvailable(skill: Pick<SkillCatalogEntry, "requiredTools">, grantedToolNames: ReadonlySet<string>): boolean {
   return (skill.requiredTools ?? []).every((name) => grantedToolNames.has(name));
-}
-
-function oneLine(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
 }
 
 /**

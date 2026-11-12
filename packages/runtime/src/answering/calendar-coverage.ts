@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import type { FanoutDialect } from "./fanout-check.js";
-import { layersOf, type GroupingKeyValue, type MeasureExpression, type SourceValue, type TimeValue } from "./fields.js";
+import { grainOf, layersOf, type GroupingKeyValue, type MeasureExpression, type SourceValue, type TimeValue } from "./fields.js";
 import { settled } from "./support.js";
 
 /**
@@ -20,14 +20,6 @@ export const CALENDAR_COVERAGE_MAX_PERIODS = 1_000;
 export type CalendarGrain = "year" | "quarter" | "month" | "day";
 
 const IDENTIFIER = "[A-Za-z_][A-Za-z0-9_]*";
-const GRAIN_WORDS: readonly [CalendarGrain | "unsupported", RegExp][] = [
-  ["quarter", /quarter|季/],
-  ["month", /month|月/],
-  ["unsupported", /week|周|星期|hour|小时/],
-  ["year", /year|年/],
-  ["day", /\bday|daily|\bdate\b|日|天/],
-];
-
 export interface CalendarTarget {
   readonly table: string;
   readonly column: string;
@@ -49,9 +41,10 @@ export interface CalendarCoverageReport {
 }
 
 
-function grainOf(text: string): CalendarGrain | "unsupported" | undefined {
-  const lower = text.toLowerCase();
-  return GRAIN_WORDS.find(([, pattern]) => pattern.test(lower))?.[0];
+/** Week and hour are calendar grains this check does not count periods for. */
+function calendarGrainOf(text: string): CalendarGrain | "unsupported" | undefined {
+  const grain = grainOf(text);
+  return grain === "week" || grain === "hour" ? "unsupported" : grain;
 }
 
 /** The calendar grain the answer is computed per: a grouping key first, then a formula layer's `per`. */
@@ -62,7 +55,7 @@ function grainFor(fields: SpecFields): CalendarGrain | "unsupported" | undefined
     ...keys.map((key) => typeof key === "string" ? key : key.grain ?? key.key),
     ...(formula ? layersOf(formula).flatMap((layer) => layer.per ? [layer.per] : []) : []),
   ];
-  return texts.map(grainOf).find(Boolean);
+  return texts.map(calendarGrainOf).find(Boolean);
 }
 
 const iso = (date: Date) => date.toISOString().slice(0, 10);

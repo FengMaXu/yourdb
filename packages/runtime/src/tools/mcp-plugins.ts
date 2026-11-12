@@ -1,6 +1,7 @@
 import { Type } from "typebox";
 import type { DataAgentToolContext } from "./answering.js";
 import { defineDataAgentTool, textResult, type DataAgentToolDefinition } from "./tool-definition.js";
+import { oneLine } from "../primitives.js";
 
 /** One tool of a connected MCP plugin, as the host's supervisor serves it. */
 export interface McpPluginTool {
@@ -23,11 +24,6 @@ export interface McpPluginPort {
 }
 
 const MAX_SNIPPET = 120;
-
-function oneLine(value: string, max: number): string {
-  const line = value.replace(/\s+/g, " ").trim();
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
-}
 
 /**
  * The tools of the MCP plugins the user enabled, as the plugins describe them.
