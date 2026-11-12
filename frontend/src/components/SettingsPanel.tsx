@@ -47,7 +47,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     const { t } = useLanguage();
     const activeMenu = SECTION_MENU[section];
 
-    // States for sub-tabs
     const [modelProvider, setModelProvider] = useState('模型设置');
     const [showPassword, setShowPassword] = useState(false);
 
@@ -65,7 +64,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     };
     const providerIds = Object.keys(PROVIDER_REGISTRY);
 
-    // Detect which provider is active based on current base_url or provider
     const detectActiveProvider = (baseUrl: string | undefined, provider?: string): string | null => {
         if (provider === 'anthropic') return 'Anthropic';
         if (baseUrl) {
@@ -79,7 +77,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
     const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
 
-    // Provide an array from the registry for easy mapping
     const providers = providerIds.map(id => ({ id, ...PROVIDER_REGISTRY[id] }));
 
     type ProviderConfig = {
@@ -659,7 +656,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                 {dbDriver === 'sqlite' && <div id="settings-db-file-help" className={UI.caption}>{t('settings.dbFileHelp')}</div>}
                             </div>
 
-                            {/* Test Result Alert */}
                             {dbTestResult && (
                                 <div className={UI.alert} data-tone={dbTestResult.success ? 'ok' : 'error'} role={dbTestResult.success ? 'status' : 'alert'} aria-live={dbTestResult.success ? 'polite' : 'assertive'}>
                                     <strong>{dbTestResult.success ? `✓ ${t('settings.dbTestSuccess')}` : `✗ ${t('settings.dbTestFailed')}`}</strong>

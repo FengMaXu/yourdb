@@ -816,28 +816,6 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     return;
                 }
 
-                if (event.type === 'widget_patch') {
-                    const activeMessage = agentBufferRef.current[targetMessageId] || message;
-                    const existing = activeMessage.widgetsById[event.widget_id] || {
-                        widget_id: event.widget_id,
-                        title: '组件预览',
-                        kind: 'rich_text',
-                    };
-                    activeMessage.widgetsById[event.widget_id] = {
-                        ...existing,
-                        ...event.patch,
-                        widget_id: event.widget_id,
-                        status: 'previewing',
-                    } as WidgetSpec;
-                    const tool = activeMessage.toolCallsById[event.tool_call_id];
-                    if (tool) {
-                        tool.status = 'running';
-                        tool.widgetId = event.widget_id;
-                    }
-                    scheduleFlush(targetMessageId, true);
-                    return;
-                }
-
                 if (event.type === 'widget') {
                     message.widgetsById[event.widget_id] = {
                         ...event.widget,
@@ -862,12 +840,6 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     if (widget) {
                         widget.status = 'ready';
                     }
-                    scheduleFlush(targetMessageId, true);
-                    return;
-                }
-
-                if (event.type === 'widget_remove') {
-                    delete message.widgetsById[event.widget_id];
                     scheduleFlush(targetMessageId, true);
                     return;
                 }

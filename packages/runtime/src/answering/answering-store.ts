@@ -17,6 +17,7 @@ import {
 import { openPaths, undeclaredPaths } from "./qualification.js";
 import { calendarRequiredPaths } from "./calendar-coverage.js";
 import { equivalentPaths } from "./probes.js";
+import { assertContext } from "./support.js";
 
 export interface AnsweringTransaction {
   getTask(taskId: TaskId): QueryTaskRecord | undefined;
@@ -99,12 +100,6 @@ function cloneState(source: StoreState): StoreState {
   };
 }
 
-function assertContext(context: BusinessContext): void {
-  if (!context || !context.principal?.id || !context.sessionId || !context.operationId || !context.invocationId) {
-    throw new Error("ANSWERING_CONTEXT_INVALID");
-  }
-  if (context.signal?.aborted) throw new Error("ANSWERING_OPERATION_ABORTED");
-}
 
 function taskVisible(task: QueryTaskRecord, context: BusinessContext): boolean {
   return task.sessionId === context.sessionId && task.principalId === context.principal.id;
@@ -213,7 +208,7 @@ export class InMemoryAnsweringStore implements AnsweringStore {
     return clone([...this.state.candidates.values()].filter((candidate) => visibleTaskIds.has(candidate.taskId)));
   }
 
-  /** Serialize the same domain records for a Session adapter or migration. */
+  /** Serialize the same domain records for a Session adapter. */
   snapshot(): AnsweringStoreSnapshot {
     const state = cloneState(this.state);
     return {

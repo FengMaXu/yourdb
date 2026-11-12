@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Visual regression snapshots of the web app (frontend migration plan, PR 0.2).
+ * Visual regression snapshots of the web app.
  *
  * Builds the fixed data of scripts/visual-fixture.mjs, starts the Web Host on it, and drives a
  * headless Edge or Chrome over the DevTools protocol through a fixed matrix of pages, each at

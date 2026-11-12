@@ -8,6 +8,7 @@ import {
 import { makeInternalId } from "./internal-ids.js";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { assertContext, inferType } from "./support.js";
 
 export interface ResultStream {
   readonly columns: readonly string[];
@@ -36,15 +37,6 @@ export interface ResultStore {
   encodeCsv(ref: PrivateResultRef, context: BusinessContext): Promise<{ readonly content: string; readonly contentHash: string }>;
 }
 
-function inferType(value: unknown): string {
-  if (value === null || value === undefined) return "NULL";
-  if (typeof value === "bigint") return "BIGINT";
-  if (typeof value === "number") return Number.isInteger(value) ? "INTEGER" : "REAL";
-  if (typeof value === "boolean") return "BOOLEAN";
-  if (typeof value === "object") return "JSON";
-  return "TEXT";
-}
-
 function stableValue(value: unknown): unknown {
   if (typeof value === "bigint") return { __type: "bigint", value: value.toString() };
   if (value === undefined) return { __type: "undefined" };
@@ -60,11 +52,6 @@ function csvField(value: unknown): string {
   if (value === null || value === undefined) return "";
   const raw = typeof value === "string" ? value : typeof value === "bigint" ? value.toString() : value instanceof Date ? value.toISOString() : typeof value === "object" ? JSON.stringify(stableValue(value)) : String(value);
   return raw === "" ? "\"\"" : /[",\r\n]/.test(raw) ? `"${raw.replaceAll('"', '""')}"` : raw;
-}
-
-function assertContext(context: BusinessContext): void {
-  if (!context?.principal?.id || !context.sessionId || !context.operationId || !context.invocationId) throw new Error("ANSWERING_CONTEXT_INVALID");
-  if (context.signal?.aborted) throw new Error("ANSWERING_OPERATION_ABORTED");
 }
 
 function encodeWire(value: unknown): unknown {

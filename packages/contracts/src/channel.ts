@@ -98,7 +98,6 @@ export const NoticeCodeSchema = Type.Union([
   /** A bot setting changed from the chat, such as the reply detail. */
   Type.Literal("SETTING_CHANGED"),
 ]);
-export type NoticeCode = Static<typeof NoticeCodeSchema>;
 
 /** What may leave the system through a Channel. Persisted before delivery. */
 export const DeliverableSchema = Type.Union([

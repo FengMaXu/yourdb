@@ -370,7 +370,7 @@ const App: React.FC = () => {
         onModelMissing={markModelMissing}
       />
       <GlobalPreviewModal />
-      {/* Short confirmations and errors from the sidebar; it used to draw its own toast at the same spot. */}
+      {/* Short confirmations and errors from the sidebar. */}
       <Toaster position="bottom-center" offset={112} />
     </PreviewProvider>
   );

@@ -1,4 +1,4 @@
-// yourdb change: no next-themes. The app has no dark mode yet, so the toaster is always light.
+// yourdb change: no next-themes. The app has no dark mode, so the toaster is always light.
 "use client"
 
 import { Toaster as Sonner, type ToasterProps } from "sonner"

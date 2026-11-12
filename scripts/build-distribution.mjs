@@ -2,7 +2,7 @@
 /**
  * Builds the complete TypeScript distribution:
  * contracts -> charts -> runtime -> electron-host/web host packages -> Renderer (vite).
- * Verifies no legacy Python backend artifacts are referenced.
+ * Runs the architecture gate against the source and the generated bundle.
  */
 import { execSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -104,15 +104,14 @@ const bundleArgs = [
   normalizeGeneratedBundle("frontend/electron-host/mcp-sqlite.cjs");
 }
 
-// The generated Electron entry is the shipped production path. Run the same
-// architecture gate against source and bundle so stale legacy output cannot be
-// packaged after a successful TypeScript build.
+// The generated Electron entry is the shipped production path, so the
+// architecture gate checks it along with the source before packaging.
 run("node scripts/verify-backend-architecture.mjs");
 // frontend/electron/ holds only this generated, gitignored file, so a fresh checkout has no such directory.
 mkdirSync(path.join(root, "frontend/electron"), { recursive: true });
 copyFileSync(path.join(root, "packages/electron-host/preload.cjs"), path.join(root, "frontend/electron/preload.cjs"));
 
-// Sanity checks: renderer + host outputs exist; python web backend not required.
+// Sanity checks: renderer and host outputs exist.
 for (const p of [
   "packages/contracts/dist/index.js",
   "packages/charts/dist/browser-source.js",

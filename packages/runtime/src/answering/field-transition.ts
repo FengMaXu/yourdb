@@ -34,6 +34,7 @@ import { makeInternalId } from "./internal-ids.js";
 import { isAdmissibleProof } from "./qualification.js";
 import { probeContext, summarizeProbes } from "./probes.js";
 import { applicableAdvice, type FieldAdvisory } from "./advice.js";
+import { asRecord, trimmedText } from "../primitives.js";
 
 /**
  * Runtime-owned field transitions (ADR-0004, ADR-0007). The model writes a
@@ -120,16 +121,8 @@ function evidenceRejected(message: string): never {
   throw new FieldWriteError("EVIDENCE_REJECTED", message);
 }
 
-function record(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 function strings(value: unknown, label: string): readonly string[] {
-  if (!Array.isArray(value) || value.length === 0 || value.some((item) => !text(item))) invalid(`${label} must be a non-empty list of non-empty strings`);
+  if (!Array.isArray(value) || value.length === 0 || value.some((item) => !trimmedText(item))) invalid(`${label} must be a non-empty list of non-empty strings`);
   return (value as string[]).map((item) => item.trim());
 }
 
@@ -146,9 +139,9 @@ function fieldValue(path: SpecPath, value: unknown): FieldValue {
 function citeEvidence(path: string, cite: unknown, currentMessageId: string | undefined): UntrustedEvidenceInput[] {
   if (!Array.isArray(cite) || cite.length === 0) invalid(`${path}.cite must list at least one {source, quote}`);
   return cite.map((item, index) => {
-    const entry = record(item) ?? invalid(`${path}.cite[${index}] must be {source, quote}`);
-    const source = text(entry.source) ?? invalid(`${path}.cite[${index}].source is required`);
-    const quote = text(entry.quote);
+    const entry = asRecord(item) ?? invalid(`${path}.cite[${index}] must be {source, quote}`);
+    const source = trimmedText(entry.source) ?? invalid(`${path}.cite[${index}].source is required`);
+    const quote = trimmedText(entry.quote);
     const localId = `${path}#cite${index + 1}`;
     const [scheme, ...rest] = source.split(":");
     const ref = rest.join(":").trim();
@@ -180,22 +173,22 @@ export function parseFieldWrite(rawPath: string, input: unknown, currentMessageI
     invalid(`unknown field path ${path}; use one of ${FIELD_PATHS.join(", ")}, or measures.<name> on a Report Task`);
   }
   if (input === "n/a") return { path, write: { kind: "not_applicable" }, evidence: [] };
-  const body = record(input);
+  const body = asRecord(input);
   // A value can itself be an object ({rowMode}, {op}, {name}); without any form key it is a bare value.
   if (!body || !FORM_KEYS.some((key) => key in body)) {
     return { path, write: { kind: "value", value: fieldValue(path, input), refs: [] }, evidence: [] };
   }
-  const reason = text(body.reason);
+  const reason = trimmedText(body.reason);
   const withReason = <T extends object>(write: T) => (reason ? { ...write, reason } : write) as T & { readonly reason?: string };
   if (body.notProbeable !== undefined) {
-    const entries = record(body.notProbeable) ?? invalid(`${path}.notProbeable must map alternative ids to reasons`);
-    const waivers = Object.entries(entries).map(([alternativeId, why]) => ({ alternativeId: alternativeId.trim(), reason: text(why) ?? invalid(`${path}.notProbeable.${alternativeId} needs a reason`) }));
+    const entries = asRecord(body.notProbeable) ?? invalid(`${path}.notProbeable must map alternative ids to reasons`);
+    const waivers = Object.entries(entries).map(([alternativeId, why]) => ({ alternativeId: alternativeId.trim(), reason: trimmedText(why) ?? invalid(`${path}.notProbeable.${alternativeId} needs a reason`) }));
     if (waivers.length === 0) invalid(`${path}.notProbeable must name at least one alternative`);
     return { path, write: { kind: "waive", waivers }, evidence: [] };
   }
   if (body.ref !== undefined) {
     if (path !== "measure.formula") invalid(`${path} cannot take a ref; only measure.formula references a Report Task measure definition`);
-    return { path, write: withReason({ kind: "ref" as const, name: text(body.ref) ?? invalid("measure.formula.ref must name a Report Task measure definition") }), evidence: [] };
+    return { path, write: withReason({ kind: "ref" as const, name: trimmedText(body.ref) ?? invalid("measure.formula.ref must name a Report Task measure definition") }), evidence: [] };
   }
   if (body.open !== undefined) {
     if (!Array.isArray(body.open) || body.open.length < 2) invalid(`${path}.open needs at least two alternatives`);
@@ -207,7 +200,7 @@ export function parseFieldWrite(rawPath: string, input: unknown, currentMessageI
   if (body.value === "n/a") return { path, write: withReason({ kind: "not_applicable" as const }), evidence: [] };
   if (body.value === null || body.value === undefined || body.value === "") invalid(`${path}.value must not be empty`);
   const value = fieldValue(path, body.value);
-  const rationale = text(body.rationale);
+  const rationale = trimmedText(body.rationale);
   if (body.basis === "assumed") {
     if (!rationale) invalid(`${path} with basis "assumed" needs a rationale`);
     return { path, write: withReason({ kind: "value" as const, value, refs: [], rationale }), evidence: [] };
@@ -215,7 +208,7 @@ export function parseFieldWrite(rawPath: string, input: unknown, currentMessageI
   if (body.basis !== undefined && body.basis !== "request") invalid(`${path}.basis must be "request" or "assumed"; cite sources with cite, observations with evidenceIds`);
   const evidence: UntrustedEvidenceInput[] = [];
   if (body.basis === "request") {
-    const quote = text(body.quote) ?? invalid(`${path} with basis "request" needs the verbatim request text in quote`);
+    const quote = trimmedText(body.quote) ?? invalid(`${path} with basis "request" needs the verbatim request text in quote`);
     evidence.push({ localId: `${path}#request`, kind: "request_wording", quote });
   }
   if (body.cite !== undefined) evidence.push(...citeEvidence(path, body.cite, currentMessageId));
@@ -223,8 +216,8 @@ export function parseFieldWrite(rawPath: string, input: unknown, currentMessageI
   const refs = [...evidence.map((item) => item.localId!), ...evidenceIds];
   if (rationale) {
     // Decides the open field it names; on a field that is not open it is a value with its reasoning.
-    const override = body.adviceOverride === undefined ? undefined : record(body.adviceOverride) ?? invalid(`${path}.adviceOverride must be {reason, evidenceIds}`);
-    const adviceOverride = override ? { reason: text(override.reason) ?? invalid(`${path}.adviceOverride.reason is required`), evidenceIds: strings(override.evidenceIds, `${path}.adviceOverride.evidenceIds`) } : undefined;
+    const override = body.adviceOverride === undefined ? undefined : asRecord(body.adviceOverride) ?? invalid(`${path}.adviceOverride must be {reason, evidenceIds}`);
+    const adviceOverride = override ? { reason: trimmedText(override.reason) ?? invalid(`${path}.adviceOverride.reason is required`), evidenceIds: strings(override.evidenceIds, `${path}.adviceOverride.evidenceIds`) } : undefined;
     return { path, write: withReason({ kind: "decide" as const, value, rationale, refs, ...(adviceOverride ? { adviceOverride } : {}) }), evidence };
   }
   // Without cited evidence the value is an assumption, disclosed at publication.

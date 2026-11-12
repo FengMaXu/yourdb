@@ -1,10 +1,10 @@
-import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
+import { isRecord } from "./primitives.js";
 
 export type WidgetKind = "kpi" | "chart" | "table" | "steps";
 
 /**
- * Widgets built by the current Runtime carry this version. Widgets without it
- * are replays of earlier sessions and keep their original rendering (ADR-0008 decision 11).
+ * Every widget the Runtime builds carries this version. A transcript widget
+ * without it is drawn from its own data rows (ADR-0008 decision 11).
  */
 export const CHART_WIDGET_CONTRACT_VERSION = 2;
 
@@ -20,14 +20,11 @@ export interface WidgetPayload extends WidgetSpecInput {
 }
 
 export interface WidgetLifecycleDetails {
-  widgetEvent: "widget" | "widget_patch" | "widget_done" | "widget_remove" | "widget_error";
+  widgetEvent: "widget";
   widgetId: string;
   toolCallId: string;
   toolName: "show_widget";
-  widget?: WidgetPayload;
-  patch?: Record<string, unknown>;
-  error?: string;
-  legacyText: string;
+  widget: WidgetPayload;
 }
 
 export type WidgetValidationResult = {
@@ -38,13 +35,9 @@ export type WidgetValidationResult = {
   error: string;
 };
 
-const isObject = (value: unknown): value is Record<string, unknown> => (
-  typeof value === "object" && value !== null && !Array.isArray(value)
-);
-
 /** Minimum server-side validation shared by the tool and its event adapter. */
 export function validateWidgetSpec(kind: WidgetKind, value: unknown): WidgetValidationResult {
-  if (!isObject(value)) return { ok: false, error: "spec must be an object" };
+  if (!isRecord(value)) return { ok: false, error: "spec must be an object" };
   if (value.title !== undefined && typeof value.title !== "string") {
     return { ok: false, error: "spec.title must be a string when provided" };
   }
@@ -56,8 +49,8 @@ export function validateWidgetSpec(kind: WidgetKind, value: unknown): WidgetVali
     }
   } else if (kind === "chart" && value.contractVersion === CHART_WIDGET_CONTRACT_VERSION) {
     // A Runtime-built ChartSpec widget: the spec plus the published rows it was resolved against.
-    const dataset = isObject(value.dataset) ? value.dataset : undefined;
-    if (!isObject(value.chartSpec) || !dataset || !Array.isArray(dataset.columns) || !Array.isArray(dataset.rows)) {
+    const dataset = isRecord(value.dataset) ? value.dataset : undefined;
+    if (!isRecord(value.chartSpec) || !dataset || !Array.isArray(dataset.columns) || !Array.isArray(dataset.rows)) {
       return { ok: false, error: "chart widget requires chartSpec and a resolved dataset" };
     }
   } else if (!Array.isArray(value.data) && !(kind === "chart" && Array.isArray(value.series))) {
@@ -72,38 +65,22 @@ function isWidgetKind(value: unknown): value is WidgetKind {
 }
 
 function isWidgetPayload(value: unknown): value is WidgetPayload {
-  if (!isObject(value)) return false;
+  if (!isRecord(value)) return false;
   return typeof value.widget_id === "string"
     && isWidgetKind(value.kind)
     && typeof value.title === "string"
     && typeof value.tool_call_id === "string";
 }
 
-/** Runtime guard for partial tool updates received from the native Pi event stream. */
+/** Guard for the details of a finished show_widget call, as the Pi event stream reports them. */
 export function isWidgetLifecycleDetails(value: unknown): value is WidgetLifecycleDetails {
-  if (!isObject(value)) return false;
-  if (!["widget", "widget_patch", "widget_done", "widget_remove", "widget_error"].includes(String(value.widgetEvent))) return false;
+  if (!isRecord(value)) return false;
+  if (value.widgetEvent !== "widget") return false;
   if (typeof value.widgetId !== "string" || value.widgetId.length === 0) return false;
   if (typeof value.toolCallId !== "string" || value.toolCallId.length === 0) return false;
-  if (value.toolName !== "show_widget" || typeof value.legacyText !== "string") return false;
-  if (value.widget !== undefined && !isWidgetPayload(value.widget)) return false;
-  if (value.patch !== undefined && !isObject(value.patch)) return false;
-  if (value.error !== undefined && typeof value.error !== "string") return false;
-  return true;
+  return value.toolName === "show_widget" && isWidgetPayload(value.widget);
 }
 
-export function widgetLegacyText(widget: WidgetPayload): string {
+export function widgetText(widget: WidgetPayload): string {
   return `[widget:${widget.kind}] ${widget.title}: ${JSON.stringify(widget)}`;
 }
-
-export function emitWidgetUpdate(
-  onUpdate: AgentToolUpdateCallback<WidgetLifecycleDetails> | undefined,
-  details: WidgetLifecycleDetails,
-): void {
-  onUpdate?.({
-    content: [{ type: "text", text: details.legacyText }],
-    details,
-  });
-}
-
-export type WidgetToolResult = AgentToolResult<WidgetLifecycleDetails>;

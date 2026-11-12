@@ -20,8 +20,8 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
-      // These diagnostics are advisory until the existing renderer is migrated
-      // to the React Compiler's stricter purity/effect model.
+      // The renderer does not follow the React Compiler's purity/effect model,
+      // so these diagnostics are off.
       'react-hooks/immutability': 'off',
       'react-hooks/purity': 'off',
       'react-hooks/refs': 'off',

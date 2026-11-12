@@ -136,7 +136,7 @@ exec(npxCmd, ["@electron/asar", "pack", staging, path.join(out, "resources", "ap
 
 // 4. extraResources. These capabilities are mandatory for a usable desktop
 // package; fail closed instead of producing a silently incomplete artifact.
-// Standalone CPython keeps python.exe at the root (see build-python-runtime.mjs); venv packs used Scripts/.
+// Standalone CPython keeps python.exe at the root (see build-python-runtime.mjs); a venv pack keeps it under Scripts/.
 const pythonRuntimeExecutable = ["python.exe", "Scripts/python.exe"]
   .map((relative) => path.resolve(root, "dist", "python-runtime", relative))
   .find((candidate) => existsSync(candidate));

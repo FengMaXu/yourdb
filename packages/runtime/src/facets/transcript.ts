@@ -5,6 +5,7 @@ import { isWidgetLifecycleDetails, validateWidgetSpec, type WidgetPayload } from
 import { splitPromptAttachments } from "../attachments.js";
 import { isRuntimeInjected } from "../runtime-injected.js";
 import { infrastructureFailureOf } from "../agent/infrastructure-failure.js";
+import { asRecord } from "../primitives.js";
 
 export interface ProjectedOperation {
   readonly requestId: string;
@@ -69,11 +70,6 @@ interface TranscriptProjectorOptions {
 interface WidgetCall {
   widgetId: string;
   messageId: string;
-  toolName: "show_widget";
-  errorEmitted: boolean;
-  doneEmitted: boolean;
-  /** Presentation-only deduplication; cleared with the tool call. */
-  widgetJson?: string;
 }
 
 interface OperationProjectionState {
@@ -83,10 +79,6 @@ interface OperationProjectionState {
   toolArgs: Map<string, unknown>;
   /** A lost database seen in a tool result; the Runtime then stops the run (harness-factory). */
   infrastructureFailure?: string | undefined;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
 function textFromContent(content: unknown): string {
@@ -308,52 +300,17 @@ export class TranscriptProjector {
         projection.widgetCalls.set(toolCallId, {
           widgetId: `widget-${toolCallId}`,
           messageId: projection.activeMessageId || `message-${toolCallId}`,
-          toolName,
-          errorEmitted: false,
-          doneEmitted: false,
         });
       }
       this.emit(base(), { type: "agent.tool_started", toolCallId, toolName, args: event.args ?? null });
       return;
     }
     if (event.type === "tool_execution_update") {
+      if (projection.widgetCalls.has(event.toolCallId)) return;
       const partialResult = event.partialResult && typeof event.partialResult === "object" ? event.partialResult as { details?: unknown } : undefined;
-      const details = isWidgetLifecycleDetails(partialResult?.details) ? partialResult.details : undefined;
-      const call = projection.widgetCalls.get(event.toolCallId);
-      if (!call) {
-        const progress = asRecord(partialResult?.details)?.toolProgress;
-        if (isNonEmptyString(event.toolCallId) && isNonEmptyString(event.toolName) && isToolProgress(progress)) {
-          this.emit(base(), { type: "agent.tool_progress", toolCallId: event.toolCallId, toolName: event.toolName, progress });
-        }
-        return;
-      }
-      const common = { messageId: call.messageId, toolCallId: event.toolCallId, widgetId: call.widgetId, toolName: "show_widget" as const };
-      const emitWidgetError = (error: string): void => {
-        if (call.doneEmitted || call.errorEmitted) return;
-        call.errorEmitted = true;
-        this.emit(base(), { type: "widget_error", ...common, error });
-      };
-      if (!details) {
-        emitWidgetError("Invalid Widget update");
-        return;
-      }
-      if (details.widgetEvent === "widget" && details.widget) {
-        this.emitWidget(base, call, event.toolCallId, details.widget);
-      } else if (details.widgetEvent === "widget_patch" && details.patch) {
-        // A later full result must replace the preview even if it matches an earlier payload.
-        delete call.widgetJson;
-        this.emit(base(), { type: "widget_patch", ...common, patch: details.patch });
-      } else if (details.widgetEvent === "widget_done") {
-        if (!call.errorEmitted && !call.doneEmitted) {
-          call.doneEmitted = true;
-          this.emit(base(), { type: "widget_done", ...common });
-        }
-      } else if (details.widgetEvent === "widget_remove") {
-        delete call.widgetJson;
-        this.emit(base(), { type: "widget_remove", ...common });
-      } else if (details.widgetEvent === "widget_error" && !call.doneEmitted && !call.errorEmitted) {
-        call.errorEmitted = true;
-        this.emit(base(), { type: "widget_error", ...common, error: details.error || "Widget execution failed" });
+      const progress = asRecord(partialResult?.details)?.toolProgress;
+      if (isNonEmptyString(event.toolCallId) && isNonEmptyString(event.toolName) && isToolProgress(progress)) {
+        this.emit(base(), { type: "agent.tool_progress", toolCallId: event.toolCallId, toolName: event.toolName, progress });
       }
       return;
     }
@@ -366,27 +323,22 @@ export class TranscriptProjector {
       projection.infrastructureFailure ??= infrastructureFailureOf(asRecord(event.result)?.content);
       const call = projection.widgetCalls.get(toolCallId);
       const completionArgs = event.args;
-      if (call && event.isError && !call.errorEmitted && !call.doneEmitted) {
-        call.errorEmitted = true;
-        this.emit(base(), { type: "widget_error", messageId: call.messageId, toolCallId, widgetId: call.widgetId, toolName: "show_widget", error: readableToolResult(event.result, "Widget execution failed") });
-      } else if (call && !event.isError && !call.errorEmitted && !call.doneEmitted) {
-        const result = asRecord(event.result);
-        const rawDetails = asRecord(result?.details);
-        // Final tool results keep readable text in content rather than legacyText.
-        // Adapt that envelope to the same lifecycle guard used for streaming updates.
-        const details = { ...rawDetails, legacyText: textFromContent(result?.content) };
-        if (isWidgetLifecycleDetails(details) && details.widgetEvent === "widget" && details.widget) {
-          this.emitWidget(base, call, toolCallId, details.widget);
-        } else if (rawDetails || call.widgetJson === undefined) {
-          call.errorEmitted = true;
-          this.emit(base(), { type: "widget_error", messageId: call.messageId, toolCallId, widgetId: call.widgetId, toolName: "show_widget", error: "Invalid Widget result" });
-        }
-        if (!call.errorEmitted) {
-          call.doneEmitted = true;
-          this.emit(base(), { type: "widget_done", messageId: call.messageId, toolCallId, widgetId: call.widgetId, toolName: "show_widget" });
+      let widgetFailed = false;
+      if (call) {
+        const common = { messageId: call.messageId, toolCallId, widgetId: call.widgetId, toolName: "show_widget" as const };
+        const details = asRecord(event.result)?.details;
+        if (event.isError) {
+          widgetFailed = true;
+          this.emit(base(), { type: "widget_error", ...common, error: readableToolResult(event.result, "Widget execution failed") });
+        } else if (!isWidgetLifecycleDetails(details)) {
+          widgetFailed = true;
+          this.emit(base(), { type: "widget_error", ...common, error: "Invalid Widget result" });
+        } else {
+          widgetFailed = !this.emitWidget(base, call, toolCallId, details.widget);
+          if (!widgetFailed) this.emit(base(), { type: "widget_done", ...common });
         }
       }
-      this.emit(base(), { type: "agent.tool_finished", toolCallId, toolName: event.toolName, ...(completionArgs !== undefined ? { args: completionArgs } : {}), result: event.result ?? null, isError: Boolean(event.isError || call?.errorEmitted) });
+      this.emit(base(), { type: "agent.tool_finished", toolCallId, toolName: event.toolName, ...(completionArgs !== undefined ? { args: completionArgs } : {}), result: event.result ?? null, isError: Boolean(event.isError || widgetFailed) });
       const delivered = event.isError ? undefined : publicationDelivered(event.toolName, event.result) ?? dashboardDelivered(event.toolName, event.result);
       if (delivered) this.emit(base(), delivered);
       projection.widgetCalls.delete(toolCallId);
@@ -399,20 +351,16 @@ export class TranscriptProjector {
     else this.state.clear();
   }
 
-  private emitWidget(base: () => Omit<DataAgentEventEnvelope, "event">, call: WidgetCall, toolCallId: string, payload: WidgetPayload): void {
+  /** Emits the widget, or a widget_error when its spec is invalid; returns whether it was delivered. */
+  private emitWidget(base: () => Omit<DataAgentEventEnvelope, "event">, call: WidgetCall, toolCallId: string, payload: WidgetPayload): boolean {
     const common = { messageId: call.messageId, toolCallId, widgetId: call.widgetId, toolName: "show_widget" as const };
     const validation = validateWidgetSpec(payload.kind, payload);
     if (!validation.ok) {
-      call.errorEmitted = true;
       this.emit(base(), { type: "widget_error", ...common, error: validation.error });
-      return;
+      return false;
     }
-    const widget = { ...payload, widget_id: call.widgetId, tool_call_id: toolCallId };
-    const widgetJson = JSON.stringify(widget);
-    if (call.widgetJson !== widgetJson) {
-      this.emit(base(), { type: "widget", ...common, widget });
-      call.widgetJson = widgetJson;
-    }
+    this.emit(base(), { type: "widget", ...common, widget: { ...payload, widget_id: call.widgetId, tool_call_id: toolCallId } });
+    return true;
   }
 
   private emit(base: Omit<DataAgentEventEnvelope, "event">, event: DataAgentEvent): void {

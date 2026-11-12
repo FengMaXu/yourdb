@@ -23,6 +23,7 @@ import type {
   PublishCandidate,
 } from "../answering/public.js";
 import { defineDataAgentTool, type DataAgentToolDefinition, type ToolPromptMetadata } from "./tool-definition.js";
+import { bigintSafeJson } from "../primitives.js";
 
 /**
  * The only application state carried into a model tool invocation. Query task
@@ -98,10 +99,6 @@ type PublishInput = Static<typeof ANSWERING_PUBLISH_PARAMETERS>;
 type InspectInput = Static<typeof ANSWERING_INSPECT_PARAMETERS>;
 
 type ToolContext = DataAgentToolContext | undefined;
-
-function json(value: unknown): string {
-  return JSON.stringify(value, (_key, item) => typeof item === "bigint" ? { __type: "bigint", value: item.toString() } : item);
-}
 
 function result(content: string, details?: unknown): AgentToolResult<unknown> {
   return { content: [{ type: "text", text: content }], details: details ?? null };
@@ -217,7 +214,7 @@ function beginQueryTaskTool(answering: Answering): AgentHarnessTool<DataAgentToo
         requestId: `semantic-spec-disabled:${requestMessageId}`,
         fields: {},
       }, business);
-      return result(`[QUERY_TASK_STARTED] taskId=${view.taskId} revisionId=${view.revisionId}\n${json(view)}`, view);
+      return result(`[QUERY_TASK_STARTED] taskId=${view.taskId} revisionId=${view.revisionId}\n${bigintSafeJson(view)}`, view);
     },
   };
 }
@@ -269,7 +266,7 @@ function adviceLabel(advice: AdviceView): string {
 
 /** Field states in compact form for the model: status, value and alternatives. */
 function fieldsJson(view: AnswerRevisionView): string {
-  return json(Object.fromEntries(view.fields.map((field) => [field.path, {
+  return bigintSafeJson(Object.fromEntries(view.fields.map((field) => [field.path, {
     status: field.status,
     ...(field.value !== undefined ? { value: field.value } : {}),
     ...(field.verified !== undefined ? { verified: field.verified } : {}),
@@ -350,7 +347,7 @@ function queryTool(answering: Answering): AgentHarnessTool<DataAgentToolContext>
         // not permission to mutate the Spec or publish anything. Preserve the
         // existing tool error path for non-Answering failures.
         if (error instanceof AnsweringError && error.obstacle) {
-          return result(`[IMPLEMENTATION_OBSTACLE] ${error.obstacle.message}\n${json(error.obstacle)}`, { obstacle: error.obstacle, code: error.code });
+          return result(`[IMPLEMENTATION_OBSTACLE] ${error.obstacle.message}\n${bigintSafeJson(error.obstacle)}`, { obstacle: error.obstacle, code: error.code });
         }
         throw error;
       }
@@ -408,7 +405,7 @@ function inspectTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
       const value = checked(ANSWERING_INSPECT_PARAMETERS, input) as InspectInput;
       const business = trustedContext(toolContext, invocation, context);
       const view = await answering.inspect(value as InspectAnswer, business);
-      return result(json(modelVisibleTaskView(view)), view);
+      return result(bigintSafeJson(modelVisibleTaskView(view)), view);
     },
   };
 }

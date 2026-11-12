@@ -36,7 +36,7 @@ export function isDatabaseDriver(value: unknown): value is DatabaseDriver {
 
 /**
  * Reads a connection from saved settings or a test request. A missing driver
- * is MySQL, which every connection was before drivers existed; an unknown one
+ * means MySQL, as saved settings without a driver field are; an unknown one
  * is refused rather than silently connected as MySQL. An unusable port is
  * refused too, so a test never succeeds against the default port instead.
  */
@@ -44,8 +44,8 @@ export function databaseConnectionFrom(settings: unknown): DatabaseConnection {
   const record = settings && typeof settings === "object" ? settings as Record<string, unknown> : {};
   const filled = (value: unknown) => value !== undefined && value !== null && String(value).trim() !== "";
   // Nothing saved yet: say so, rather than dial a MySQL on localhost:3306 the user never chose.
-  // The setup checklist uses the same rule (useReadiness). Settings from before the driver field
-  // carried a host and mean MySQL, so they still default to it.
+  // The setup checklist uses the same rule (useReadiness). Settings with a host but no driver
+  // field are MySQL settings.
   if (!filled(record.driver) && !filled(record.host) && !filled(record.database)) {
     throw new Error("DATABASE_NOT_CONFIGURED: 还没有连接数据库。请在 设置 → 数据库 中连接，或在新会话页点“先用示例 SQLite 试试”。");
   }

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { CheckCoverage, FieldRecord, Finding, SpecFields } from "./model.js";
-import type { GroupingKeyValue, MeasureExpression, MeasureOperand, SelectionValue, SourceValue, SpecPath, TiesValue } from "./fields.js";
+import type { CheckCoverage, Finding, SpecFields } from "./model.js";
+import { grainOf, type GroupingKeyValue, type MeasureExpression, type MeasureOperand, type SelectionValue, type SourceValue, type SpecPath, type TiesValue, type Grain } from "./fields.js";
+import { settled } from "./support.js";
 
 /**
  * Spec realization: does the final SQL implement the sealed fields? The Spec
@@ -84,9 +85,6 @@ function sqlText(sql: string): SqlText {
   return { masked, withLiterals: blankComments(sql, false), depths };
 }
 
-function settled<T>(field: FieldRecord | undefined): T | undefined {
-  return field && (field.state === "specified" || field.state === "decided") ? field.value as T : undefined;
-}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -241,17 +239,6 @@ function formulaVerdicts(fields: SpecFields, sql: SqlText): readonly Realization
 
 // --- grouping grain -----------------------------------------------------------
 
-type Grain = "year" | "quarter" | "month" | "week" | "day" | "hour";
-
-const GRAIN_WORDS: readonly [Grain, RegExp][] = [
-  ["quarter", /quarter|季/],
-  ["month", /month|月/],
-  ["week", /week|周|星期/],
-  ["hour", /hour|小时/],
-  ["year", /year|年/],
-  ["day", /\bday|daily|\bdate\b|日|天/],
-];
-
 const GRAIN_SQL: Readonly<Record<Grain, RegExp>> = {
   year: /year|%y|yyyy|\b(substr|substring|left)\w*\s*\([^()]*,\s*(1\s*,\s*)?4\s*\)/,
   quarter: /quarter|%q|\bq\b|\/\s*3(\.0*)?\b/,
@@ -260,11 +247,6 @@ const GRAIN_SQL: Readonly<Record<Grain, RegExp>> = {
   day: /\bday|%d|\bdate\b|date\s*\(|::date|date_trunc|\b(substr|substring|left)\w*\s*\([^()]*,\s*(1\s*,\s*)?10\s*\)/,
   hour: /hour|%h|\bhh/,
 };
-
-function grainOf(text: string): Grain | undefined {
-  const lower = text.toLowerCase();
-  return GRAIN_WORDS.find(([, pattern]) => pattern.test(lower))?.[0];
-}
 
 function groupingVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
   const keys = settled<readonly (string | GroupingKeyValue)[]>(fields.grouping);

@@ -34,15 +34,13 @@ vi.mock('../runtime-client', () => ({
 describe('Runtime Widget event replay adapter', () => {
     it('maps the lifecycle vocabulary while keeping the active message', () => {
         const common = { messageId: 'message-1', toolCallId: 'call-1', widgetId: 'widget-call-1', toolName: 'show_widget' } as const;
-        const types = ['widget', 'widget_patch', 'widget_done', 'widget_remove', 'widget_error'] as const;
+        const types = ['widget', 'widget_done', 'widget_error'] as const;
         const events = types.map((type) => {
             const event = type === 'widget'
                 ? { type, ...common, widget: { widget_id: common.widgetId, kind: 'kpi', title: 'Revenue' } as const }
-                : type === 'widget_patch'
-                    ? { type, ...common, patch: { subtitle: 'Today' } }
-                    : type === 'widget_error'
-                        ? { type, ...common, error: 'failed' }
-                        : { type, ...common };
+                : type === 'widget_error'
+                    ? { type, ...common, error: 'failed' }
+                    : { type, ...common };
             return mapRuntimeEvent(event, 'message-1')!.event;
         });
 
@@ -50,7 +48,7 @@ describe('Runtime Widget event replay adapter', () => {
         expect(events.every((event) => 'message_id' in event && event.message_id === 'message-1')).toBe(true);
     });
 
-    it('turns a structured tool result into readable legacy fallback text', () => {
+    it('turns a structured tool result into readable text', () => {
         const mapped = mapRuntimeEvent({
             type: 'agent.tool_finished',
             toolCallId: 'call-1',
@@ -72,7 +70,7 @@ describe('Runtime Widget event replay adapter', () => {
 });
 
 describe('runtime tool argument preservation', () => {
-    it('forwards completion args when present and leaves old events optional', () => {
+    it('forwards completion args when present and omits them when absent', () => {
         expect(mapRuntimeEvent({ type: 'agent.tool_started', toolCallId: 'call-1', toolName: 'query', args: { sql: 'select 1' } }, 'msg-1')?.event)
             .toMatchObject({ type: 'tool_call', arguments: { sql: 'select 1' } });
         expect(mapRuntimeEvent({ type: 'agent.tool_finished', toolCallId: 'call-1', toolName: 'query', result: 'ok', isError: false }, 'msg-1')?.event)

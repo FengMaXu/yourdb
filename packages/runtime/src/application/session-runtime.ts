@@ -20,7 +20,6 @@ import { createDataAgentPiRuntime, createPiSessionHost, type DataAgentModelProfi
 import type { PresentationAgentEvent } from "../facets/transcript.js";
 import { ArtifactDirectory } from "../facets/artifact-directory.js";
 import { ClarificationDialogs, type ClarificationLedger } from "../facets/clarification-dialogs.js";
-import { QueryTaskProjection, queryTaskReadModel } from "../facets/query-task-projection.js";
 import { unwrapApplicationSession } from "../session-store.js";
 import { HarnessChildExecutor, JsonlChildSessionRepository, MemoryChildSessionRepository, NativeDelegation, PiSessionDelegationLedger } from "../delegation/index.js";
 import { createQueryTaskDelegationResolver, type DelegationSqlExplorer } from "./delegation.js";
@@ -280,7 +279,6 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
     }),
   });
   const clarificationDialogs = new ClarificationDialogs(options.clarifications ?? new ClarificationManager(), clarificationLedger);
-  const queryTasks = new QueryTaskProjection(queryTaskReadModel(answering, (context) => answeringStore.list(context)));
   // Derived datasets sit beside the session's results, outside its workspace, so no workspace write can alter them.
   const derivedDatasets = new DerivedDatasets(options.resultRoot ? new FileDerivedDatasetStore(`${options.resultRoot}/derived`) : new InMemoryDerivedDatasetStore());
   const artifacts = new ArtifactDirectory({
@@ -376,7 +374,6 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
     skillToolAllowlist,
     systemPrompt,
     profile: options.profile,
-    queryTaskProjection: queryTasks,
     artifactDirectory: artifacts,
     clarificationDialogs,
     dashboardRefresher: new DashboardRefresher({ workspace: options.workspace, answering, artifacts }),

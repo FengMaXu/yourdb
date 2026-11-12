@@ -16,8 +16,8 @@ type SourceStream = AsyncIterable<AssistantMessageEvent> & { result?: () => Prom
  * Gathers runs of text and thinking deltas of one content block into a single
  * delta, for up to `windowMs`. Pi stores every streamed event as its own
  * durable frame in the session file (to recover a response after a crash), so
- * a provider that streams a token per event wrote about a thousand frames per
- * reply: 20 MB of the 84 MB session in the Olist test. A gathered delta is
+ * a provider that streams a token per event writes about a thousand frames per
+ * reply (20 MB of an 84 MB session in the Olist test). A gathered delta is
  * the concatenation of its parts, so the frames and the final message are the
  * same, only fewer. Live consumers see the same text up to `windowMs` later,
  * in larger steps.
