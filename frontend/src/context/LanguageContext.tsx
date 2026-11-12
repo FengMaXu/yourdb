@@ -68,6 +68,11 @@ const translations: Translations = {
         'setup.database.failed': 'The saved database did not connect:',
         'setup.database.connect': 'Connect database',
         'setup.database.sample': 'Try the sample SQLite first',
+        'sample.title': 'You are using the sample sales database',
+        'sample.description': 'Two years of an electronics retailer’s sales: 240 customers across five regions (East, South, North, Southwest, Central China), 12 products in five categories (computers, peripherals, audio, mobile devices, accessories), and their orders through the online store, retail stores and distributors, with each order’s items, quantities, prices and discounts. Sales peak in June and November, and about 6% of orders were refunded.',
+        'sample.tryAsking': 'Try asking',
+        'sample.question.trend': 'How did sales move month by month, and which months were the peaks?',
+        'sample.question.top': 'Which five products sold the most, and what share of total sales does each have?',
         'setup.examplesLocked': 'Example questions — available once both steps are done',
         'app.retry': 'Try again',
 
@@ -545,6 +550,11 @@ const translations: Translations = {
         'setup.database.failed': '已保存的数据库连不上：',
         'setup.database.connect': '连接数据库',
         'setup.database.sample': '用示例 SQLite 先试试',
+        'sample.title': '你正在使用示例销售库',
+        'sample.description': '一家电子产品零售商两年的销售数据：240 家客户，分布在华东、华南、华北、西南、华中五个大区；12 款商品，分为电脑、外设、音频、移动设备、配件五类；以及它们通过线上商城、门店、经销商三个渠道下的订单，每笔订单的商品、数量、单价和折扣都有记录。每年 6 月和 11 月是销售高峰，约 6% 的订单已退款。',
+        'sample.tryAsking': '可以这样问',
+        'sample.question.trend': '每个月的销售额走势如何？哪几个月是高峰？',
+        'sample.question.top': '销售额最高的 5 款商品是哪些？各占总销售额多少？',
         'setup.examplesLocked': '示例问题（完成上面两步后可用）',
         'app.retry': '重试',
 
