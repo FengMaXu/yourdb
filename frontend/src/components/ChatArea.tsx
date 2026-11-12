@@ -89,6 +89,8 @@ interface ChatAreaProps {
 
 /** Starter questions an empty session offers; a click puts one in the input to edit before sending. */
 const STARTER_PROMPTS = ['query', 'trend', 'dashboard', 'report'] as const;
+/** How long after this view saw its own run end a run-finished report is taken to be that run's. */
+const FOLLOWED_RUN_END_WINDOW_MS = 10_000;
 
 const STAGE_ORDER: AgentProgressStage[] = [
     'sent',
@@ -325,6 +327,9 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         }
     }, [replaceWithSnapshot]);
 
+    /** The last run this view followed to its end, so its run-finished report is not mistaken for another device's. */
+    const followedRunEndRef = useRef<{ sessionId: string; at: number } | null>(null);
+
     /**
      * Reads the session's state on the server and, when a run is in progress there, shows what it has
      * committed and follows the rest live; a clarification it waits on is shown either way.
@@ -370,12 +375,16 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         return () => { superseded = true; };
     }, [currentSession.id, replaceWithSnapshot]);
 
-    // A run this view did not start (a phone through a message channel, another window) began or
+    // A run this view did not follow (a phone through a message channel, another window) began or
     // ended in the open session: follow it as on opening the session, or load what it committed.
+    // The end of a run this view followed itself is skipped: followRun already showed all of it.
     useEffect(() => {
         if (!runActivity || runActivity.sessionId !== currentSession.id || streamHandleRef.current) return;
         const sessionId = currentSession.id;
         if (runActivity.phase === 'finished') {
+            const followed = followedRunEndRef.current;
+            followedRunEndRef.current = null;
+            if (followed && followed.sessionId === sessionId && Date.now() - followed.at < FOLLOWED_RUN_END_WINDOW_MS) return;
             void resyncFromServer(sessionId);
             return;
         }
@@ -958,6 +967,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             activeAgentMessageIdRef.current = null;
             pendingAgentMessageIdRef.current = null;
             streamHandleRef.current = null;
+            followedRunEndRef.current = { sessionId: runSessionId, at: Date.now() };
             return true;
         }
         streamHandleRef.current = handle;
