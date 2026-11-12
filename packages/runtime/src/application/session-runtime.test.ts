@@ -98,15 +98,15 @@ describe("Session Runtime scoped query composition", () => {
     }
   });
 
-  it("starts every prompt with the data-only task scope, even when a knowledge base replaces SYSTEM.md", async () => {
+  it("starts every prompt with the data-only task scope, whichever SYSTEM.md is read", async () => {
     const root = await mkdtemp(path.join(process.cwd(), ".tmp-session-runtime-scope-"));
     try {
       const fs = await import("node:fs/promises");
       await fs.mkdir(path.join(root, ".pi"), { recursive: true });
-      await fs.writeFile(path.join(root, ".pi", "SYSTEM.md"), "A user's own copy that says nothing about scope.", "utf8");
+      await fs.writeFile(path.join(root, ".pi", "SYSTEM.md"), "A different SYSTEM.md that says nothing about scope.", "utf8");
       const prompt = await canonicalPrompt({ systemPromptRoots: [root] });
       expect(prompt.startsWith(TASK_SCOPE_PROMPT)).toBe(true);
-      expect(prompt).toContain("A user's own copy that says nothing about scope.");
+      expect(prompt).toContain("A different SYSTEM.md that says nothing about scope.");
       expect(TASK_SCOPE_PROMPT).toMatch(/^<task_scope>[\s\S]*拒绝执行[\s\S]*<\/task_scope>$/);
     } finally {
       await rm(root, { recursive: true, force: true });

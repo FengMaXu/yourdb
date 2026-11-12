@@ -49,7 +49,7 @@ export async function buildVisualFixture(dataDir) {
     host: "web",
     knowledgeRoot,
     projectRoot: root,
-    systemPromptRoots: [knowledgeRoot, root],
+    systemPromptRoots: [root],
     skillRoots: [path.join(root, ".agents", "skills")],
     // Opening a session resolves a profile; no prompt is ever sent.
     resolveProfile: async () => ({ provider: "openai", model: "fixture", apiKey: "fixture", apiFormat: "responses" }),

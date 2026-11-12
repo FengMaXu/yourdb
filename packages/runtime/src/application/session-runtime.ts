@@ -98,9 +98,9 @@ export function composeKnowledgeCatalogPrompt(base: string, knowledge?: Knowledg
 }
 
 /**
- * What the agent works on, at the very start of its prompt. It lives here rather than in
- * .pi/SYSTEM.md because a knowledge base may hold its own copy of that file, which replaces the
- * shipped one; the scope must hold whichever copy is read.
+ * What the agent works on, at the very start of its prompt. It is code, not part of .pi/SYSTEM.md,
+ * so it heads the prompt whichever SYSTEM.md the configured roots supply (hosts pass only the app's
+ * own roots; a test or evaluation may pass a different prompt).
  */
 export const TASK_SCOPE_PROMPT = `<task_scope>
 你只执行与数据相关的任务：查询、统计和导出用户数据库中的数据；解释指标口径、字段含义和业务定义；基于查询结果做分析、图表、看板和报告；以及完成这些任务所需的数据库与知识库操作。

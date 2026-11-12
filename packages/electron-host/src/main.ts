@@ -458,7 +458,8 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
     // SQL stays unavailable until a database-enforced scoped executor is supplied.
     enableSubagents: true,
     delegationKnowledgePaths: ["doc/business.md", "doc/db_schema.md", "doc/query_patterns.md", "doc/learning.md", "doc/rules.md", "doc/semantic_guide.md"],
-    systemPromptRoots: [knowledgeRoot, developmentRoot, packagedRoot],
+    // The system prompt ships with the app; the knowledge folder never supplies one (writes to .pi/ are refused too).
+    systemPromptRoots: [developmentRoot, packagedRoot],
     projectRoot: developmentRoot,
     packagedRoot,
     skillRoots: [path.join(developmentRoot, ".agents", "skills"), path.join(packagedRoot, ".agents", "skills")],
