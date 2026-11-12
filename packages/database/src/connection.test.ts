@@ -26,8 +26,14 @@ describe("databaseConnectionFrom", () => {
   });
 
   it("refuses a port it cannot use instead of falling back to the default", () => {
-    for (const port of ["abc", 0, 70000, "3306.5"]) expect(() => databaseConnectionFrom({ port })).toThrow("INVALID_DATABASE_PORT");
-    expect(databaseConnectionFrom({ port: "" })).toEqual({ driver: "mysql" });
+    for (const port of ["abc", 0, 70000, "3306.5"]) expect(() => databaseConnectionFrom({ host: "db", port })).toThrow("INVALID_DATABASE_PORT");
+    expect(databaseConnectionFrom({ host: "db", port: "" })).toEqual({ driver: "mysql", host: "db" });
+  });
+
+  it("says no database is connected instead of dialing MySQL on localhost", () => {
+    for (const settings of [undefined, {}, { provider: "openai", model: "m" }, { driver: "", host: " ", database: "" }]) {
+      expect(() => databaseConnectionFrom(settings)).toThrow("DATABASE_NOT_CONFIGURED");
+    }
   });
 
   it("reads a SQLite connection as its file alone and refuses one without a file", () => {
