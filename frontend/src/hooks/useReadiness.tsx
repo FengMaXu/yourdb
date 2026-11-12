@@ -15,6 +15,8 @@ export interface Readiness {
     readonly database: StepState;
     /** Why the saved database did not connect; absent when none is configured yet. */
     readonly databaseProblem?: string;
+    /** True when the connected database is the built-in sample, so the chat page can introduce it. */
+    readonly usingSample: boolean;
     /** How many steps are still missing. */
     readonly remaining: number;
     /** True once both steps are done; the chat page then offers its example questions. */
@@ -31,6 +33,7 @@ export interface Readiness {
 const ASSUME_READY: Readiness = {
     model: 'ready',
     database: 'ready',
+    usingSample: false,
     remaining: 0,
     ready: true,
     recheck: () => undefined,
@@ -53,8 +56,19 @@ export async function readModelConfigured(config: Record<string, unknown>): Prom
     ].some((value) => typeof value === 'string' && value.trim().length > 0);
 }
 
+/** The sample's file name, as the runtime creates it (packages/runtime/src/sample-database.ts). */
+const SAMPLE_DATABASE_FILE = 'sample-sales.sqlite';
+
+/** Whether the saved connection is the built-in sample: SQLite, opening the sample's file. */
+function isSampleDatabase(config: Record<string, unknown>): boolean {
+    return config.driver === 'sqlite' && typeof config.database === 'string'
+        && config.database.replace(/\\/g, '/').split('/').pop() === SAMPLE_DATABASE_FILE;
+}
+
+type DatabaseCheck = { state: StepState; problem?: string; sample?: boolean };
+
 /** A saved connection counts only when it actually answers; an untouched form is not one. */
-async function readDatabase(config: Record<string, unknown>): Promise<{ state: StepState; problem?: string }> {
+async function readDatabase(config: Record<string, unknown>): Promise<DatabaseCheck> {
     const filled = (value: unknown) => typeof value === 'string' ? value.trim().length > 0 : value !== undefined && value !== null;
     if (!filled(config.driver) && !filled(config.database) && !filled(config.host)) return { state: 'missing' };
     const result = await testDbViaRuntime({
@@ -65,7 +79,7 @@ async function readDatabase(config: Record<string, unknown>): Promise<{ state: S
         password: config.password,
         database: config.database,
     });
-    return result.success ? { state: 'ready' } : { state: 'missing', problem: result.message };
+    return result.success ? { state: 'ready', sample: isSampleDatabase(config) } : { state: 'missing', problem: result.message };
 }
 
 export function ReadinessProvider({ children, onOpenSettings, modelMissingSignal }: {
@@ -75,7 +89,7 @@ export function ReadinessProvider({ children, onOpenSettings, modelMissingSignal
     modelMissingSignal?: number;
 }) {
     const [model, setModel] = useState<StepState>('checking');
-    const [database, setDatabase] = useState<{ state: StepState; problem?: string }>({ state: 'checking' });
+    const [database, setDatabase] = useState<DatabaseCheck>({ state: 'checking' });
     const generation = useRef(0);
 
     const recheck = useCallback(() => {
@@ -127,6 +141,7 @@ export function ReadinessProvider({ children, onOpenSettings, modelMissingSignal
             model,
             database: database.state,
             ...(database.problem ? { databaseProblem: database.problem } : {}),
+            usingSample: database.state === 'ready' && database.sample === true,
             remaining,
             ready: model === 'ready' && database.state === 'ready',
             recheck,

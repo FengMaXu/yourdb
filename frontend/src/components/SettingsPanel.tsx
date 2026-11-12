@@ -40,6 +40,9 @@ interface SettingsPanelProps {
 }
 
 /** Settings shown in the main pane; the sidebar picks the section. */
+/** A settings sub-page (database, environment): no card around it, one centred column. */
+const SUB_PAGE = 'mx-auto w-full max-w-[640px] pt-2';
+
 const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     const { t } = useLanguage();
     const activeMenu = SECTION_MENU[section];
@@ -344,6 +347,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
         }
     };
 
+    // Nothing saved means no database, whatever defaults the form shows (the same rule as useReadiness).
+    const dbSaved = [config?.driver, config?.host, config?.database].some((value) => value !== undefined && value !== null && String(value).trim() !== '');
+
     const handleSaveDB = async () => {
         setIsSavingDB(true);
         try {
@@ -355,6 +361,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                 password: dbPassword,
                 database: dbDriver === 'sqlite' ? dbFile : dbName
             });
+            setConfig(prev => prev ? { ...prev, driver: dbDriver, host: dbHost, port: dbPort, user: dbUser, database: dbDriver === 'sqlite' ? dbFile : dbName } : prev);
             setDbTestResult({ success: true, message: t('settings.dbSaveSuccess') });
         } catch (e: unknown) {
             console.error('Failed to save database configuration:', e);
@@ -565,9 +572,6 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                         />
                                     </div>
 
-                                    <div className={cn(UI.alert, '[&_span]:inline-flex [&_span]:items-start [&_span]:gap-2 [&_svg]:mt-1 [&_svg]:flex-none [&_svg]:text-faint')}>
-                                        <span><SettingsIcon size={14} aria-hidden="true" /> {t('settings.configLocalHint')}</span>
-                                    </div>
                                 </div>
                             )}
                         </div>
@@ -576,14 +580,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                 {/* 数据库 (Database) */}
                 {activeMenu === '数据库' && (
-                    <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
-                        <section className={cn(UI.card, UI.stack, 'gap-5')} aria-labelledby="settings-db-heading">
+                    <div className={cn(UI.stack, UI.enter, SUB_PAGE)}>
+                        <section className={cn(UI.stack, 'gap-5')} aria-labelledby="settings-db-heading">
                             <div className={UI.cardHead}>
                                 <div className={UI.cardTitle} id="settings-db-heading">
                                     <span className={UI.cardIcon} aria-hidden="true"><Database size={18} /></span>
                                     <div className="grid min-w-0 gap-0.5">
                                         <div>{t('settings.database')}</div>
-                                        <div className={cn(UI.caption, 'truncate')}>-- {dbDriver === 'sqlite' ? `sqlite:///${dbFile}` : `${dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://${dbHost || 'localhost'}:${dbPort}`}</div>
+                                        <div className={cn(UI.caption, 'truncate')}>-- {!dbSaved ? t('settings.dbNotConnected') : dbDriver === 'sqlite' ? `sqlite:///${dbFile}` : `${dbDriver === 'postgres' ? 'postgresql' : 'mysql'}://${dbHost || 'localhost'}:${dbPort}`}</div>
                                     </div>
                                 </div>
                             </div>
@@ -683,8 +687,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                 {/* 环境 (Environment) */}
                 {activeMenu === '环境' && (
-                    <div className={cn(UI.stack, UI.enter, 'max-w-[760px]')}>
-                        <section className={cn(UI.card, UI.stack, 'gap-5')} aria-labelledby="settings-python-heading">
+                    <div className={cn(UI.stack, UI.enter, SUB_PAGE)}>
+                        <section className={cn(UI.stack, 'gap-5')} aria-labelledby="settings-python-heading">
                             <div className={UI.cardHead}>
                                 <div>
                                     <h3 className={UI.cardTitle} id="settings-python-heading">

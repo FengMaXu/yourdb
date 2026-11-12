@@ -29,6 +29,7 @@ import { IdCard } from 'lucide-react';
 import { isAgentMessageEmpty } from '../utils/agent-message';
 import { groupIntoTurns } from '../utils/agent-turns';
 import AgentTurn from './AgentTurn';
+import { SampleDatabaseIntro } from './SampleDatabaseIntro';
 import { SetupChecklist } from './SetupChecklist';
 import { useReadiness } from '../hooks/useReadiness';
 import { mergeToolResultState, type ToolCallState } from './tool-event-state';
@@ -255,7 +256,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
 
     const { t } = useLanguage();
     // Until a model and a database are both set up, the empty page walks the user through them first.
-    const { ready: setupDone } = useReadiness();
+    const { ready: setupDone, usingSample } = useReadiness();
 
     const [inputValue, setInputValue] = useState('');
     const [messages, setMessages] = useState<ChatMessage[]>(() => currentTranscript.map(fromSnapshotMessage));
@@ -1103,6 +1104,10 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         <SetupChecklist />
                         <p className="m-0 mt-5 text-[0.8rem] text-faint">{t('setup.examplesLocked')}</p>
                         </>)}
+                        {/* On the sample database its own introduction and questions replace the general starters, which are written for the user's data. */}
+                        {setupDone && usingSample ? (
+                            <SampleDatabaseIntro onPick={(question) => { setInputValue(question); textareaRef.current?.focus(); }} />
+                        ) : (
                         <div className={`grid grid-cols-2 gap-2.5 max-[720px]:grid-cols-1 ${setupDone ? 'mt-[22px]' : 'opacity-50'}`}>
                             {STARTER_PROMPTS.map((kind, index) => (
                                 <button
@@ -1126,6 +1131,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                 </button>
                             ))}
                         </div>
+                        )}
                     </div>
                 )}
 
