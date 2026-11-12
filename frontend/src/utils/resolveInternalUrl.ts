@@ -166,7 +166,7 @@ export function resolveInternalUrl(href: string | undefined, currentSessionId?: 
                     return publicationUrl.toString();
                 }
             } catch {
-                // Fall through to the legacy URL for non-workspace paths.
+                // Not a workspace or publication path: fall through to the API URL.
             }
         }
         return appendAuthToken(`${API_BASE_URL}${normalizedHref}`);

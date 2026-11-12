@@ -33,7 +33,7 @@ export interface WidgetSpec {
     file_path?: string;
     download_url?: string;
     file_type?: string;
-    status?: 'previewing' | 'ready' | 'error';
+    status?: 'ready' | 'error';
     error?: string;
     /** Set by the current Runtime; absent on widgets replayed from earlier sessions. */
     contractVersion?: number;
@@ -519,10 +519,6 @@ const FileLinkWidget: React.FC<FileLinkWidgetProps> = ({ widget, t, currentSessi
 const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionId }) => {
     const { t } = useLanguage();
 
-    if (widget.status === 'previewing') {
-        return null;
-    }
-
     const body = (() => {
         if (widget.status === 'error') {
             return <div className="text-[13px] text-destructive">{widget.error || t('widgets.renderFail')}</div>;
@@ -535,7 +531,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
             case 'table':
                 return renderTable(widget, t);
             case 'chart':
-                // Runtime-built ChartSpec widgets; charts replayed from earlier sessions keep the legacy renderer.
+                // A transcript can hold charts without a resolved ChartSpec; those are drawn from their data rows.
                 return widget.contractVersion === CURRENT_WIDGET_CONTRACT && widget.chartSpec && widget.dataset
                     ? <Suspense fallback={<div style={{ height: 360 }} />}><ChartSpecWidget widget={{ chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} /></Suspense>
                     : renderChart(widget, t);
@@ -544,8 +540,8 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
             case 'rich_text':
                 return renderRichText(widget, t);
             case 'echarts':
-                // A raw ECharts option from an earlier Runtime; its contents were never checked, so it is not drawn (ADR-0008 decision 11).
-                return <div role="note" className="text-[13px] text-muted-foreground">{t('widgets.legacyEcharts')}</div>;
+                // A raw ECharts option in a transcript was never checked, so it is not drawn (ADR-0008 decision 11).
+                return <div role="note" className="text-[13px] text-muted-foreground">{t('widgets.uncheckedEcharts')}</div>;
             case 'file_link':
                 return <FileLinkWidget widget={widget} t={t} currentSessionId={currentSessionId} />;
             default:

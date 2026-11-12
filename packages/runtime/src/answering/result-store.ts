@@ -8,6 +8,7 @@ import {
 import { makeInternalId } from "./internal-ids.js";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { inferType } from "./support.js";
 
 export interface ResultStream {
   readonly columns: readonly string[];
@@ -36,14 +37,6 @@ export interface ResultStore {
   encodeCsv(ref: PrivateResultRef, context: BusinessContext): Promise<{ readonly content: string; readonly contentHash: string }>;
 }
 
-function inferType(value: unknown): string {
-  if (value === null || value === undefined) return "NULL";
-  if (typeof value === "bigint") return "BIGINT";
-  if (typeof value === "number") return Number.isInteger(value) ? "INTEGER" : "REAL";
-  if (typeof value === "boolean") return "BOOLEAN";
-  if (typeof value === "object") return "JSON";
-  return "TEXT";
-}
 
 function stableValue(value: unknown): unknown {
   if (typeof value === "bigint") return { __type: "bigint", value: value.toString() };

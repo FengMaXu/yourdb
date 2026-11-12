@@ -1,5 +1,3 @@
-import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
-
 export type WidgetKind = "kpi" | "chart" | "table" | "steps";
 
 /**
@@ -20,14 +18,11 @@ export interface WidgetPayload extends WidgetSpecInput {
 }
 
 export interface WidgetLifecycleDetails {
-  widgetEvent: "widget" | "widget_patch" | "widget_done" | "widget_remove" | "widget_error";
+  widgetEvent: "widget";
   widgetId: string;
   toolCallId: string;
   toolName: "show_widget";
-  widget?: WidgetPayload;
-  patch?: Record<string, unknown>;
-  error?: string;
-  legacyText: string;
+  widget: WidgetPayload;
 }
 
 export type WidgetValidationResult = {
@@ -79,31 +74,15 @@ function isWidgetPayload(value: unknown): value is WidgetPayload {
     && typeof value.tool_call_id === "string";
 }
 
-/** Runtime guard for partial tool updates received from the native Pi event stream. */
+/** Guard for the details of a finished show_widget call, as the Pi event stream reports them. */
 export function isWidgetLifecycleDetails(value: unknown): value is WidgetLifecycleDetails {
   if (!isObject(value)) return false;
-  if (!["widget", "widget_patch", "widget_done", "widget_remove", "widget_error"].includes(String(value.widgetEvent))) return false;
+  if (value.widgetEvent !== "widget") return false;
   if (typeof value.widgetId !== "string" || value.widgetId.length === 0) return false;
   if (typeof value.toolCallId !== "string" || value.toolCallId.length === 0) return false;
-  if (value.toolName !== "show_widget" || typeof value.legacyText !== "string") return false;
-  if (value.widget !== undefined && !isWidgetPayload(value.widget)) return false;
-  if (value.patch !== undefined && !isObject(value.patch)) return false;
-  if (value.error !== undefined && typeof value.error !== "string") return false;
-  return true;
+  return value.toolName === "show_widget" && isWidgetPayload(value.widget);
 }
 
-export function widgetLegacyText(widget: WidgetPayload): string {
+export function widgetText(widget: WidgetPayload): string {
   return `[widget:${widget.kind}] ${widget.title}: ${JSON.stringify(widget)}`;
 }
-
-export function emitWidgetUpdate(
-  onUpdate: AgentToolUpdateCallback<WidgetLifecycleDetails> | undefined,
-  details: WidgetLifecycleDetails,
-): void {
-  onUpdate?.({
-    content: [{ type: "text", text: details.legacyText }],
-    details,
-  });
-}
-
-export type WidgetToolResult = AgentToolResult<WidgetLifecycleDetails>;

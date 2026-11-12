@@ -174,11 +174,9 @@ export const DataAgentEventSchema = Type.Union([
   Type.Object({ type: Type.Literal("agent.tool_progress"), toolCallId: Type.String(), toolName: Type.String(), progress: ToolProgressSchema }),
   Type.Object({ type: Type.Literal("agent.tool_finished"), toolCallId: Type.String(), toolName: Type.String(), args: Type.Optional(Type.Unknown()), result: Type.Unknown(), isError: Type.Boolean() }),
   Type.Object({ type: Type.Literal("widget"), ...WidgetEventFields, toolName: Type.Literal("show_widget"), widget: WidgetRecordSchema }),
-  Type.Object({ type: Type.Literal("widget_patch"), ...WidgetEventFields, toolName: Type.Literal("show_widget"), patch: WidgetRecordSchema }),
   Type.Object({ type: Type.Literal("widget_done"), ...WidgetEventFields, toolName: Type.Literal("show_widget") }),
-  Type.Object({ type: Type.Literal("widget_remove"), ...WidgetEventFields, toolName: Type.Literal("show_widget") }),
   Type.Object({ type: Type.Literal("widget_error"), ...WidgetEventFields, toolName: Type.Literal("show_widget"), error: Type.String() }),
-  /** `outcome` says how the run ended; absent means completed (older producers). */
+  /** `outcome` says how the run ended; absent means completed. */
   Type.Object({ type: Type.Literal("agent.completed"), outcome: Type.Optional(Type.Union([Type.Literal("completed"), Type.Literal("stopped"), Type.Literal("failed")])) }),
   Type.Object({ type: Type.Literal("workspace.artifact.created"), path: Type.String(), kind: Type.Literal("file") }),
   Type.Object({ type: Type.Literal("clarification.request"), clarificationId: Type.String(), question: Type.String(), options: Type.Array(Type.String()) }),

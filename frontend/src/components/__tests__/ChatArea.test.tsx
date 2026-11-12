@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../api/runtime-client', () => ({
     answerClarificationViaRuntime: vi.fn(),
-    clearSessionViaRuntime: vi.fn(),
     getRuntimeClient: vi.fn(() => ({ dispatch: vi.fn() })),
     renameSessionViaRuntime: vi.fn(),
     steerAgentViaRuntime: vi.fn(),

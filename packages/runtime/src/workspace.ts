@@ -51,7 +51,7 @@ export class WorkspaceStore {
   async read(relativePath: string): Promise<string> { return (await this.readRange(relativePath)).content; }
   async readBytes(relativePath: string): Promise<Uint8Array> { this.assertReadable(relativePath); return new Uint8Array(await readFile(await this.safeExisting(relativePath))); }
   /** Read a session path with a constrained root-file fallback. */
-  async readBytesWithLegacyFallback(relativePath: string): Promise<Uint8Array> {
+  async readBytesWithRootFallback(relativePath: string): Promise<Uint8Array> {
     try {
       return await this.readBytes(relativePath);
     } catch (error) {

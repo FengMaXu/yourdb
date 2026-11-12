@@ -33,12 +33,6 @@ export class PiApplicationSession {
     return this.metadata;
   }
 
-  /** Read-only transcript projection used by offline migration tooling. */
-  async buildContext(): Promise<{ messages: any[] }> {
-    const entries = await this.getEntries();
-    return { messages: entries.filter((entry) => entry.type === "message").map((entry) => entry.message) as any[] };
-  }
-
   getNative(): Session<any> { return this.native; }
 }
 
@@ -66,9 +60,7 @@ export class PiJsonlSessionStore {
     await mkdir(this.cwd, { recursive: true });
     const explicitId = typeof metadata.sessionId === "string" && metadata.sessionId.trim()
       ? metadata.sessionId.trim()
-      : typeof metadata.legacySessionId === "string" && metadata.legacySessionId.trim()
-        ? metadata.legacySessionId.trim()
-        : undefined;
+      : undefined;
     const session = await this.repo.create({ cwd: this.cwd, ...(explicitId ? { id: explicitId } : {}) }, TODO_CONTEXT);
     const appMetadata = { ...metadata };
     this.applicationMetadata.set(session.metadata.id, appMetadata);

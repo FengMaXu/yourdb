@@ -14,7 +14,7 @@ import { DEFAULT_KNOWLEDGE_RESULTS, formatKnowledgeSearchResults, MAX_KNOWLEDGE_
 import { KnowledgeWriter } from "../knowledge-write.js";
 import { runPythonJob } from "../python-job.js";
 import type { WorkspaceStore } from "../workspace.js";
-import { CHART_WIDGET_CONTRACT_VERSION, validateWidgetSpec, widgetLegacyText, type WidgetPayload } from "../widget.js";
+import { CHART_WIDGET_CONTRACT_VERSION, validateWidgetSpec, widgetText, type WidgetPayload } from "../widget.js";
 import { trustedContext, type DataAgentToolContext } from "./answering.js";
 import { defineDataAgentTool, type DataAgentToolDefinition } from "./tool-definition.js";
 import type { ClarificationDialogs } from "../facets/clarification-dialogs.js";
@@ -344,7 +344,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
           throw new Error("WIDGET_SPEC_INVALID: table fields must map column names to ChartSpec field semantics (type, storage, additivity, ...)");
         }
         const widget: WidgetPayload = { ...validation.spec, widget_id: widgetId, kind: value.kind, title: typeof validation.spec.title === "string" && validation.spec.title.trim() ? validation.spec.title : `${value.kind} widget`, tool_call_id: toolCallId, contractVersion: CHART_WIDGET_CONTRACT_VERSION };
-        return text(widgetLegacyText(widget), lifecycle(widget));
+        return text(widgetText(widget), lifecycle(widget));
       },
     }, {
       promptSnippet: "输出结构化展示部件。",

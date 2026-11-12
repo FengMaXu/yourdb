@@ -43,10 +43,6 @@ export function isSpecPath(value: string): value is SpecPath {
 export const FIELD_SECTIONS = ["population", "measure", "grouping", "selection", "output"] as const;
 export type FieldSection = typeof FIELD_SECTIONS[number];
 
-export function sectionOf(path: SpecPath): FieldSection {
-  if (path.startsWith("measures.")) return "measure";
-  return path.split(".")[0] as FieldSection;
-}
 
 /**
  * Physical fields are facts about this database rather than the user's

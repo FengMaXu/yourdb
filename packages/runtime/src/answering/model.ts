@@ -319,7 +319,7 @@ export interface QueryTaskRecord {
   readonly latestCandidateId?: CandidateId;
   readonly publicationId?: PublicationId;
   readonly lifecycle: "open" | "published" | "closed";
-  /** Persisted task budget; omitted only for legacy snapshots and normalized on read/write. */
+  /** Persisted task budget; a stored task without one is normalized on read/write. */
   readonly budget?: QueryBudgetState;
   /** Latest probe per field alternative; alternative ids are stable until the field is rewritten. */
   readonly fieldProbes?: readonly FieldProbeRecord[];

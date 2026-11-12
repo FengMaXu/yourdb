@@ -63,16 +63,12 @@ let selected: RuntimeClient | undefined;
 export function getRuntimeClient(): RuntimeClient {
   if (selected) return selected;
   const bridge = window.dataAgentRuntime;
-  if (bridge && typeof bridge.invokeRuntimeCommand === "function") {
-    selected = createElectronRuntimeClient({
-      invoke: (_channel, payload) => bridge.invokeRuntimeCommand(payload),
-      subscribe: bridge.subscribeRuntimeEvents,
-    });
-  } else {
-    const configuredBase = import.meta.env.VITE_API_BASE_URL;
-    const base = typeof configuredBase === "string" ? configuredBase.trim().replace(/\/$/, "") : "";
-    selected = createHttpRuntimeClient(base);
-  }
+  const electronBridge: ElectronCommandBridge | undefined = bridge && typeof bridge.invokeRuntimeCommand === "function"
+    ? { invoke: (_channel, payload) => bridge.invokeRuntimeCommand(payload), subscribe: bridge.subscribeRuntimeEvents }
+    : undefined;
+  const configuredBase = import.meta.env.VITE_API_BASE_URL;
+  const httpBaseUrl = typeof configuredBase === "string" ? configuredBase.trim().replace(/\/$/, "") : "";
+  selected = selectRuntimeClient({ ...(electronBridge ? { electronBridge } : {}), httpBaseUrl });
   return selected;
 }
 
@@ -85,12 +81,6 @@ export async function listTasksViaRuntime(): Promise<Array<{ id: string; name: s
   return result.items as Array<{ id: string; name: string; createdAt?: number; updatedAt?: number }>;
 }
 
-export async function createTaskViaRuntime(name: string): Promise<{ id: string }> {
-  const envelope = await getRuntimeClient().dispatch({ type: "task.create", name });
-  const result = envelope.response;
-  if (result.type !== "mutation.result") throw new Error("UNEXPECTED_RESPONSE");
-  return result.item as { id: string };
-}
 
 export async function listSessionsViaRuntime(taskId?: string): Promise<Array<{ id: string; taskId?: string; name: string }>> {
   const envelope = await getRuntimeClient().dispatch({ type: "session.list", ...(taskId ? { taskId } : {}) });
@@ -106,19 +96,7 @@ export async function createSessionViaRuntime(taskId: string, name?: string): Pr
   return result.item as { id: string; taskId?: string; name?: string; createdAt?: number };
 }
 
-export async function listWorkspaceViaRuntime(): Promise<string[]> {
-  const envelope = await getRuntimeClient().dispatch({ type: "workspace.list" });
-  const result = envelope.response;
-  if (result.type !== "workspace.result" || !result.files) throw new Error("UNEXPECTED_RESPONSE");
-  return result.files;
-}
 
-export async function searchKnowledgeViaRuntime(query: string): Promise<Array<{ path: string; title: string; score: number }>> {
-  const envelope = await getRuntimeClient().dispatch({ type: "knowledge.search", query });
-  const result = envelope.response;
-  if (result.type !== "knowledge.search.result") throw new Error("UNEXPECTED_RESPONSE");
-  return result.hits as Array<{ path: string; title: string; score: number }>;
-}
 
 export async function readKnowledgeViaRuntime(path: string): Promise<string> {
   const envelope = await getRuntimeClient().dispatch({ type: "knowledge.read", path });
@@ -157,13 +135,7 @@ export async function createTaskWithIdViaRuntime(name: string): Promise<{ id: st
   return result.item as { id: string; name: string };
 }
 
-export async function deleteWorkspaceFileViaRuntime(path: string): Promise<void> {
-  await getRuntimeClient().dispatch({ type: "workspace.delete", path });
-}
 
-export async function writeWorkspaceFileViaRuntime(path: string, content: string): Promise<void> {
-  await getRuntimeClient().dispatch({ type: "workspace.write", path, content });
-}
 
 export async function listKnowledgeViaRuntime(): Promise<Array<{ path: string; size: number; modifiedAt: number; knowledgeId?: string; name?: string; description?: string; usage?: "method" | "fact"; readOnly?: boolean; hasContent?: boolean }>> {
   const envelope = await getRuntimeClient().dispatch({ type: "knowledge.list" });
@@ -458,19 +430,6 @@ export async function testLlmViaRuntime(profile: Record<string, unknown>): Promi
   return envelope.response as unknown as { success: boolean; message: string };
 }
 
-/**
- * Clears a session's conversation in the new model: the Runtime session is
- * deleted and a fresh one is created for the same task. Returns the new
- * session id so the renderer can switch to it.
- */
-export async function clearSessionViaRuntime(sessionId: string): Promise<string> {
-  const sessions = await listSessionsViaRuntime();
-  const target = sessions.find((session) => session.id === sessionId);
-  await deleteSessionViaRuntime(sessionId);
-  if (!target?.taskId) throw new Error("SESSION_TASK_UNKNOWN");
-  const created = await createSessionViaRuntime(target.taskId, target.name);
-  return created.id;
-}
 
 export type RuntimeTranscriptMessage = SessionSnapshotMessage & { timestamp?: number };
 

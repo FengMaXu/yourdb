@@ -166,7 +166,7 @@
   --radius-xl: var(--radius-card);
 }
 
-/* Motion tokens (animate-*). The curve is --ease-out from the legacy root until phase 4. */
+/* Motion tokens (animate-*), all on the --ease-out curve. */
 @theme {
   --animate-rise: rise 520ms var(--ease-out) both;
   --animate-rise-quick: rise 260ms var(--ease-out) both;

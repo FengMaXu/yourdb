@@ -92,19 +92,19 @@ describe("PiSessionAnsweringStore", () => {
 
   it("reads a session stored as one Value and migrates it on the first write", async () => {
     await withSession(async (session, root) => {
-      const legacyStore = new InMemoryAnsweringStore();
-      await legacyStore.transact((state) => { state.putTask(task("old-b", 1)); state.putTask(task("old-a", 1)); }, context);
-      const legacy = value<JsonValue>("data-agent.answering", "state");
+      const singleValueStore = new InMemoryAnsweringStore();
+      await singleValueStore.transact((state) => { state.putTask(task("old-b", 1)); state.putTask(task("old-a", 1)); }, context);
+      const singleValue = value<JsonValue>("data-agent.answering", "state");
       await session.mutate(async (mutator) => {
-        await mutator.commit([setValue(legacy, JSON.parse(JSON.stringify(legacyStore.snapshot())) as JsonValue)], TODO_CONTEXT);
+        await mutator.commit([setValue(singleValue, JSON.parse(JSON.stringify(singleValueStore.snapshot())) as JsonValue)], TODO_CONTEXT);
       }, TODO_CONTEXT);
-      expect(legacyStore.snapshot().version).toBe(ANSWERING_SNAPSHOT_VERSION);
+      expect(singleValueStore.snapshot().version).toBe(ANSWERING_SNAPSHOT_VERSION);
 
       const store = new PiSessionAnsweringStore(session);
       expect((await store.list(context)).map((record) => record.taskId)).toEqual(["old-b", "old-a"]);
       await store.transact((state) => { state.putTask(task("new", 1)); }, context);
 
-      expect(await session.getValue(legacy, TODO_CONTEXT)).toBeUndefined();
+      expect(await session.getValue(singleValue, TODO_CONTEXT)).toBeUndefined();
       const reloaded = new PiSessionAnsweringStore(session);
       expect((await reloaded.list(context)).map((record) => record.taskId)).toEqual(["old-b", "old-a", "new"]);
       expect(await answeringWrites(root)).toContain("delete data-agent.answering/state");

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import type { CheckCoverage, FieldRecord, Finding, SpecFields } from "./model.js";
+import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import type { FanoutDialect } from "./fanout-check.js";
 import { layersOf, type GroupingKeyValue, type MeasureExpression, type SourceValue, type TimeValue } from "./fields.js";
+import { settled } from "./support.js";
 
 /**
  * Calendar coverage: does the data have every period the Spec groups by? When
@@ -47,9 +48,6 @@ export interface CalendarCoverageReport {
   readonly limitations: readonly string[];
 }
 
-function settled<T>(field: FieldRecord | undefined): T | undefined {
-  return field && (field.state === "specified" || field.state === "decided") ? field.value as T : undefined;
-}
 
 function grainOf(text: string): CalendarGrain | "unsupported" | undefined {
   const lower = text.toLowerCase();

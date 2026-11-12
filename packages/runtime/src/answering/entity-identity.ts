@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { CheckCoverage, FieldRecord, Finding, SpecFields } from "./model.js";
+import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import { layersOf, type EntityValue, type MeasureExpression, type SourceValue } from "./fields.js";
+import { settled } from "./support.js";
 
 /**
  * Entity identity: does one row of a declared source stand for one entity?
@@ -45,9 +46,6 @@ export interface EntityIdentityReport {
   readonly limitations: readonly string[];
 }
 
-function settled<T>(field: FieldRecord | undefined): T | undefined {
-  return field && (field.state === "specified" || field.state === "decided") ? field.value as T : undefined;
-}
 
 /** A plain, optionally schema-qualified table name, or undefined when it is not one. */
 function tableName(item: string): string | undefined {

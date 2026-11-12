@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
-import type { CheckCoverage, FieldRecord, Finding, SpecFields } from "./model.js";
+import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import type { GroupingKeyValue, MeasureExpression, MeasureOperand, SelectionValue, SourceValue, SpecPath, TiesValue } from "./fields.js";
+import { settled } from "./support.js";
 
 /**
  * Spec realization: does the final SQL implement the sealed fields? The Spec
@@ -84,9 +85,6 @@ function sqlText(sql: string): SqlText {
   return { masked, withLiterals: blankComments(sql, false), depths };
 }
 
-function settled<T>(field: FieldRecord | undefined): T | undefined {
-  return field && (field.state === "specified" || field.state === "decided") ? field.value as T : undefined;
-}
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

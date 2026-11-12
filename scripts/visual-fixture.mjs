@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fixed data for the visual regression snapshots (frontend migration plan, PR 0.1).
+ * Fixed data for the visual regression snapshots.
  *
  * `evaluations/visual/fixture-data/fixture.json` describes one account, its settings and
  * MCP plugins, and a few sessions holding finished answers. This script builds that into a

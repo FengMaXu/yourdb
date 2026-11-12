@@ -62,7 +62,6 @@ describe("SQLite MCP server", () => {
     expect(schemaPayload.schema[0].primaryKey).toEqual(["id"]);
 
     const listedTools = await client.listTools();
-    expect(listedTools.tools.some((tool) => tool.name === "execute_query_export_batch")).toBe(false);
     expect(listedTools.tools.some((tool) => tool.name === "export_query")).toBe(false);
     const forbiddenExport = await client.callTool({ name: "export_query", arguments: { sql: "SELECT * FROM sales" } });
     expect(forbiddenExport.isError).toBe(true);

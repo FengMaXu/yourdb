@@ -10,8 +10,8 @@ import {
 } from "../answering/answering-store.js";
 import type { AnswerTaskView, BusinessContext, TaskId, QueryTaskRecord } from "../answering/model.js";
 
-/** Before per-record storage: the whole snapshot as one Value, rewritten on every change. Read once, then migrated. */
-const LEGACY_ANSWERING_STATE = value<JsonValue>("data-agent.answering", "state");
+/** The single-Value form: the whole snapshot as one Value. Read once, then split into per-record Values. */
+const SINGLE_VALUE_ANSWERING_STATE = value<JsonValue>("data-agent.answering", "state");
 /**
  * One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`),
  * each id percent-encoded so an id containing "/" can neither collide nor regroup.
@@ -123,7 +123,7 @@ function recordingWrites(state: AnsweringTransaction, written: Map<string, JsonV
  * the transaction changed: one Answer Spec field changes one revision record,
  * instead of rewriting every task, revision, evidence item and candidate of
  * the session (which grew a session file by tens of megabytes). A session
- * written in the earlier single-Value form is read from it and migrated on its
+ * held in the single-Value form is read from it and split into records on its
  * first write.
  *
  * Each write is a single native Session mutation. The in-memory delegate is
@@ -140,19 +140,19 @@ export class PiSessionAnsweringStore implements AnsweringStore {
     private readonly piContext: Context = TODO_CONTEXT,
   ) {}
 
-  /** The stored records, and whether they still sit in the legacy single Value. */
-  private async readRecords(reader: Reader): Promise<{ readonly records: Map<string, StoredRecord>; readonly legacy: boolean }> {
+  /** The stored records, and whether they sit in the single-Value form. */
+  private async readRecords(reader: Reader): Promise<{ readonly records: Map<string, StoredRecord>; readonly singleValue: boolean }> {
     const scan = async () => new Map((await reader.scanValues(ALL_RECORDS, this.piContext)).map((entry) => [entry.address.key, entry.value] as const));
     const stored = await scan();
-    if (stored.size > 0) return { records: stored, legacy: false };
-    const legacy = await reader.getValue(LEGACY_ANSWERING_STATE, this.piContext);
-    const decoded = legacy ? decodeJson(legacy.value) : undefined;
+    if (stored.size > 0) return { records: stored, singleValue: false };
+    const whole = await reader.getValue(SINGLE_VALUE_ANSWERING_STATE, this.piContext);
+    const decoded = whole ? decodeJson(whole.value) : undefined;
     if (!isSnapshot(decoded)) {
-      // Outside a mutation, a migration may have committed between the two reads: look again.
-      return { records: legacy ? new Map() : await scan(), legacy: false };
+      // Outside a mutation, a split may have committed between the two reads: look again.
+      return { records: whole ? new Map() : await scan(), singleValue: false };
     }
     let order = 0;
-    return { records: new Map([...snapshotRecords(decoded)].map(([key, record]) => [key, { order: order++, record }])), legacy: true };
+    return { records: new Map([...snapshotRecords(decoded)].map(([key, record]) => [key, { order: order++, record }])), singleValue: true };
   }
 
   private async readSnapshot(): Promise<AnsweringStoreSnapshot | undefined> {
@@ -177,21 +177,21 @@ export class PiSessionAnsweringStore implements AnsweringStore {
       await this.session.mutate(async (mutator) => {
         // Read inside the mutation so a concurrent native Session writer cannot
         // silently overwrite the Answering records between read and commit.
-        const { records: before, legacy } = await this.readRecords(mutator);
+        const { records: before, singleValue } = await this.readRecords(mutator);
         const nextDelegate = new InMemoryAnsweringStore(before.size > 0 ? recordsSnapshot(before) : this.delegate.snapshot());
         const written = new Map<string, JsonValue>();
         answer = await nextDelegate.transact((state) => command(recordingWrites(state, written)), context);
         let nextOrder = 0;
         for (const entry of before.values()) if (entry.order >= nextOrder) nextOrder = entry.order + 1;
         const writes: ValueWrite[] = [];
-        if (legacy) {
-          // Migration: every record becomes its own Value, in the legacy snapshot's order.
+        if (singleValue) {
+          // Split: every record becomes its own Value, in the snapshot's order.
           for (const [key, entry] of before) if (!written.has(key)) writes.push(setValue(recordValue(key), entry));
-          writes.push(deleteValue(LEGACY_ANSWERING_STATE));
+          writes.push(deleteValue(SINGLE_VALUE_ANSWERING_STATE));
         }
         for (const [key, record] of written) {
           const previous = before.get(key);
-          if (!legacy && previous && JSON.stringify(previous.record) === JSON.stringify(record)) continue;
+          if (!singleValue && previous && JSON.stringify(previous.record) === JSON.stringify(record)) continue;
           writes.push(setValue(recordValue(key), { order: previous?.order ?? nextOrder++, record }));
         }
         if (writes.length > 0) await mutator.commit(writes, this.piContext);

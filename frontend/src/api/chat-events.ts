@@ -36,11 +36,7 @@ function isWidgetSpec(value: unknown): value is WidgetSpec {
     && isWidgetKind(value.kind);
 }
 
-function asWidgetPatch(value: unknown): Partial<WidgetSpec> {
-  return isRecord(value) ? value as unknown as Partial<WidgetSpec> : {};
-}
-
-/** Extract the text content retained for clients that do not understand Widget events. */
+/** The text content of a tool result, shown as the tool call's output. */
 function readableToolResult(result: unknown): string {
   if (typeof result === "string") return result;
   if (result && typeof result === "object") {
@@ -54,9 +50,8 @@ function readableToolResult(result: unknown): string {
 }
 
 /**
- * Compatibility adapter from one versioned Runtime event to the existing chat
- * event model. In particular, terminal tool results retain readable text for
- * clients that predate structured Widget events.
+ * Maps one versioned Runtime event to the chat event model the renderer
+ * consumes.
  */
 export function mapRuntimeEvent(event: DataAgentEvent, activeMessageId: string): { event: SSEEvent; messageId?: string } | null {
   switch (event.type) {
@@ -101,30 +96,10 @@ export function mapRuntimeEvent(event: DataAgentEvent, activeMessageId: string):
           widget: event.widget,
         },
       };
-    case "widget_patch":
-      return {
-        event: {
-          type: "widget_patch",
-          message_id: event.messageId,
-          tool_call_id: event.toolCallId,
-          widget_id: event.widgetId,
-          tool_name: event.toolName,
-          patch: asWidgetPatch(event.patch),
-        },
-      };
     case "widget_done":
       return {
         event: {
           type: "widget_done",
-          message_id: event.messageId,
-          tool_call_id: event.toolCallId,
-          widget_id: event.widgetId,
-        },
-      };
-    case "widget_remove":
-      return {
-        event: {
-          type: "widget_remove",
           message_id: event.messageId,
           tool_call_id: event.toolCallId,
           widget_id: event.widgetId,

@@ -46,7 +46,7 @@ describe('Versioned widgets', () => {
         expect(setOption).not.toHaveBeenCalled();
     });
 
-    it('keeps the legacy renderer for charts replayed from earlier sessions', () => {
+    it('draws a chart without a ChartSpec from its data rows', () => {
         render(<WidgetRenderer widget={{ widget_id: 'w3', kind: 'chart', title: 'Sales', data: [{ label: 'North', value: 10 }] }} />);
         expect(screen.getByText('North')).toBeInTheDocument();
         expect(setOption).not.toHaveBeenCalled();

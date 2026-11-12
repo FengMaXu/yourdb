@@ -452,7 +452,7 @@ const translations: Translations = {
 
         'widgets.true': 'Yes',
         'widgets.false': 'No',
-        'widgets.legacyEcharts': 'This chart came from an earlier version and is no longer drawn. Ask again to rebuild it from published data.',
+        'widgets.uncheckedEcharts': 'This chart came from an earlier version and is no longer drawn. Ask again to rebuild it from published data.',
         'widgets.metric': 'Metric',
         'widgets.column': 'Column',
         'widgets.dataPoint': 'Data Point',
@@ -934,7 +934,7 @@ const translations: Translations = {
 
         'widgets.true': '是',
         'widgets.false': '否',
-        'widgets.legacyEcharts': '此图表来自早期版本，已不再绘制。请重新提问，以基于已发布数据重建图表。',
+        'widgets.uncheckedEcharts': '此图表来自早期版本，已不再绘制。请重新提问，以基于已发布数据重建图表。',
         'widgets.metric': '指标',
         'widgets.column': '列',
         'widgets.dataPoint': '数据点',

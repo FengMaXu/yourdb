@@ -20,12 +20,10 @@ export interface Session {
     taskId: string;
     name: string;
     createdAt: string;
-    conversationVersion: number;
 }
 
 const CURRENT_TASK_STORAGE_KEY = 'data-agent:current-task';
 const CURRENT_SESSION_STORAGE_KEY = 'data-agent:current-session';
-const TRANSCRIPT_SAVE_DEBOUNCE_MS = 800;
 const DEFAULT_TASK_NAMES = new Set(['New task', 'New Task', '新任务']);
 const DEFAULT_SESSION_NAMES = new Set(['New session', 'New Session', '新会话']);
 
@@ -47,10 +45,9 @@ interface SessionContextType {
     deleteSession: (sessionId: string) => void;
     updateTaskName: (taskId: string, name: string) => void;
     setCurrentTranscript: (sessionId: string, messages: SessionSnapshotMessage[]) => void;
-    clearCurrentTranscript: (sessionId: string, options?: { persist?: boolean; conversationVersion?: number }) => void;
     setAttachedFiles: (files: string[]) => void;
     toggleAttachedFile: (filePath: string) => void;
-    clearAttachedFiles: (options?: { persist?: boolean }) => void;
+    clearAttachedFiles: () => void;
     isFileAttached: (filePath: string) => boolean;
     /**
      * The latest run that started or finished in any session, whoever ran it: this view, another
@@ -104,18 +101,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const [transcriptsBySession, setTranscriptsBySession] = useState<SessionTranscriptStore>({});
     const [attachedFilesBySession, setAttachedFilesBySession] = useState<SessionAttachedFilesStore>({});
     const [runActivity, setRunActivity] = useState<RunActivity | null>(null);
-    const attachedFilesRef = useRef<SessionAttachedFilesStore>({});
-    const conversationVersionsRef = useRef<Record<string, number>>({});
-    const transcriptSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const titleSaveRequestedRef = useRef<Set<string>>(new Set());
     const sessionNamesRef = useRef<Record<string, string>>({});
 
     const defaultTaskName = t('task.new') || 'New task';
     const defaultSessionName = t('session.new') || 'New session';
-
-    useEffect(() => {
-        attachedFilesRef.current = attachedFilesBySession;
-    }, [attachedFilesBySession]);
 
     useEffect(() => {
         sessionNamesRef.current = Object.fromEntries(sessions.map((session) => [session.id, session.name]));
@@ -125,36 +115,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         void prepareSessionViaRuntime(sessionId).catch((error) => {
             console.warn('Failed to prepare session runtime:', error);
         });
-    }, []);
-
-    const persistTranscript = useCallback((_sessionId: string, _messages: SessionSnapshotMessage[]) => {
-        // Transcripts are owned by the Runtime's Pi JSONL session store.
-        // Renderer snapshots are no longer persisted server-side.
-    }, []);
-
-    const scheduleTranscriptSave = useCallback((
-        sessionId: string,
-        messages: SessionSnapshotMessage[],
-        immediate = false,
-    ) => {
-        const existingTimer = transcriptSaveTimersRef.current[sessionId];
-        if (existingTimer) {
-            clearTimeout(existingTimer);
-            delete transcriptSaveTimersRef.current[sessionId];
-        }
-        if (immediate) {
-            persistTranscript(sessionId, messages);
-            return;
-        }
-        transcriptSaveTimersRef.current[sessionId] = setTimeout(() => {
-            delete transcriptSaveTimersRef.current[sessionId];
-            persistTranscript(sessionId, messages);
-        }, TRANSCRIPT_SAVE_DEBOUNCE_MS);
-    }, [persistTranscript]);
-
-    useEffect(() => () => {
-        Object.values(transcriptSaveTimersRef.current).forEach(clearTimeout);
-        transcriptSaveTimersRef.current = {};
     }, []);
 
     const toTask = useCallback((task: { id: string; name: string; createdAt?: number; updatedAt?: number }): Task => ({
@@ -168,7 +128,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         taskId: session.taskId ?? '',
         name: DEFAULT_SESSION_NAMES.has(session.name) ? defaultSessionName : session.name,
         createdAt: new Date().toISOString(),
-        conversationVersion: 1,
     }), [defaultSessionName]);
 
     useEffect(() => {
@@ -185,9 +144,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 const loadedTasks: Task[] = runtimeTasks.map(toTask);
                 const loadedSessions: Session[] = runtimeSessions.map(toSession);
 
-                loadedSessions.forEach((session) => {
-                    conversationVersionsRef.current[session.id] = session.conversationVersion;
-                });
                 const storedSessionId = readCurrentSessionId();
                 const storedTaskId = readCurrentTaskId();
                 const selectedTask = loadedTasks.find((task) => task.id === storedTaskId)
@@ -326,12 +282,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 taskId: created.taskId || taskId,
                 name: created.name || defaultSessionName,
                 createdAt: new Date(created.createdAt ?? Date.now()).toISOString(),
-                conversationVersion: 1,
             };
             setSessions((prev) => [session, ...prev.filter((item) => item.id !== session.id)]);
             setTranscriptsBySession((prev) => ({ ...prev, [session.id]: [] }));
             setAttachedFilesBySession((prev) => ({ ...prev, [session.id]: [] }));
-            conversationVersionsRef.current[session.id] = 1;
             setCurrentTaskId(session.taskId);
             setCurrentSessionId(session.id);
             writeCurrentTaskId(session.taskId);
@@ -457,8 +411,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         const shouldSaveTitleNow = Boolean(isUntitled && title && !titleSaveRequestedRef.current.has(sessionId));
         if (shouldSaveTitleNow) {
             titleSaveRequestedRef.current.add(sessionId);
-            // Naming is deliberately local and best-effort. A failed metadata
-            // write must never interrupt transcript persistence or the answer.
+            // Naming is best-effort: a failed rename must never interrupt the answer.
             sessionNamesRef.current[sessionId] = title;
             setSessions((prev) => prev.map((session) => (
                 session.id === sessionId ? { ...session, name: title } : session
@@ -467,37 +420,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 console.warn('Failed to rename session:', error);
             });
         }
-        scheduleTranscriptSave(sessionId, messages, shouldSaveTitleNow);
-    }, [scheduleTranscriptSave]);
-
-    const clearCurrentTranscript = useCallback((
-        sessionId: string,
-        options: { persist?: boolean; conversationVersion?: number } = {},
-    ) => {
-        if (typeof options.conversationVersion === 'number') {
-            conversationVersionsRef.current[sessionId] = options.conversationVersion;
-            setSessions((prev) => prev.map((session) => (
-                session.id === sessionId ? { ...session, conversationVersion: options.conversationVersion as number } : session
-            )));
-        }
-        setTranscriptsBySession((prev) => ({ ...prev, [sessionId]: [] }));
-        titleSaveRequestedRef.current.delete(sessionId);
-        if (options.persist === false) {
-            const existingTimer = transcriptSaveTimersRef.current[sessionId];
-            if (existingTimer) {
-                clearTimeout(existingTimer);
-                delete transcriptSaveTimersRef.current[sessionId];
-            }
-            return;
-        }
-        scheduleTranscriptSave(sessionId, [], true);
-    }, [scheduleTranscriptSave]);
+    }, []);
 
     const setAttachedFiles = useCallback((files: string[]) => {
         if (!currentSession) return;
         const deduped = Array.from(new Set(files));
         setAttachedFilesBySession((prev) => ({ ...prev, [currentSession.id]: deduped }));
-        // Attached files persist with the workspace; no separate snapshot needed.
     }, [currentSession]);
 
     const toggleAttachedFile = useCallback((filePath: string) => {
@@ -507,10 +435,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setAttachedFilesBySession((prev) => ({ ...prev, [currentSession.id]: next }));
     }, [attachedFilesBySession, currentSession]);
 
-    const clearAttachedFiles = useCallback((options: { persist?: boolean } = {}) => {
+    const clearAttachedFiles = useCallback(() => {
         if (!currentSession) return;
         setAttachedFilesBySession((prev) => ({ ...prev, [currentSession.id]: [] }));
-        if (options.persist === false) return;
     }, [currentSession]);
 
     const isFileAttached = useCallback((filePath: string) => attachedFiles.includes(filePath), [attachedFiles]);
@@ -533,7 +460,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             deleteSession,
             updateTaskName,
             setCurrentTranscript,
-            clearCurrentTranscript,
             setAttachedFiles,
             toggleAttachedFile,
             clearAttachedFiles,
