@@ -13,6 +13,8 @@ Unicode true
 
 Name "${APP_NAME}"
 OutFile "${OUT_FILE}"
+Icon "{{ICON}}"
+UninstallIcon "{{ICON}}"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
 RequestExecutionLevel user
 
