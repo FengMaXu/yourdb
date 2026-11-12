@@ -68,7 +68,8 @@ application = await createDataAgentApplication({
     if (config.llm_enabled === false || !profile.apiKey || !profile.model) throw new Error("LLM_NOT_CONFIGURED: add a model API key in Settings → Model");
     return profile;
   },
-  systemPromptRoots: [knowledgeRoot, root],
+  // The system prompt ships with the repository; the knowledge folder never supplies one.
+  systemPromptRoots: [root],
   projectRoot: root,
   packagedRoot,
   skillRoots,
