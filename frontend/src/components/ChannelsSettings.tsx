@@ -426,15 +426,15 @@ const ChannelsSettings: React.FC = () => {
     };
 
     if (unavailable) {
-        return <p className={UI.lead}>当前运行方式没有启用消息渠道，或暂时无法读取渠道状态。</p>;
+        return <p className={cn(UI.lead, 'mx-auto w-full max-w-[640px]')}>当前运行方式没有启用消息渠道，或暂时无法读取渠道状态。</p>;
     }
-    if (!channels) return <Loader2 size={20} className="animate-spin" />;
+    if (!channels) return <Loader2 size={20} className="mx-auto animate-spin" />;
 
     const bots = channels.filter(isBot);
     const current = selected === 'new' ? undefined : bots.find((bot) => bot.id === selected) ?? bots[0];
 
     return (
-        <div className="flex max-w-[1040px] flex-col gap-4">
+        <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-4">
             <p className={UI.lead}>把飞书、微信接入数据智能体：在手机上直接提问，接收查询结果和看板。</p>
             <div className="grid grid-cols-[248px_minmax(0,1fr)] items-start gap-4 max-[900px]:grid-cols-1">
                 <nav aria-label="机器人列表" className="grid gap-1.5 rounded-xl border border-border bg-paper p-2">
