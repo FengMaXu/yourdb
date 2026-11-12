@@ -167,14 +167,6 @@ export interface LLMProfilesResponse {
     profiles: LLMProfile[];
 }
 
-export type DBConfigUpdate = {
-    host?: string;
-    port?: number;
-    user?: string;
-    password?: string;
-    database?: string;
-};
-
 export interface DatabaseConnection {
     id: string;
     name: string;

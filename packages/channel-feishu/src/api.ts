@@ -26,8 +26,9 @@ export interface FeishuCredentials {
   readonly domain?: Lark.Domain | string;
 }
 
-function checked<T extends { code?: number; msg?: string }>(response: T, operation: string): T {
-  if (response.code !== undefined && response.code !== 0) throw new Error(`FEISHU_${operation}_FAILED: ${response.code} ${response.msg ?? ""}`.trim());
+/** Throws on a Feishu answer whose code is set and not 0; otherwise returns it. */
+export function checked<T extends { code?: number; msg?: string } | null | undefined>(response: T, operation: string): T {
+  if (response?.code !== undefined && response.code !== 0) throw new Error(`FEISHU_${operation}_FAILED: ${response.code} ${response.msg ?? ""}`.trim());
   return response;
 }
 

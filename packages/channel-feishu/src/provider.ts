@@ -1,6 +1,6 @@
 import * as Lark from "@larksuiteoapi/node-sdk";
 import type { ChannelConfig, ChannelProvider, ChannelProvisioning } from "@data-agent/contracts";
-import { createLarkApi, createLarkEvents, type FeishuCredentials } from "./api.js";
+import { checked, createLarkApi, createLarkEvents, type FeishuCredentials } from "./api.js";
 import { FeishuChannel } from "./channel.js";
 import { FEISHU_CHANNEL_ID } from "./inbound.js";
 
@@ -29,10 +29,6 @@ function credentials(config: ChannelConfig): FeishuCredentials {
   const { appId, appSecret, domain } = config;
   if (typeof appId !== "string" || !appId || typeof appSecret !== "string" || !appSecret) throw new Error("FEISHU_CONFIG_INVALID");
   return { appId, appSecret, ...(typeof domain === "string" && domain ? { domain } : {}) };
-}
-
-function checked(response: { code?: number; msg?: string } | null | undefined, operation: string): void {
-  if (response?.code !== undefined && response.code !== 0) throw new Error(`FEISHU_${operation}_FAILED: ${response.code} ${response.msg ?? ""}`.trim());
 }
 
 /** The SDK throws the HTTP error for a non-2xx answer; Feishu's own code and message are in its body. */

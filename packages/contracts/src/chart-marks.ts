@@ -46,7 +46,6 @@ export const ChartHighlightSchema = Type.Object({
    */
   layer: Type.Optional(Type.Integer({ minimum: 0 })),
 }, Strict);
-export type ChartHighlight = Static<typeof ChartHighlightSchema>;
 
 /**
  * A reference line on a value axis, read from a column that holds one value in every row, such as a
@@ -57,11 +56,9 @@ export const ChartReferenceSchema = Type.Object({
   label: Type.Optional(Name),
   axis: Type.Optional(Type.Union([Type.Literal("left"), Type.Literal("right")])),
 }, Strict);
-export type ChartReference = Static<typeof ChartReferenceSchema>;
 
 /** A labelled span of x categories, such as a promotion period; `to` defaults to `from`. */
 export const ChartBandSchema = Type.Object({ from: Name, to: Type.Optional(Name), label: Name }, Strict);
-export type ChartBand = Static<typeof ChartBandSchema>;
 
 export const CartesianChartSchema = Type.Object({
   mark: Type.Literal("cartesian"),

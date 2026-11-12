@@ -89,7 +89,6 @@ export const DashboardInsightSchema = Type.Object({
   text: Type.String({ minLength: 1, maxLength: 160 }),
   tone: Type.Optional(Type.Union([Type.Literal("focus"), Type.Literal("bad"), Type.Literal("good")])),
 }, Strict);
-export type DashboardInsight = Static<typeof DashboardInsightSchema>;
 
 export const DashboardInsightsViewSchema = Type.Object({
   id: ViewId,
@@ -102,7 +101,6 @@ export const DashboardInsightsViewSchema = Type.Object({
 }, Strict);
 
 export const DashboardViewSchema = Type.Union([DashboardChartViewSchema, DashboardTableViewSchema, DashboardKpiViewSchema, DashboardInsightsViewSchema]);
-export type DashboardChartView = Static<typeof DashboardChartViewSchema>;
 export type DashboardTableView = Static<typeof DashboardTableViewSchema>;
 export type DashboardKpiView = Static<typeof DashboardKpiViewSchema>;
 export type DashboardInsightsView = Static<typeof DashboardInsightsViewSchema>;
@@ -119,13 +117,11 @@ export const DashboardLayoutRowSchema = Type.Object({
   widths: Type.Optional(Type.Array(Type.Integer({ minimum: 1, maximum: 12 }), { minItems: 1, maxItems: 4 })),
   height: Type.Optional(DashboardRowHeightSchema),
 }, Strict);
-export type DashboardLayoutRow = Static<typeof DashboardLayoutRowSchema>;
 
 export const DashboardLayoutSchema = Type.Object({
   /** Every view appears in exactly one row. */
   rows: Type.Array(DashboardLayoutRowSchema, { minItems: 1, maxItems: 20 }),
 }, Strict);
-export type DashboardLayout = Static<typeof DashboardLayoutSchema>;
 
 export const DashboardSpecSchema = Type.Object({
   version: Type.Literal(DASHBOARD_SPEC_VERSION),
