@@ -3,7 +3,26 @@ import path from "node:path";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { MetadataStore } from "@data-agent/runtime/testing";
-import { registerApplicationProtocol, registerDesktopCapabilities, resolveRuntimePaths, startElectronHost } from "./main.js";
+import { registerApplicationProtocol, registerDesktopCapabilities, resolveRuntimePaths, startElectronHost, usePackagedDataFolder } from "./main.js";
+
+describe("usePackagedDataFolder", () => {
+  const app = (isPackaged: boolean) => {
+    const setPath = vi.fn();
+    return { setPath, app: { isPackaged, setPath, getPath: () => path.join("C:", "Users", "u", "AppData", "Roaming"), whenReady: async () => {}, quit: () => {} } };
+  };
+
+  it("keeps the installed app's data in <appData>/yourdb, where 0.1.0 kept it", () => {
+    const { app: installed, setPath } = app(true);
+    usePackagedDataFolder(installed);
+    expect(setPath).toHaveBeenCalledWith("userData", path.join("C:", "Users", "u", "AppData", "Roaming", "yourdb"));
+  });
+
+  it("leaves a run from the repository on Electron's default folder", () => {
+    const { app: dev, setPath } = app(false);
+    usePackagedDataFolder(dev);
+    expect(setPath).not.toHaveBeenCalled();
+  });
+});
 
 describe("resolveRuntimePaths", () => {
   it("resolves the renderer dist relative to the frontend root in dev layout", () => {

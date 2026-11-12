@@ -14,6 +14,7 @@ export {
 } from "./application/data-agent-application.js";
 export type { ApplicationAuthService, ApplicationAuthUser, ApplicationCommandHost, ApplicationEventFilter, EventReplay } from "./application/protocol-host.js";
 export { ChannelHub, type ChannelHubOptions, type SubmitOutcome } from "./channels/hub.js";
+export { createDashboardSnapshotter, findBrowser, type DashboardSnapshotOptions } from "./channels/dashboard-snapshot.js";
 
 export type {
   DataAgentCommand,
