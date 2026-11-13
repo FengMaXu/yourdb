@@ -1,7 +1,7 @@
 /*
  * Design tokens, the single source for colour, radius and motion. See DESIGN.md.
  * Names follow shadcn/ui's semantic variables (baseColor stone), mapped to yourdb's
- * existing values. --accent keeps shadcn's meaning, a quiet hover surface; the brand
+ * values. --accent keeps shadcn's meaning, a quiet hover surface; the brand
  * orange is --brand. --primary is ink, as the primary buttons are.
  * Components use these through utilities (text-body, bg-success-soft, …), never a raw hex.
  */
@@ -166,7 +166,7 @@
   --radius-xl: var(--radius-card);
 }
 
-/* Motion tokens (animate-*). The curve is --ease-out from the legacy root until phase 4. */
+/* Motion tokens (animate-*), all on the --ease-out curve. */
 @theme {
   --animate-rise: rise 520ms var(--ease-out) both;
   --animate-rise-quick: rise 260ms var(--ease-out) both;

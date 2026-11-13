@@ -13,7 +13,6 @@ const runtime = vi.hoisted(() => ({
 
 vi.mock('../../api/runtime-client', () => ({
     answerClarificationViaRuntime: vi.fn(),
-    clearSessionViaRuntime: vi.fn(),
     steerAgentViaRuntime: vi.fn(),
     stopAgentViaRuntime: vi.fn(),
     getRuntimeClient: vi.fn(() => ({ dispatch: vi.fn() })),
@@ -42,7 +41,6 @@ vi.mock('../../hooks/useSession', () => ({
         attachedFiles: [],
         setAttachedFiles: vi.fn(),
         setCurrentTranscript: vi.fn(),
-        clearCurrentTranscript: vi.fn(),
         clearAttachedFiles: vi.fn(),
         createSession: vi.fn(),
     }),

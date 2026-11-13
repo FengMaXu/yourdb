@@ -12,6 +12,7 @@ export function isDatabaseUnavailable(error: unknown): boolean {
 export class AnsweringError extends Error {
   readonly code:
     | "ANSWERING_CONTEXT_INVALID"
+    | "ANSWERING_OPERATION_ABORTED"
     | "INVALID_REQUEST"
     | "TASK_NOT_FOUND"
     | "REVISION_STALE"

@@ -632,8 +632,7 @@
   --shimmer-angle: calc(--value(integer) * 1deg);
 }
 
-/* Kept for backwards compatibility. Unlayered, so it still wins over other
-   utilities on a plain .shimmer element. Variants are handled in the utility. */
+/* Reduced motion for a plain .shimmer element; variants are handled in the utility. */
 @layer utilities {
 @media (prefers-reduced-motion: reduce) {
   .shimmer {

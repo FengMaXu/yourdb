@@ -30,6 +30,7 @@ import { refreshPublication } from "./refresh.js";
 import type { AnsweringDeps, FanoutAnsweringOptions, SemanticQualificationMode } from "./deps.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { FieldAdviceOptions } from "./advice-execution.js";
+import { assertContext } from "./support.js";
 
 export { AnsweringError };
 export { DEFAULT_QUERY_BUDGET_POLICY };
@@ -83,12 +84,6 @@ export interface InMemoryAnsweringOptions {
   readonly populationDecisions?: "require_evidence" | "allow_disclosed";
 }
 
-function assertContext(context: BusinessContext): void {
-  if (!context?.principal?.id || !context.sessionId || !context.operationId || !context.invocationId) {
-    throw new AnsweringError("ANSWERING_CONTEXT_INVALID", "Answering requires principal, session, operation and invocation identities");
-  }
-  if (context.signal?.aborted) throw new AnsweringError("ANSWERING_CONTEXT_INVALID", "Answering operation was cancelled");
-}
 
 function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
   const fanout = { ...(options.fanout ?? {}) };

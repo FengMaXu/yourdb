@@ -14,6 +14,7 @@ import { withToolPromptCatalog } from "../agent/tool-prompt-models.js";
 import { withCoalescedDeltas } from "../agent/coalesced-stream-models.js";
 import { failedStream, overrideModels } from "../agent/models-overrides.js";
 import { infrastructureFailureOf } from "../agent/infrastructure-failure.js";
+import { awaitWithSignal, errorText } from "./signals.js";
 import {
   firstStopReason,
   isStopping,
@@ -71,26 +72,6 @@ function finalAssistantText(newestFirst: readonly Entry[]): string | undefined {
     if (text) return text;
   }
   return undefined;
-}
-
-function errorText(error: unknown): string {
-  const text = error instanceof Error ? error.message : String(error);
-  return text.slice(0, 2048);
-}
-
-async function awaitWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) {
-    void promise.catch(() => undefined);
-    throw signal.reason instanceof Error ? signal.reason : new Error("SUBAGENT_OPERATION_ABORTED");
-  }
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(signal.reason instanceof Error ? signal.reason : new Error("SUBAGENT_OPERATION_ABORTED"));
-    signal.addEventListener("abort", onAbort, { once: true });
-    void promise.then(
-      (value) => { signal.removeEventListener("abort", onAbort); resolve(value); },
-      (error) => { signal.removeEventListener("abort", onAbort); reject(error); },
-    );
-  });
 }
 
 /**
@@ -344,7 +325,7 @@ export class HarnessChildExecutor implements ChildExecutor {
       operationId = accepted.value.operationId;
       if (request.onAccepted) {
         try {
-          await awaitWithSignal(Promise.resolve(request.onAccepted(operationId, executionAbort.signal)), executionAbort.signal);
+          await awaitWithSignal(Promise.resolve(request.onAccepted(operationId, executionAbort.signal)), executionAbort.signal, "SUBAGENT_OPERATION_ABORTED");
         } catch (error) {
           if (!executionAbort.signal.aborted) throw error;
         }

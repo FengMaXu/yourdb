@@ -23,7 +23,6 @@ export const DatasetRefSchema = Type.Union([
 export type DatasetRef = Static<typeof DatasetRefSchema>;
 
 export const MagnitudeSchema = Type.Union([Type.Literal(1), Type.Literal(1e3), Type.Literal(1e4), Type.Literal(1e6), Type.Literal(1e8)]);
-export type Magnitude = Static<typeof MagnitudeSchema>;
 
 export const FieldMetaSchema = Type.Union([
   Type.Object({
@@ -55,13 +54,11 @@ export const ChartSelectionSchema = Type.Object({
   n: Type.Integer({ minimum: 1 }),
   order: Type.Union([Type.Literal("desc"), Type.Literal("asc")]),
 }, Strict);
-export type ChartSelection = Static<typeof ChartSelectionSchema>;
 
 export const ChartViewportSchema = Type.Object({
   mode: Type.Union([Type.Literal("scroll"), Type.Literal("zoom")]),
   window: Type.Integer({ minimum: 1 }),
 }, Strict);
-export type ChartViewport = Static<typeof ChartViewportSchema>;
 
 export const ChartSpecSchema = Type.Object({
   version: Type.Literal(CHART_SPEC_VERSION),

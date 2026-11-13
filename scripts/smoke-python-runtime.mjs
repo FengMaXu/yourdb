@@ -7,11 +7,9 @@ if (!root) throw new Error("Usage: node smoke-python-runtime.mjs <runtime-root")
 const requiredSqlglotVersion = "30.17.0";
 const manifest = JSON.parse(await readFile(path.join(root, "manifest.json"), "utf8"));
 const executable = path.join(root, process.platform === "win32" ? "python.exe" : "bin/python");
-const fallbackExecutable = path.join(root, "Scripts", "python.exe");
-const resolvedExecutable = await access(executable).then(() => executable).catch(() => fallbackExecutable);
-await access(resolvedExecutable);
+await access(executable);
 await new Promise((resolve, reject) => {
-  const child = spawn(resolvedExecutable, ["-c", "import importlib.util, numpy, pandas, sqlglot; print('data-agent-python-runtime-ok'); print('matplotlib=' + ('present' if importlib.util.find_spec('matplotlib') else 'absent')); print('sqlglot='+sqlglot.__version__)"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(executable, ["-c", "import importlib.util, numpy, pandas, sqlglot; print('data-agent-python-runtime-ok'); print('matplotlib=' + ('present' if importlib.util.find_spec('matplotlib') else 'absent')); print('sqlglot='+sqlglot.__version__)"], { cwd: root, stdio: ["ignore", "pipe", "pipe"] });
   let output = "";
   let error = "";
   child.stdout.on("data", chunk => output += chunk);

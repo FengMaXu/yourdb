@@ -15,6 +15,9 @@ const runtime = vi.hoisted(() => ({
     prepareSessionViaRuntime: vi.fn(),
     renameSessionViaRuntime: vi.fn(),
     renameTaskViaRuntime: vi.fn(),
+    subscribeRuntimeEvents: vi.fn(),
+    /** The listener SessionProvider subscribed with, so a test can deliver events to it. */
+    listener: undefined as ((envelope: unknown) => void) | undefined,
 }));
 
 vi.mock('../../api/runtime-client', () => runtime);
@@ -45,6 +48,40 @@ beforeEach(() => {
     runtime.createSessionViaRuntime.mockResolvedValue({ id: 'session-runtime', taskId: 'task-runtime', name: 'New session', createdAt: 1 });
     runtime.prepareSessionViaRuntime.mockResolvedValue(undefined);
     runtime.renameSessionViaRuntime.mockResolvedValue(undefined);
+    runtime.listener = undefined;
+    runtime.subscribeRuntimeEvents.mockImplementation((listener: (envelope: unknown) => void) => {
+        runtime.listener = listener;
+        return () => { runtime.listener = undefined; };
+    });
+});
+
+describe('SessionProvider conversations from elsewhere', () => {
+    it('lists a session a phone started, without a reload', async () => {
+        const { result } = renderHook(() => useSession(), { wrapper });
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+        runtime.listSessionsViaRuntime.mockResolvedValue([
+            { id: 'session-1', taskId: 'task-1', name: 'New session' },
+            { id: 'session-phone', taskId: 'task-1', name: 'From Feishu' },
+        ]);
+
+        act(() => runtime.listener!({ sessionId: 'session-phone', event: { type: 'agent.message_started', messageId: 'm1' } }));
+
+        await waitFor(() => expect(result.current.sessions.map((session) => session.id)).toContain('session-phone'));
+        expect(result.current.runActivity).toMatchObject({ sessionId: 'session-phone', phase: 'started' });
+    });
+
+    it('reports a run that finished in the open session and ignores streamed text', async () => {
+        const { result } = renderHook(() => useSession(), { wrapper });
+        await waitFor(() => expect(result.current.currentSession?.id).toBe('session-1'));
+        await waitFor(() => expect(runtime.listener).toBeDefined());
+
+        act(() => runtime.listener!({ sessionId: 'session-1', event: { type: 'agent.text_delta', delta: 'x' } }));
+        expect(result.current.runActivity).toBeNull();
+
+        act(() => runtime.listener!({ sessionId: 'session-1', event: { type: 'agent.completed', outcome: 'completed' } }));
+        expect(result.current.runActivity).toMatchObject({ sessionId: 'session-1', phase: 'finished' });
+        expect(runtime.listSessionsViaRuntime).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('SessionProvider runtime identities', () => {

@@ -1,3 +1,5 @@
+import { asRecord, trimmedText } from "../primitives.js";
+
 /**
  * The Answer Spec field tree (ADR-0007, target model). Every ambiguity of an
  * answer sits on one of these paths, in calculation order: who is counted
@@ -43,10 +45,6 @@ export function isSpecPath(value: string): value is SpecPath {
 export const FIELD_SECTIONS = ["population", "measure", "grouping", "selection", "output"] as const;
 export type FieldSection = typeof FIELD_SECTIONS[number];
 
-export function sectionOf(path: SpecPath): FieldSection {
-  if (path.startsWith("measures.")) return "measure";
-  return path.split(".")[0] as FieldSection;
-}
 
 /**
  * Physical fields are facts about this database rather than the user's
@@ -203,14 +201,6 @@ function fail(message: string): never {
   throw new FieldValueError(message);
 }
 
-function record(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
-}
-
-function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
-}
-
 function onlyKeys(body: Record<string, unknown>, allowed: readonly string[], label: string): void {
   const extra = Object.keys(body).filter((key) => !allowed.includes(key));
   if (extra.length > 0) fail(`${label} has unknown keys ${extra.join(", ")}; allowed: ${allowed.join(", ")}`);
@@ -218,7 +208,7 @@ function onlyKeys(body: Record<string, unknown>, allowed: readonly string[], lab
 
 function textList(value: unknown, label: string): readonly string[] {
   const items = typeof value === "string" ? [value] : value;
-  if (!Array.isArray(items) || items.length === 0 || items.some((item) => !text(item))) fail(`${label} must be a non-empty list of non-empty strings`);
+  if (!Array.isArray(items) || items.length === 0 || items.some((item) => !trimmedText(item))) fail(`${label} must be a non-empty list of non-empty strings`);
   return (items as string[]).map((item) => item.trim());
 }
 
@@ -228,48 +218,48 @@ function textList(value: unknown, label: string): readonly string[] {
  * object without a qualifier collapses to its text.
  */
 function qualifiedList<T>(value: unknown, label: string, item: readonly string[], qualifier: string, build: (name: string, extra?: string) => T): readonly (string | T)[] {
-  const items = typeof value === "string" || (record(value) !== undefined) ? [value] : value;
+  const items = typeof value === "string" || (asRecord(value) !== undefined) ? [value] : value;
   if (!Array.isArray(items) || items.length === 0) fail(`${label} must be a non-empty list`);
   return items.map((entry, index) => {
-    if (typeof entry === "string") return text(entry) ?? fail(`${label}[${index}] must not be empty`);
-    const body = record(entry) ?? fail(`${label}[${index}] must be text or {${item[0]}, ${qualifier}?}`);
+    if (typeof entry === "string") return trimmedText(entry) ?? fail(`${label}[${index}] must not be empty`);
+    const body = asRecord(entry) ?? fail(`${label}[${index}] must be text or {${item[0]}, ${qualifier}?}`);
     onlyKeys(body, [...item, qualifier], `${label}[${index}]`);
-    const name = item.map((key) => text(body[key])).find(Boolean) ?? fail(`${label}[${index}].${item[0]} is required`);
-    const extra = body[qualifier] === undefined ? undefined : text(body[qualifier]) ?? fail(`${label}[${index}].${qualifier} must not be empty`);
+    const name = item.map((key) => trimmedText(body[key])).find(Boolean) ?? fail(`${label}[${index}].${item[0]} is required`);
+    const extra = body[qualifier] === undefined ? undefined : trimmedText(body[qualifier]) ?? fail(`${label}[${index}].${qualifier} must not be empty`);
     return extra ? build(name, extra) : name;
   });
 }
 
 function sentence(value: unknown, path: string): string {
-  return text(value) ?? fail(`${path} value must be a sentence stating the decision`);
+  return trimmedText(value) ?? fail(`${path} value must be a sentence stating the decision`);
 }
 
 function parseEntity(value: unknown): EntityValue {
   if (typeof value === "string") return { name: sentence(value, "population.entity") };
-  const body = record(value) ?? fail("population.entity value must be a string or {name, keyColumns?}");
+  const body = asRecord(value) ?? fail("population.entity value must be a string or {name, keyColumns?}");
   onlyKeys(body, ["name", "keyColumns"], "population.entity value");
-  const name = text(body.name) ?? fail("population.entity.name is required");
+  const name = trimmedText(body.name) ?? fail("population.entity.name is required");
   return { name, ...(body.keyColumns !== undefined ? { keyColumns: textList(body.keyColumns, "population.entity.keyColumns") } : {}) };
 }
 
 function parseSource(value: unknown): SourceValue {
-  const body = record(value) ?? fail("population.source value must be {tables: [...], note?}");
+  const body = asRecord(value) ?? fail("population.source value must be {tables: [...], note?}");
   onlyKeys(body, ["tables", "note"], "population.source value");
-  const note = text(body.note);
+  const note = trimmedText(body.note);
   return { tables: textList(body.tables, "population.source.tables"), ...(note ? { note } : {}) };
 }
 
 function parseTime(value: unknown): TimeValue {
   if (typeof value === "string") return { expression: sentence(value, "population.time") };
-  const body = record(value) ?? fail("population.time value must be a string or {expression, boundary?}");
+  const body = asRecord(value) ?? fail("population.time value must be a string or {expression, boundary?}");
   onlyKeys(body, ["expression", "boundary"], "population.time value");
-  const expression = text(body.expression) ?? fail("population.time.expression is required");
+  const expression = trimmedText(body.expression) ?? fail("population.time.expression is required");
   if (body.boundary !== undefined && !["inclusive", "exclusive", "mixed"].includes(String(body.boundary))) fail("population.time.boundary must be inclusive, exclusive or mixed");
   return { expression, ...(body.boundary !== undefined ? { boundary: body.boundary as TimeValue["boundary"] } : {}) };
 }
 
 function parseSelection(value: unknown): SelectionValue {
-  const body = record(value) ?? fail("selection value must be {n, orderBy}");
+  const body = asRecord(value) ?? fail("selection value must be {n, orderBy}");
   onlyKeys(body, ["n", "orderBy"], "selection value");
   if (!Number.isSafeInteger(body.n) || Number(body.n) < 1) fail("selection.n must be a positive integer; argmax/argmin is n = 1");
   return { n: Number(body.n), orderBy: orderByText(body.orderBy) ?? fail('selection.orderBy is required: the column and direction, e.g. "revenue desc"') };
@@ -277,12 +267,12 @@ function parseSelection(value: unknown): SelectionValue {
 
 /** "revenue desc", or the same as {column, direction}. */
 function orderByText(value: unknown): string | undefined {
-  const written = text(value);
+  const written = trimmedText(value);
   if (written) return written;
-  const body = record(value);
+  const body = asRecord(value);
   if (!body) return undefined;
   onlyKeys(body, ["column", "direction"], "selection.orderBy");
-  const column = text(body.column) ?? fail('selection.orderBy.column is required, e.g. {"column": "revenue", "direction": "desc"}');
+  const column = trimmedText(body.column) ?? fail('selection.orderBy.column is required, e.g. {"column": "revenue", "direction": "desc"}');
   if (body.direction === undefined) return column;
   // A direction that is there but unusable must not quietly become ascending.
   const direction = typeof body.direction === "string" ? body.direction.trim().toLowerCase() : "";
@@ -296,15 +286,15 @@ function parseTies(value: unknown): TiesValue {
 }
 
 function parseOutput(value: unknown): OutputValue {
-  const body = record(value) ?? fail("output value must be {rowMode?, rowCount?, columns?, units?, decimals?}");
+  const body = asRecord(value) ?? fail("output value must be {rowMode?, rowCount?, columns?, units?, decimals?}");
   onlyKeys(body, ["rowMode", "rowCount", "columns", "units", "decimals"], "output value");
   const { rowMode, rowCount, columns, units, decimals } = body;
   if (rowMode !== undefined && !(OUTPUT_ROW_MODES as readonly unknown[]).includes(rowMode)) fail(`output.rowMode ${JSON.stringify(rowMode)}: use one of ${OUTPUT_ROW_MODES.join(", ")}`);
   if (rowCount !== undefined && (!Number.isSafeInteger(rowCount) || Number(rowCount) < 0)) fail(`output.rowCount ${JSON.stringify(rowCount)}: use a non-negative integer`);
   if (columns !== undefined && (!Array.isArray(columns) || columns.some((item) => typeof item !== "string"))) fail("output.columns must be an array of column-name strings");
-  const unitMap = units === undefined ? undefined : record(units) ?? fail("output.units must map column names to units");
-  if (unitMap && Object.values(unitMap).some((item) => !text(item))) fail("output.units values must be non-empty strings");
-  const decimalMap = decimals === undefined ? undefined : record(decimals) ?? fail("output.decimals must map column names to decimal places");
+  const unitMap = units === undefined ? undefined : asRecord(units) ?? fail("output.units must map column names to units");
+  if (unitMap && Object.values(unitMap).some((item) => !trimmedText(item))) fail("output.units values must be non-empty strings");
+  const decimalMap = decimals === undefined ? undefined : asRecord(decimals) ?? fail("output.decimals must map column names to decimal places");
   if (decimalMap && Object.values(decimalMap).some((item) => !Number.isSafeInteger(item) || Number(item) < 0)) fail("output.decimals values must be non-negative integers");
   if ([rowMode, rowCount, columns, units, decimals].every((item) => item === undefined)) fail("output value must set at least one of rowMode, rowCount, columns, units, decimals");
   return {
@@ -319,18 +309,18 @@ function parseOutput(value: unknown): OutputValue {
 const EXPRESSION_KEYS = ["op", "per", "of", "numerator", "denominator", "from", "to", "description"] as const;
 
 function parseOperand(value: unknown, label: string): MeasureOperand {
-  if (typeof value === "string") return text(value) ?? fail(`${label} must not be empty`);
+  if (typeof value === "string") return trimmedText(value) ?? fail(`${label} must not be empty`);
   return parseExpression(value, label);
 }
 
 function parseExpression(value: unknown, label: string): MeasureExpression {
-  const body = record(value) ?? fail(`${label} must be {op, per?, of | numerator+denominator | from+to}`);
+  const body = asRecord(value) ?? fail(`${label} must be {op, per?, of | numerator+denominator | from+to}`);
   onlyKeys(body, EXPRESSION_KEYS, label);
   const op = body.op;
   if (!(MEASURE_OPS as readonly unknown[]).includes(op)) fail(`${label}.op ${JSON.stringify(op)}: use one of ${MEASURE_OPS.join(", ")}`);
   const measureOp = op as MeasureOp;
-  const per = body.per === undefined ? undefined : text(body.per) ?? fail(`${label}.per must not be empty`);
-  const description = body.description === undefined ? undefined : text(body.description) ?? fail(`${label}.description must not be empty`);
+  const per = body.per === undefined ? undefined : trimmedText(body.per) ?? fail(`${label}.per must not be empty`);
+  const description = body.description === undefined ? undefined : trimmedText(body.description) ?? fail(`${label}.description must not be empty`);
   const present = (key: string) => body[key] !== undefined;
   const only = (keys: readonly string[]) => {
     const misplaced = ["of", "numerator", "denominator", "from", "to"].filter((key) => present(key) && !keys.includes(key));
@@ -373,7 +363,7 @@ export function layersOf(expression: MeasureExpression): readonly MeasureExpress
  */
 function parseFormula(value: unknown, label: string): MeasureExpression {
   // {ref} is a form of the field, like {value} or {open}: as a formula it would read as one with an unknown key.
-  if (record(value)?.ref !== undefined) {
+  if (asRecord(value)?.ref !== undefined) {
     fail(`${label}: a formula cannot be a ref. Only a chart query (parentTaskId) references a Report Task measure, and it writes the ref as the field itself, "measure.formula": {"ref": "<measure name>"}, never inside "value" or "open"; a measure definition states its own formula`);
   }
   const expression = parseExpression(value, label);
@@ -385,9 +375,9 @@ function parseFormula(value: unknown, label: string): MeasureExpression {
 }
 
 function parseMeasureDefinition(value: unknown, path: string): MeasureDefinitionValue {
-  const body = record(value) ?? fail(`${path} value must be {formula, countGrain?, denominator?, window?}`);
+  const body = asRecord(value) ?? fail(`${path} value must be {formula, countGrain?, denominator?, window?}`);
   onlyKeys(body, ["formula", "countGrain", "denominator", "window"], `${path} value`);
-  const optional = (key: "countGrain" | "denominator" | "window") => body[key] === undefined ? {} : { [key]: text(body[key]) ?? fail(`${path}.${key} must be a sentence`) };
+  const optional = (key: "countGrain" | "denominator" | "window") => body[key] === undefined ? {} : { [key]: trimmedText(body[key]) ?? fail(`${path}.${key} must be a sentence`) };
   return { formula: parseFormula(body.formula, `${path}.formula`), ...optional("countGrain"), ...optional("denominator"), ...optional("window") };
 }
 
@@ -457,3 +447,21 @@ export function requiredPaths(inputs: NecessityInputs): readonly FieldPath[] {
 
 /** Report Tasks answer only for the shared population (ADR-0009). */
 export const REPORT_REQUIRED: readonly FieldPath[] = ["population.entity", "population.eligibility", "population.conditions", "population.time"];
+
+export type Grain = "year" | "quarter" | "month" | "week" | "day" | "hour";
+
+/** Words that name a calendar grain, checked in this order: "quarter" before "year", "month" before "day". */
+const GRAIN_WORDS: readonly [Grain, RegExp][] = [
+  ["quarter", /quarter|季/],
+  ["month", /month|月/],
+  ["week", /week|周|星期/],
+  ["hour", /hour|小时/],
+  ["year", /year|年/],
+  ["day", /\bday|daily|\bdate\b|日|天/],
+];
+
+/** The calendar grain a field's text names, or undefined when it names none. */
+export function grainOf(text: string): Grain | undefined {
+  const lower = text.toLowerCase();
+  return GRAIN_WORDS.find(([, pattern]) => pattern.test(lower))?.[0];
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Fixed data for the visual regression snapshots (frontend migration plan, PR 0.1).
+ * Fixed data for the visual regression snapshots.
  *
  * `evaluations/visual/fixture-data/fixture.json` describes one account, its settings and
  * MCP plugins, and a few sessions holding finished answers. This script builds that into a
@@ -49,7 +49,7 @@ export async function buildVisualFixture(dataDir) {
     host: "web",
     knowledgeRoot,
     projectRoot: root,
-    systemPromptRoots: [knowledgeRoot, root],
+    systemPromptRoots: [root],
     skillRoots: [path.join(root, ".agents", "skills")],
     // Opening a session resolves a profile; no prompt is ever sent.
     resolveProfile: async () => ({ provider: "openai", model: "fixture", apiKey: "fixture", apiFormat: "responses" }),
@@ -121,8 +121,6 @@ export async function buildVisualFixture(dataDir) {
     db.prepare("UPDATE app_config SET updated_at = ?").run(clock);
     for (const [taskId, created] of taskTimes) db.prepare("UPDATE tasks SET created_at = ?, updated_at = ? WHERE id = ?").run(created, created, taskId);
     for (const [sessionId, { created, updated }] of sessionTimes) db.prepare("UPDATE chat_sessions SET created_at = ?, updated_at = ? WHERE id = ?").run(created, updated, sessionId);
-    // Projection jobs would otherwise run on the next start and touch updated_at again.
-    db.prepare("UPDATE session_projection_outbox SET created_at = ?, updated_at = ?").run(clock, clock);
   } finally {
     db.close();
   }

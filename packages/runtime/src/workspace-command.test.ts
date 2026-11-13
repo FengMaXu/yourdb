@@ -13,8 +13,8 @@ describe("workspace commands", () => {
     await runtime.dispatch({ protocolVersion: 1, requestId: "write", command: { type: "workspace.write", path: "note.txt", content: "one\ntwo\nthree" } }, context);
     const result = await runtime.dispatch({ protocolVersion: 1, requestId: "read", command: { type: "workspace.read", path: "note.txt", startLine: 2, endLine: 3 } }, context);
     expect((result.response as { content: string }).content).toBe("two\nthree");
-    const legacy = await runtime.dispatch({ protocolVersion: 1, requestId: "legacy", command: { type: "workspace.read", path: "note.txt" } }, context);
-    expect((legacy.response as { content: string }).content).toBe("one\ntwo\nthree");
+    const whole = await runtime.dispatch({ protocolVersion: 1, requestId: "whole", command: { type: "workspace.read", path: "note.txt" } }, context);
+    expect((whole.response as { content: string }).content).toBe("one\ntwo\nthree");
     await expect(runtime.dispatch({ protocolVersion: 1, requestId: "invalid", command: { type: "workspace.read", path: "note.txt", startLine: 3, endLine: 2 } }, context)).rejects.toMatchObject({ code: "INVALID_COMMAND" });
     await expect(runtime.dispatch({ protocolVersion: 1, requestId: "escape", command: { type: "workspace.read", path: "../outside.txt" } }, context)).rejects.toThrow();
     await writeFile(join(root, "large.txt"), "z".repeat(60000), "utf8");

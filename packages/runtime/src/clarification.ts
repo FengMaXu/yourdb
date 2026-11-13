@@ -17,11 +17,10 @@ export interface ClarificationListener {
 }
 
 /**
- * One pending clarification per session. Waits live in the runtime (surviving
- * renderer disconnects), expires on timeout, and is cancelled by stop/abort.
- * Application restart drops pending waits — they are marked interrupted rather
- * than pretending to resume an in-flight tool call. Answers are not kept here:
- * the asking Session records them (ClarificationDialogs' ledger).
+ * One pending clarification per session: a new question cancels the previous
+ * one. Waits live in the runtime (surviving renderer disconnects), expire on
+ * timeout, are cancelled by stop/abort, and end with the process. Answers are
+ * not kept here: the asking Session records them (ClarificationDialogs' ledger).
  */
 export class ClarificationManager {
   private readonly pending = new Map<string, PendingClarification>();
@@ -90,21 +89,6 @@ export class ClarificationManager {
   cancel(sessionId: string, outcome: "cancelled" | "expired" = "cancelled"): void {
     for (const [id, entry] of [...this.pending.entries()]) {
       if (entry.sessionId === sessionId) this.cancelById(id, outcome);
-    }
-  }
-
-  isPending(sessionId: string): boolean {
-    for (const entry of this.pending.values()) if (entry.sessionId === sessionId) return true;
-    return false;
-  }
-
-  /** Application restart: nothing survives process death. */
-  dropAll(): void {
-    for (const [id, entry] of [...this.pending.entries()]) {
-      clearTimeout(entry.timer);
-      this.pending.delete(id);
-      entry.resolve("");
-      this.notifySettled(id, "cancelled", { sessionId: entry.sessionId });
     }
   }
 }

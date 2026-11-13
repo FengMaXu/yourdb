@@ -19,7 +19,7 @@ describe("knowledge.list", () => {
       const byPath = new Map(files.map((file) => [file.path, file]));
       expect(byPath.get("doc/business.md")).toMatchObject({ knowledgeId: "business-definitions", name: "业务定义", description: "业务指标与约束。", usage: "fact" });
       expect(byPath.get("doc/rules.md")).toMatchObject({ knowledgeId: "sql-rules", name: "SQL 生成规范", usage: "method" });
-      expect(byPath.get("doc/notes.md")).toMatchObject({ knowledgeId: "legacy-doc-notes", name: "Notes without frontmatter" });
+      expect(byPath.get("doc/notes.md")).toMatchObject({ knowledgeId: "path-doc-notes", name: "Notes without frontmatter" });
     } finally {
       await rm(root, { recursive: true, force: true });
     }

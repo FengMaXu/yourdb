@@ -168,7 +168,7 @@ describe("ChannelHub inbound", () => {
 
   it("reports a Submission the previous process accepted but never dispatched", async () => {
     const first = await setup();
-    await new MetadataChannelStore(first.runtime.metadataStore!).acceptInbound("im", input("evt-lost", direct), 500);
+    await first.store.acceptInbound("im", input("evt-lost", direct), 500);
     await first.close();
     const second = await setup({ dbPath: first.dbPath });
     await second.hub.flush();
@@ -182,7 +182,7 @@ describe("ChannelHub clarification answers", () => {
     const { hub, fake, runtime, channel } = await setup();
     await hub.submit("im", input("evt-1", direct));
     const sessionId = fake.calls[0]!.sessionId!;
-    const asked = runtime.askClarification(sessionId, "订单量指什么？", ["全部订单", "已支付订单"]);
+    const asked = runtime.clarificationManager.ask(sessionId, "订单量指什么？", ["全部订单", "已支付订单"]);
     await hub.idle();
     await hub.flush();
     expect(channel.delivered.at(-1)).toMatchObject({ key: `question:${asked.clarificationId}`, deliverable: { kind: "question", question: "订单量指什么？", options: ["全部订单", "已支付订单"] } });
@@ -195,7 +195,7 @@ describe("ChannelHub clarification answers", () => {
   it("turns an answer that arrives after the wait ended into the user's next input", async () => {
     const { hub, fake, runtime } = await setup({ clarificationTimeoutMs: 10 });
     await hub.submit("im", input("evt-1", direct));
-    const asked = runtime.askClarification(fake.calls[0]!.sessionId!, "订单量指什么？", []);
+    const asked = runtime.clarificationManager.ask(fake.calls[0]!.sessionId!, "订单量指什么？", []);
     await expect(asked.promise).resolves.toBe("");
     await hub.submit("im", { requestId: "evt-2", address: direct, actor: alice, body: { kind: "answer", clarificationId: asked.clarificationId, text: "已支付订单" } });
     expect(fake.calls.at(-1)).toMatchObject({ kind: "prompt", text: "已支付订单" });
@@ -205,7 +205,7 @@ describe("ChannelHub clarification answers", () => {
     const { hub, fake, runtime } = await setup();
     await hub.submit("im", input("evt-1", group, alice));
     await hub.submit("im", input("evt-2", group, bob));
-    const asked = runtime.askClarification(fake.calls[0]!.sessionId!, "订单量指什么？", []);
+    const asked = runtime.clarificationManager.ask(fake.calls[0]!.sessionId!, "订单量指什么？", []);
     await hub.submit("im", { requestId: "evt-3", address: group, actor: bob, body: { kind: "answer", clarificationId: asked.clarificationId, text: "全部订单" } });
     // Bob's words went to Bob's own Session as input; Alice's question is still waiting.
     expect(fake.calls.at(-1)).toMatchObject({ kind: "prompt", text: "全部订单", sessionId: fake.calls[1]!.sessionId });
@@ -360,7 +360,7 @@ describe("ChannelHub deliverables", () => {
     const { hub, fake, runtime } = await setup();
     await hub.submit("im", input("evt-1", direct));
     const first = fake.calls[0]!.sessionId!;
-    const asked = runtime.askClarification(first, "含税吗？", []);
+    const asked = runtime.clarificationManager.ask(first, "含税吗？", []);
     expect(await hub.submit("im", input("evt-2", direct, alice, " /NEW "))).toBe("dispatched");
     await hub.submit("im", { requestId: "evt-3", address: direct, actor: alice, body: { kind: "answer", clarificationId: asked.clarificationId, text: "含税" } });
     await hub.submit("im", input("evt-4", direct, alice, "新对话"));
@@ -386,7 +386,7 @@ describe("ChannelHub deliverables", () => {
     await hub.flush();
     expect(channel.delivered.at(-1)).toMatchObject({ key: "notice:started:evt-3", deliverable: { kind: "notice", code: "CONVERSATION_STARTED", text: expect.stringContaining("1 小时") } });
 
-    const asked = runtime.askClarification(rotated, "含税吗？", []);
+    const asked = runtime.clarificationManager.ask(rotated, "含税吗？", []);
     clock.now += 3 * 60 * 60_000;
     await hub.submit("im", { requestId: "evt-4", address: direct, actor: alice, body: { kind: "answer", clarificationId: asked.clarificationId, text: "含税" } });
     await expect(asked.promise).resolves.toBe("含税");
@@ -402,7 +402,7 @@ describe("ChannelHub access", () => {
     const { hub, fake, channel, runtime } = await setup({ linked: false });
     expect(await hub.submit("im", input("evt-1", group))).toBe("denied");
     expect(await hub.submit("im", command("evt-2", "/new"))).toBe("denied");
-    const asked = runtime.askClarification("some-session", "含税吗？", []);
+    const asked = runtime.clarificationManager.ask("some-session", "含税吗？", []);
     expect(await hub.submit("im", { requestId: "evt-3", address: direct, actor: alice, body: { kind: "answer", clarificationId: asked.clarificationId, text: "含税" } })).toBe("denied");
     await hub.flush();
     expect(fake.calls).toHaveLength(0);

@@ -25,7 +25,7 @@ const NON_TEXT_REPLY = "暂时只能处理文字消息，请用文字提问。";
 /**
  * Personal WeChat through ClawBot as a Channel (ADR-0011). Conversations are
  * private chats with the bot. It long-polls for messages, and answers in
- * plain text: no cards, buttons or edits, and no files yet, so a result is
+ * plain text: no cards, buttons or edits, and no files, so a result is
  * previewed in the chat and the rest stays on the computer.
  *
  * Memory here is presentation state only: the newest context token per

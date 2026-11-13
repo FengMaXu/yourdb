@@ -235,7 +235,7 @@ function safeSessionSegment(sessionId: string): string {
 
 export async function registerApplicationProtocol(
   protocol: ElectronProtocolLike | undefined,
-  workspace: WorkspaceBytesLike & { readBytesWithLegacyFallback(relativePath: string): Promise<Uint8Array> },
+  workspace: WorkspaceBytesLike & { readBytesWithRootFallback(relativePath: string): Promise<Uint8Array> },
   authorizeSession?: (userId: string, sessionId: string) => boolean | Promise<boolean>,
   readPublication?: (publicationId: string, context: { readonly userId: string; readonly sessionId: string }) => Promise<{ readonly summary: { readonly format: "inline" | "csv" }; readonly content: string }>,
 ): Promise<() => void> {
@@ -255,7 +255,7 @@ export async function registerApplicationProtocol(
       if (!relativePath) return new Response("File path is required", { status: 400 });
       const parts = relativePath.replaceAll("\\", "/").split("/").filter(Boolean);
       if (parts.length >= 2 && authorizeSession && !(await authorizeSession("local", parts[0]))) return new Response("Not found", { status: 404 });
-      const bytes = await workspace.readBytesWithLegacyFallback(relativePath);
+      const bytes = await workspace.readBytesWithRootFallback(relativePath);
       return new Response(Buffer.from(bytes), { headers: { "Content-Type": contentTypeFor(relativePath), "Cache-Control": "no-store" } });
     } catch {
       return new Response("Not found", { status: 404 });
@@ -406,10 +406,8 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
   // Bundled Python runtime pack ships under extraResources; never fall back to
   // development paths inside the packaged application.
   const effectiveResources = overrides.resourcesPath ?? deps.resourcesPath;
-  // A standalone CPython keeps python.exe at the pack root; older venv-based packs used Scripts/.
-  const bundledPythonExecutable = effectiveResources
-    ? [path.join(effectiveResources, "python-runtime", "python.exe"), path.join(effectiveResources, "python-runtime", "Scripts", "python.exe")].find((candidate) => existsSync(candidate))
-    : undefined;
+  const packedPython = effectiveResources ? path.join(effectiveResources, "python-runtime", "python.exe") : undefined;
+  const bundledPythonExecutable = packedPython && existsSync(packedPython) ? packedPython : undefined;
   for (const dir of ["metadata", "sessions", "workspace", "knowledge"]) {
     mkdirSync(path.join(paths.userDataDir, dir), { recursive: true });
   }
@@ -458,7 +456,8 @@ export async function startElectronHost(deps: MainDeps, overrides: Partial<Elect
     // SQL stays unavailable until a database-enforced scoped executor is supplied.
     enableSubagents: true,
     delegationKnowledgePaths: ["doc/business.md", "doc/db_schema.md", "doc/query_patterns.md", "doc/learning.md", "doc/rules.md", "doc/semantic_guide.md"],
-    systemPromptRoots: [knowledgeRoot, developmentRoot, packagedRoot],
+    // The system prompt ships with the app; the knowledge folder never supplies one (writes to .pi/ are refused too).
+    systemPromptRoots: [developmentRoot, packagedRoot],
     projectRoot: developmentRoot,
     packagedRoot,
     skillRoots: [path.join(developmentRoot, ".agents", "skills"), path.join(packagedRoot, ".agents", "skills")],

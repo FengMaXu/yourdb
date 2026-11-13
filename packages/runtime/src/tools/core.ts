@@ -9,19 +9,14 @@ import type { ArtifactDirectory } from "../facets/artifact-directory.js";
 import { MAX_WIDGET_ROWS, chartDataRef, declaredFields, formatChartErrors, jsonSafeRows, semanticChecks } from "./charts.js";
 import { ChartDataResolver, describeSource } from "../facets/chart-data.js";
 import { MAX_DERIVED_ROWS, type DerivedDatasets, type DerivedInput } from "../facets/derived-datasets.js";
-import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { DEFAULT_KNOWLEDGE_RESULTS, formatKnowledgeSearchResults, MAX_KNOWLEDGE_RESULTS, type KnowledgeIndex } from "../knowledge.js";
 import { KnowledgeWriter } from "../knowledge-write.js";
 import { runPythonJob } from "../python-job.js";
 import type { WorkspaceStore } from "../workspace.js";
-import { CHART_WIDGET_CONTRACT_VERSION, validateWidgetSpec, widgetLegacyText, type WidgetPayload } from "../widget.js";
+import { CHART_WIDGET_CONTRACT_VERSION, validateWidgetSpec, widgetText, type WidgetPayload } from "../widget.js";
 import { trustedContext, type DataAgentToolContext } from "./answering.js";
-import { defineDataAgentTool, type DataAgentToolDefinition } from "./tool-definition.js";
+import { defineDataAgentTool, textResult, type DataAgentToolDefinition } from "./tool-definition.js";
 import type { ClarificationDialogs } from "../facets/clarification-dialogs.js";
-
-function text(content: string, details?: unknown): AgentToolResult<unknown> {
-  return { content: [{ type: "text", text: content }], details: details ?? null };
-}
 
 const TableFieldsSchema = Type.Record(Type.String(), FieldMetaSchema);
 
@@ -121,7 +116,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
       description: "List files in the current session workspace.",
       replay: "safe",
       parameters: Type.Object({}, { additionalProperties: false }),
-      async execute() { return text((await options.workspace.list()).join("\n") || "(workspace empty)"); },
+      async execute() { return textResult((await options.workspace.list()).join("\n") || "(workspace empty)"); },
     }, {
       promptSnippet: "列出当前会话工作区中的文件。",
       promptGuidelines: ["只说明当前工作区，不暗示可以浏览全系统文件。"],
@@ -138,7 +133,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
           ...(value.startLine !== undefined ? { startLine: value.startLine } : {}),
           ...(value.endLine !== undefined ? { endLine: value.endLine } : {}),
         });
-        return text(read.content, { path: value.path, truncated: read.truncated });
+        return textResult(read.content, { path: value.path, truncated: read.truncated });
       },
     }, {
       promptSnippet: "读取工作区文件，可选一基包含的行区间。",
@@ -153,7 +148,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
       async execute(_toolCallId, input) {
         const value = input as { path: string; content: string };
         await options.workspace.write(value.path, value.content);
-        return text(`written ${value.path} (${value.content.length} bytes)`);
+        return textResult(`written ${value.path} (${value.content.length} bytes)`);
       },
     }, {
       promptSnippet: "写入当前会话工作区中的文件。",
@@ -184,7 +179,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
             (_relativePath, knowledgeId) => !allowed || allowed.has(knowledgeId),
           );
           const formatted = formatKnowledgeSearchResults(hits, requestedResults);
-          return text(JSON.stringify(formatted), formatted);
+          return textResult(JSON.stringify(formatted), formatted);
         },
       }, {
         promptSnippet: "检索相关知识章节及有界正文。",
@@ -203,7 +198,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
         async execute(_toolCallId, input) {
           const value = input as { knowledgeId: string; sectionId?: string; continuationToken?: string };
           const read = knowledge.read(value);
-          return text(JSON.stringify(read), read);
+          return textResult(JSON.stringify(read), read);
         },
       }, {
         promptSnippet: "读取短知识文档或指定章节。",
@@ -222,7 +217,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
         async execute(_toolCallId, input) {
           const value = input as { operation: "append_learning" | "write_draft" | "update_schema"; path: string; content: string };
           const written = await writer.write(value.operation, value.path, value.content);
-          return text(`${written.operation} -> ${written.path} (${written.bytesWritten} bytes)`);
+          return textResult(`${written.operation} -> ${written.path} (${written.bytesWritten} bytes)`);
         },
       }, {
         promptSnippet: "追加学习记录或写入受限知识内容。",
@@ -269,7 +264,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
         }
         const job = await runPythonJob(value.code, { workspace: options.workspace.root, executable, timeoutMs: 120_000, ...(context.abortSignal ? { signal: context.abortSignal } : {}) });
         const output = job.stdout || job.stderr || "(no output)";
-        if (!derive || job.status !== "success") return text(output, { status: job.status, jobId: job.jobId, artifacts: job.artifacts, sessionId: toolContext?.sessionId });
+        if (!derive || job.status !== "success") return textResult(output, { status: job.status, jobId: job.jobId, artifacts: job.artifacts, sessionId: toolContext?.sessionId });
         const derived = [];
         for (const declared of derive.outputs) {
           const table = derivedTable(await options.workspace.read(declared.path), declared.path);
@@ -277,7 +272,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
           derived.push({ name: declared.name, derivedId: record.derivedId, rows: record.rows.length });
         }
         const lines = derived.map((item) => `[DERIVED] ${item.name} derivedId=${item.derivedId}（${item.rows} 行，派生自 ${inputs.map((item) => item.receiptId).join("、") || "无输入"}）`);
-        return text([output, ...lines].join("\n"), { status: job.status, jobId: job.jobId, artifacts: job.artifacts, sessionId: toolContext?.sessionId, derived });
+        return textResult([output, ...lines].join("\n"), { status: job.status, jobId: job.jobId, artifacts: job.artifacts, sessionId: toolContext?.sessionId, derived });
       },
     }, {
       promptSnippet: "在配置的 Python 环境中执行当前工作区分析。",
@@ -296,8 +291,8 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
         const value = input as { question: string; options?: string[] };
         const request = options.clarifications!.ask(toolContext?.sessionId ?? "", value.question, value.options ?? []);
         const answer = await request.promise;
-        if (!answer) return text("[CLARIFICATION_UNANSWERED] 用户未回答（超时或已取消）。按 spec Skill 的「决定与澄清」第 5 条处理：统计总体字段仍需引用能确定它的原题或业务文档，建议无倾向的字段只能引用业务文档，都没有时再次询问；其他字段按比较建议的倾向决定。", { clarificationId: request.clarificationId });
-        return text(`${answer}\n[CLARIFICATION_ANSWERED] clarificationId=${request.clarificationId}：在 set_answer_spec 中以 cite: [{source: "clarification:${request.clarificationId}", quote: <回答原文的逐字摘录>}] 引用这条回答。`, { clarificationId: request.clarificationId });
+        if (!answer) return textResult("[CLARIFICATION_UNANSWERED] 用户未回答（超时或已取消）。按 spec Skill 的「决定与澄清」第 5 条处理：统计总体字段仍需引用能确定它的原题或业务文档，建议无倾向的字段只能引用业务文档，都没有时再次询问；其他字段按比较建议的倾向决定。", { clarificationId: request.clarificationId });
+        return textResult(`${answer}\n[CLARIFICATION_ANSWERED] clarificationId=${request.clarificationId}：在 set_answer_spec 中以 cite: [{source: "clarification:${request.clarificationId}", quote: <回答原文的逐字摘录>}] 引用这条回答。`, { clarificationId: request.clarificationId });
       },
     }, {
       promptSnippet: "请求并等待一个结构化的用户澄清。",
@@ -315,7 +310,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
       const name = (input as { name: string }).name;
       const skill = options.skills?.find((item) => item.name === name);
       if (!skill) throw new Error(`SKILL_NOT_FOUND: ${name}`);
-      return text(skill.content, { nativeSkill: name });
+      return textResult(skill.content, { nativeSkill: name });
     },
   }, {
     promptSnippet: "加载已经发现的技能。",
@@ -335,7 +330,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
         const lifecycle = (widget: WidgetPayload) => ({ widgetEvent: "widget", widgetId, toolCallId, toolName: "show_widget", widget });
         if (value.kind === "chart") {
           const widget = await chartWidget(options, value.spec, widgetId, toolCallId, trustedContext(toolContext, invocation, context));
-          return text(chartWidgetText(widget), lifecycle(widget));
+          return textResult(chartWidgetText(widget), lifecycle(widget));
         }
         const validation = validateWidgetSpec(value.kind, value.spec);
         if (!validation.ok) throw new Error(`WIDGET_SPEC_INVALID: ${validation.error}`);
@@ -344,7 +339,7 @@ export function createCoreAgentToolDefinitions(options: CoreToolOptions): readon
           throw new Error("WIDGET_SPEC_INVALID: table fields must map column names to ChartSpec field semantics (type, storage, additivity, ...)");
         }
         const widget: WidgetPayload = { ...validation.spec, widget_id: widgetId, kind: value.kind, title: typeof validation.spec.title === "string" && validation.spec.title.trim() ? validation.spec.title : `${value.kind} widget`, tool_call_id: toolCallId, contractVersion: CHART_WIDGET_CONTRACT_VERSION };
-        return text(widgetLegacyText(widget), lifecycle(widget));
+        return textResult(widgetText(widget), lifecycle(widget));
       },
     }, {
       promptSnippet: "输出结构化展示部件。",

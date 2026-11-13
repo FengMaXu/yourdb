@@ -54,14 +54,14 @@ import { registerElectronRuntimeIpc, type IpcMainLike } from "./index.js";
     eventListeners.get("data-agent:events:subscribe")?.({ sender }, { sessionId: "session-1" });
     await runtime.dispatch({ protocolVersion: 1, requestId: "bind-session", sessionId: "session-1", command: { type: "runtime.probe" } }, { userId: "local", host: "electron", sessionId: "session-1" });
 
-    runtime.askClarification("session-2", "other", []);
-    runtime.askClarification("session-1", "wanted", []);
+    runtime.clarificationManager.ask("session-2", "other", []);
+    runtime.clarificationManager.ask("session-1", "wanted", []);
 
     expect(sent.length).toBeGreaterThan(0);
     expect(sent.every((payload) => (payload as { sessionId?: string }).sessionId === "session-1")).toBe(true);
     expect(sent.some((payload) => (payload as { event?: { question?: string } }).event?.question === "wanted")).toBe(true);
-    runtime.cancelSessionClarifications("session-1");
-    runtime.cancelSessionClarifications("session-2");
+    runtime.clarificationManager.cancel("session-1");
+    runtime.clarificationManager.cancel("session-2");
     unregister();
   });
 

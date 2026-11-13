@@ -10,7 +10,7 @@ import type { ApplicationAuthService, ApplicationCommandHost } from "@data-agent
 
 interface WorkspaceHost {
   assertAccess(context: RequestContext): void;
-  readBytesWithLegacyFallback(relativePath: string): Promise<Uint8Array>;
+  readBytesWithRootFallback(relativePath: string): Promise<Uint8Array>;
   scoped(sessionId: string): Promise<WorkspaceHost>;
   upload(tempPath: string, relativePath: string): Promise<{ readonly size: number }>;
 }
@@ -88,7 +88,7 @@ export async function createRuntimeServer(
         options.workspace!.assertAccess(context);
         const workspacePath = query.path ?? "";
         await assertSessionPathAccess(options.authorizeSession, context.userId, workspacePath);
-        const bytes = await options.workspace!.readBytesWithLegacyFallback(workspacePath);
+        const bytes = await options.workspace!.readBytesWithRootFallback(workspacePath);
         return reply.type(workspaceContentType(workspacePath)).send(Buffer.from(bytes));
       } catch {
         return reply.code(403).send({ error: { code: "WORKSPACE_ACCESS_DENIED" } });

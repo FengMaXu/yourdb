@@ -1,4 +1,4 @@
-import type { AgentHarnessTool } from "@earendil-works/pi-agent-core";
+import type { AgentHarnessTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
 /** Trusted, code-owned prompt metadata for one executable tool. */
@@ -71,3 +71,7 @@ export function defineDataAgentTool<
   });
 }
 
+/** A tool result whose content is one text part. */
+export function textResult(content: string, details?: unknown): AgentToolResult<unknown> {
+  return { content: [{ type: "text", text: content }], details: details ?? null };
+}

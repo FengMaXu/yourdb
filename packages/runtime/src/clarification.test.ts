@@ -9,8 +9,8 @@ describe("clarification flow", () => {
     const runtime = new DataAgentRuntime({ clarifications: new ClarificationManager(5000) });
     const events: any[] = [];
     runtime.subscribe((event) => events.push(event));
-    const first = runtime.askClarification("session-1", "Which region?", ["north", "south"]);
-    const second = runtime.askClarification("session-1", "Second?", []);
+    const first = runtime.clarificationManager.ask("session-1", "Which region?", ["north", "south"]);
+    const second = runtime.clarificationManager.ask("session-1", "Second?", []);
     expect(events.filter((e) => e.event.type === "clarification.request").length).toBe(2);
     expect(events.filter((e) => e.event.type === "clarification.settled").length).toBe(1);
 
@@ -38,15 +38,15 @@ describe("clarification flow", () => {
 
   it("expires pending clarifications after the timeout", async () => {
     const runtime = new DataAgentRuntime({ clarifications: new ClarificationManager(50) });
-    const asked = runtime.askClarification("session-2", "?", []);
+    const asked = runtime.clarificationManager.ask("session-2", "?", []);
     await expect(asked.promise).resolves.toBe("");
   });
 
   it("marks waits cancelled on stop without pretending to resume", async () => {
     const manager = new ClarificationManager(60000);
     const runtime = new DataAgentRuntime({ clarifications: manager });
-    const asked = runtime.askClarification("session-3", "?", []);
-    runtime.cancelSessionClarifications("session-3");
+    const asked = runtime.clarificationManager.ask("session-3", "?", []);
+    runtime.clarificationManager.cancel("session-3");
     await expect(asked.promise).resolves.toBe("");
   });
 });

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ArtifactDirectory } from "./artifact-directory.js";
 import { InMemoryResultStore } from "../answering/result-store.js";
-import { QueryTaskProjection } from "./query-task-projection.js";
 import { ClarificationDialogs } from "./clarification-dialogs.js";
 import { ClarificationManager } from "../clarification.js";
 import type { AnswerTaskView, BusinessContext } from "../answering/model.js";
@@ -38,18 +37,6 @@ const view: AnswerTaskView = {
 };
 
 describe("Session Facets", () => {
-  it("rebuilds QueryTaskProjection from the Answering read model", async () => {
-    const projection = new QueryTaskProjection({
-      inspect: async () => view,
-      list: async () => [view.task],
-    });
-    const state = await projection.refreshFromIndex(context, "task-1");
-    expect(state).toEqual({
-      activeTaskId: "task-1",
-      tasks: [{ taskId: "task-1", requestMessageId: "message-1", currentRevisionId: "revision-1", phase: "published", pendingClarifications: 0, latestCandidateId: "candidate-1", publicationId: "publication-1" }],
-    });
-  });
-
   it("resolves artifacts only through an authorized Receipt", async () => {
     let opened = false;
     const directory = new ArtifactDirectory({

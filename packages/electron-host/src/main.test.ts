@@ -47,7 +47,7 @@ describe("resolveRuntimePaths", () => {
       unhandle: () => undefined,
     }, {
       writeBytes: async () => undefined,
-      readBytesWithLegacyFallback: async () => new Uint8Array(),
+      readBytesWithRootFallback: async () => new Uint8Array(),
     }, async (_userId, sessionId) => sessionId === "session-1", async (publicationId, context) => {
       expect(publicationId).toBe("publication-1");
       expect(context).toEqual({ userId: "local", sessionId: "session-1" });

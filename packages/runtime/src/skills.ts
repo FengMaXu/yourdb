@@ -1,5 +1,6 @@
 import { readFile, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
+import { unquoted } from "./primitives.js";
 
 export interface SkillDefinition {
   readonly name: string;
@@ -52,9 +53,9 @@ function isWithinRoot(root: string, candidate: string): boolean {
   return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
 }
 
-function scalar(frontmatter: string, key: string): string | undefined {
+function frontmatterValue(frontmatter: string, key: string): string | undefined {
   const match = new RegExp(`^${key}\\s*:\\s*(.+)$`, "mi").exec(frontmatter);
-  return match?.[1]?.trim().replace(/^['"]|['"]$/g, "");
+  return match?.[1] === undefined ? undefined : unquoted(match[1]);
 }
 
 function parseToolList(frontmatter: string, keys: readonly string[], label: string, filePath: string, diagnostics: SkillDiagnostic[]): string[] | undefined {
@@ -71,14 +72,14 @@ function parseToolList(frontmatter: string, keys: readonly string[], label: stri
     if (!inline.startsWith("[") || !inline.endsWith("]")) {
       diagnostics.push(diagnostic(filePath, `${label} must be a list`, "invalid_metadata"));
     } else {
-      values.push(...inline.slice(1, -1).split(",").map((value) => value.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean));
+      values.push(...inline.slice(1, -1).split(",").map(unquoted).filter(Boolean));
     }
   } else {
     const start = frontmatter.slice(key.index + key[0].length);
     for (const item of start.split("\n")) {
       if (/^\s*-\s*/.test(item)) {
         const value = /^\s*-\s*(\S.*?)\s*$/.exec(item)?.[1];
-        if (value) values.push(value.replace(/^['"]|['"]$/g, ""));
+        if (value) values.push(unquoted(value));
       } else if (item.trim() && !/^\s/.test(item)) break;
     }
   }
@@ -91,7 +92,7 @@ function parseToolMetadata(frontmatter: string, filePath: string): { allowedTool
   const diagnostics: SkillDiagnostic[] = [];
   const allowedTools = parseToolList(frontmatter, ["allowed-tools", "allowedTools"], "allowed-tools", filePath, diagnostics);
   const requiredTools = parseToolList(frontmatter, ["requires-tools", "requiredTools"], "requires-tools", filePath, diagnostics);
-  const disabled = scalar(frontmatter, "disable-model-invocation") ?? scalar(frontmatter, "disableModelInvocation");
+  const disabled = frontmatterValue(frontmatter, "disable-model-invocation") ?? frontmatterValue(frontmatter, "disableModelInvocation");
   return {
     ...(allowedTools ? { allowedTools } : {}),
     ...(requiredTools ? { requiredTools } : {}),
@@ -107,12 +108,12 @@ function parseSkill(raw: string, filePath: string): { skill?: SkillDefinition; d
   const marker = normalized.indexOf("\n---", 4);
   if (marker < 0) return { diagnostics: [diagnostic(filePath, "unterminated frontmatter", "invalid_metadata")] };
   const frontmatter = normalized.slice(4, marker);
-  const name = scalar(frontmatter, "name");
-  const description = scalar(frontmatter, "description");
+  const name = frontmatterValue(frontmatter, "name");
+  const description = frontmatterValue(frontmatter, "description");
   if (!name || !description) return { diagnostics: [diagnostic(filePath, "name and description are required", "invalid_metadata")] };
   const metadata = parseToolMetadata(frontmatter, filePath);
   diagnostics.push(...metadata.diagnostics);
-  const whenToUse = scalar(frontmatter, "when_to_use") ?? scalar(frontmatter, "whenToUse");
+  const whenToUse = frontmatterValue(frontmatter, "when_to_use") ?? frontmatterValue(frontmatter, "whenToUse");
   const body = normalized.slice(marker + 4).replace(/^\n/, "").trim();
   return {
     skill: {

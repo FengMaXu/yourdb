@@ -177,9 +177,9 @@ describe("show_widget chart", () => {
     await cleanup();
   });
 
-  it("no longer accepts model-written chart rows", async () => {
+  it("rejects model-written chart rows", async () => {
     const { showWidget, cleanup } = await setup([["批发业", 1]]);
-    await expect(call(showWidget, "chart", { title: "Sales", data: [{ label: "North", value: 10 }] }, "widget-legacy")).rejects.toThrow("CHART_DATA_UNSUPPORTED");
+    await expect(call(showWidget, "chart", { title: "Sales", data: [{ label: "North", value: 10 }] }, "widget-rows")).rejects.toThrow("CHART_DATA_UNSUPPORTED");
     await cleanup();
   });
 

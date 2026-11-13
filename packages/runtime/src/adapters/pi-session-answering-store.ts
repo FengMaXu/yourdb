@@ -1,4 +1,4 @@
-import { deleteValue, setValue, value, type Session, type Value, type ValueWrite } from "@earendil-works/pi-agent-core/harness/session";
+import { setValue, value, type Session, type Value, type ValueWrite } from "@earendil-works/pi-agent-core/harness/session";
 import { TODO_CONTEXT, type Context } from "@earendil-works/pi-agent-core/harness/context";
 import type { JsonValue } from "@earendil-works/chord";
 import {
@@ -10,8 +10,6 @@ import {
 } from "../answering/answering-store.js";
 import type { AnswerTaskView, BusinessContext, TaskId, QueryTaskRecord } from "../answering/model.js";
 
-/** Before per-record storage: the whole snapshot as one Value, rewritten on every change. Read once, then migrated. */
-const LEGACY_ANSWERING_STATE = value<JsonValue>("data-agent.answering", "state");
 /**
  * One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`),
  * each id percent-encoded so an id containing "/" can neither collide nor regroup.
@@ -37,26 +35,6 @@ function encodeJson(valueToEncode: unknown): JsonValue {
 
 function decodeJson(valueToDecode: unknown): unknown {
   return JSON.parse(JSON.stringify(valueToDecode), (_key, valueToVisit) => valueToVisit && typeof valueToVisit === "object" && valueToVisit.__type === "bigint" ? BigInt(valueToVisit.value) : valueToVisit);
-}
-
-function isSnapshot(valueToCheck: unknown): valueToCheck is AnsweringStoreSnapshot {
-  if (!valueToCheck || typeof valueToCheck !== "object") return false;
-  const record = valueToCheck as Record<string, unknown>;
-  // Records of an earlier Answer Spec model are not read (ADR-0007).
-  return record.version === ANSWERING_SNAPSHOT_VERSION && Array.isArray(record.tasks) && Array.isArray(record.revisions) && Array.isArray(record.evidence)
-    && Array.isArray(record.candidates) && Array.isArray(record.receipts);
-}
-
-/** The snapshot as records keyed by kind and id, in snapshot order. */
-function snapshotRecords(snapshot: AnsweringStoreSnapshot): Map<string, JsonValue> {
-  const records = new Map<string, JsonValue>();
-  for (const task of snapshot.tasks) records.set(recordKey("task", task.taskId), encodeJson(task));
-  for (const revision of snapshot.revisions) records.set(recordKey("revision", revision.revisionId), encodeJson(revision));
-  for (const group of snapshot.evidence) for (const item of group.items) records.set(recordKey("evidence", group.taskId, item.id), encodeJson(item));
-  for (const group of snapshot.attempts ?? []) for (const item of group.items) records.set(recordKey("attempt", group.taskId, item.attemptId), encodeJson(item));
-  for (const candidate of snapshot.candidates) records.set(recordKey("candidate", candidate.candidateId), encodeJson(candidate));
-  for (const receipt of snapshot.receipts) records.set(recordKey("receipt", receipt.receiptId), encodeJson(receipt));
-  return records;
 }
 
 /** Stored records back to a snapshot; within each kind, records keep the order they were first stored in. */
@@ -92,7 +70,7 @@ function recordsSnapshot(stored: ReadonlyMap<string, StoredRecord>): AnsweringSt
   };
 }
 
-type Reader = Pick<Session<any>, "getValue" | "scanValues">;
+type Reader = Pick<Session<any>, "scanValues">;
 
 /**
  * The transaction as the command sees it, recording every record it writes
@@ -122,9 +100,7 @@ function recordingWrites(state: AnsweringTransaction, written: Map<string, JsonV
  * Every record is its own Session Value, and a write commits only the records
  * the transaction changed: one Answer Spec field changes one revision record,
  * instead of rewriting every task, revision, evidence item and candidate of
- * the session (which grew a session file by tens of megabytes). A session
- * written in the earlier single-Value form is read from it and migrated on its
- * first write.
+ * the session (which would grow a session file by tens of megabytes).
  *
  * Each write is a single native Session mutation. The in-memory delegate is
  * rebuilt from the Values inside that mutation, then replaced only after Pi
@@ -140,23 +116,12 @@ export class PiSessionAnsweringStore implements AnsweringStore {
     private readonly piContext: Context = TODO_CONTEXT,
   ) {}
 
-  /** The stored records, and whether they still sit in the legacy single Value. */
-  private async readRecords(reader: Reader): Promise<{ readonly records: Map<string, StoredRecord>; readonly legacy: boolean }> {
-    const scan = async () => new Map((await reader.scanValues(ALL_RECORDS, this.piContext)).map((entry) => [entry.address.key, entry.value] as const));
-    const stored = await scan();
-    if (stored.size > 0) return { records: stored, legacy: false };
-    const legacy = await reader.getValue(LEGACY_ANSWERING_STATE, this.piContext);
-    const decoded = legacy ? decodeJson(legacy.value) : undefined;
-    if (!isSnapshot(decoded)) {
-      // Outside a mutation, a migration may have committed between the two reads: look again.
-      return { records: legacy ? new Map() : await scan(), legacy: false };
-    }
-    let order = 0;
-    return { records: new Map([...snapshotRecords(decoded)].map(([key, record]) => [key, { order: order++, record }])), legacy: true };
+  private async readRecords(reader: Reader): Promise<Map<string, StoredRecord>> {
+    return new Map((await reader.scanValues(ALL_RECORDS, this.piContext)).map((entry) => [entry.address.key, entry.value] as const));
   }
 
   private async readSnapshot(): Promise<AnsweringStoreSnapshot | undefined> {
-    const { records } = await this.readRecords(this.session);
+    const records = await this.readRecords(this.session);
     return records.size > 0 ? recordsSnapshot(records) : undefined;
   }
 
@@ -177,21 +142,16 @@ export class PiSessionAnsweringStore implements AnsweringStore {
       await this.session.mutate(async (mutator) => {
         // Read inside the mutation so a concurrent native Session writer cannot
         // silently overwrite the Answering records between read and commit.
-        const { records: before, legacy } = await this.readRecords(mutator);
+        const before = await this.readRecords(mutator);
         const nextDelegate = new InMemoryAnsweringStore(before.size > 0 ? recordsSnapshot(before) : this.delegate.snapshot());
         const written = new Map<string, JsonValue>();
         answer = await nextDelegate.transact((state) => command(recordingWrites(state, written)), context);
         let nextOrder = 0;
         for (const entry of before.values()) if (entry.order >= nextOrder) nextOrder = entry.order + 1;
         const writes: ValueWrite[] = [];
-        if (legacy) {
-          // Migration: every record becomes its own Value, in the legacy snapshot's order.
-          for (const [key, entry] of before) if (!written.has(key)) writes.push(setValue(recordValue(key), entry));
-          writes.push(deleteValue(LEGACY_ANSWERING_STATE));
-        }
         for (const [key, record] of written) {
           const previous = before.get(key);
-          if (!legacy && previous && JSON.stringify(previous.record) === JSON.stringify(record)) continue;
+          if (previous && JSON.stringify(previous.record) === JSON.stringify(record)) continue;
           writes.push(setValue(recordValue(key), { order: previous?.order ?? nextOrder++, record }));
         }
         if (writes.length > 0) await mutator.commit(writes, this.piContext);

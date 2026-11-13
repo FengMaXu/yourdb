@@ -1,6 +1,7 @@
 import type { BoundedResult, QueryExecutionScope } from "./model.js";
 import type { FanoutDialect, FanoutSchema } from "./fanout-check.js";
 import { AnsweringError } from "./errors.js";
+import { inferType } from "./support.js";
 
 export interface SqlQueryResult {
   readonly columns: readonly string[];
@@ -39,14 +40,6 @@ export interface AnsweringSqlExecutor {
   }): Promise<SqlQueryResult>;
 }
 
-function inferType(value: unknown): string {
-  if (value === null || value === undefined) return "NULL";
-  if (typeof value === "bigint") return "BIGINT";
-  if (typeof value === "number") return Number.isInteger(value) ? "INTEGER" : "REAL";
-  if (typeof value === "boolean") return "BOOLEAN";
-  if (typeof value === "object") return "JSON";
-  return "TEXT";
-}
 
 function serializedByteLength(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value, (_key, item) => typeof item === "bigint" ? { __type: "bigint", value: item.toString() } : item), "utf8");

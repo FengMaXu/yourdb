@@ -1,5 +1,4 @@
-import { clone, contentHash, type AnswerRevisionView, type BusinessContext, type RevisionId, type SpecFields, type TaskId } from "./model.js";
-import type { SpecPath } from "./fields.js";
+import { clone, contentHash, type AnswerRevisionView, type BusinessContext, type RevisionId, type TaskId } from "./model.js";
 import { assertTaskAccess } from "./answering-store.js";
 import type { AnsweringDeps } from "./deps.js";
 import {
@@ -21,6 +20,7 @@ import {
   type CalendarCoverageReport,
   type CalendarTarget,
 } from "./calendar-coverage.js";
+import { isSettled } from "./support.js";
 
 function sameTarget(observation: TableIdentityObservation, target: IdentityTarget): boolean {
   return observation.table === target.table && JSON.stringify(observation.keyColumns ?? []) === JSON.stringify(target.keyColumns ?? []);
@@ -100,11 +100,6 @@ function sameCalendar(left: CalendarTarget | undefined, right: CalendarTarget): 
 }
 
 /** A field the checks can read: it has a value that is not one of several open alternatives. */
-function settled(fields: SpecFields, path: SpecPath): boolean {
-  const field = fields[path];
-  return field?.state === "specified" || field?.state === "decided";
-}
-
 interface DataCheckReports {
   readonly entityIdentity?: EntityIdentityReport;
   readonly calendarCoverage?: CalendarCoverageReport;
@@ -127,8 +122,8 @@ export async function recordDataChecks(deps: AnsweringDeps, taskId: TaskId, revi
   const revision = snapshot.revision;
   if (!revision) return undefined;
   if (revision.entityIdentity || revision.calendarCoverage) return revision;
-  const identityApplies = settled(revision.fields, "population.entity") && settled(revision.fields, "population.source");
-  const calendarApplies = settled(revision.fields, "population.time") && (settled(revision.fields, "grouping") || settled(revision.fields, "measure.formula"));
+  const identityApplies = isSettled(revision.fields["population.entity"]) && isSettled(revision.fields["population.source"]);
+  const calendarApplies = isSettled(revision.fields["population.time"]) && (isSettled(revision.fields["grouping"]) || isSettled(revision.fields["measure.formula"]));
   if (!identityApplies && !calendarApplies) return undefined;
 
   let entityIdentity: EntityIdentityReport | undefined;

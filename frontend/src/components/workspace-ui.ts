@@ -1,7 +1,7 @@
 /**
  * The workspace pages' primitives (settings, channels, skills): cards, fields, inputs, buttons,
  * switches, segmented choices, pills, alerts and tables, on the stone palette with the brand
- * accent. They replace styles/ui.css and styles/workspace.css; combine them with cn(), base first.
+ * accent. Combine them with cn(), base first.
  */
 export const UI = {
     stack: 'flex flex-col gap-4',

@@ -4,15 +4,14 @@ import { ChartSpecSchema, DatasetRefSchema, FieldMetaSchema, checkChartSpec, typ
 
 /**
  * DashboardSpec v1 (ADR-0008 step 4): a snapshot dashboard whose views are
- * ChartSpecs, tables, KPI cards and findings. Every view reads one Dataset Reference;
- * a live binding is added later as another DatasetRef kind, not a new spec.
+ * ChartSpecs, tables, KPI cards and findings. Every view reads one Dataset Reference.
  */
 export const DASHBOARD_SPEC_VERSION = 1 as const;
 
 const Strict = { additionalProperties: false } as const;
 const Name = Type.String({ minLength: 1 });
 const ViewId = Type.String({ pattern: "^[A-Za-z0-9_\\-]{1,64}$" });
-/** Placement used only when the spec has no `layout`: kept so dashboards built before rows still open and refresh. */
+/** Placement used only when the spec has no `layout`, so a saved dashboard without rows still opens and refreshes. */
 const Width = Type.Optional(Type.Union([Type.Literal("half"), Type.Literal("full")]));
 const Fields = Type.Optional(Type.Record(Type.String(), FieldMetaSchema));
 
@@ -90,7 +89,6 @@ export const DashboardInsightSchema = Type.Object({
   text: Type.String({ minLength: 1, maxLength: 160 }),
   tone: Type.Optional(Type.Union([Type.Literal("focus"), Type.Literal("bad"), Type.Literal("good")])),
 }, Strict);
-export type DashboardInsight = Static<typeof DashboardInsightSchema>;
 
 export const DashboardInsightsViewSchema = Type.Object({
   id: ViewId,
@@ -103,7 +101,6 @@ export const DashboardInsightsViewSchema = Type.Object({
 }, Strict);
 
 export const DashboardViewSchema = Type.Union([DashboardChartViewSchema, DashboardTableViewSchema, DashboardKpiViewSchema, DashboardInsightsViewSchema]);
-export type DashboardChartView = Static<typeof DashboardChartViewSchema>;
 export type DashboardTableView = Static<typeof DashboardTableViewSchema>;
 export type DashboardKpiView = Static<typeof DashboardKpiViewSchema>;
 export type DashboardInsightsView = Static<typeof DashboardInsightsViewSchema>;
@@ -120,13 +117,11 @@ export const DashboardLayoutRowSchema = Type.Object({
   widths: Type.Optional(Type.Array(Type.Integer({ minimum: 1, maximum: 12 }), { minItems: 1, maxItems: 4 })),
   height: Type.Optional(DashboardRowHeightSchema),
 }, Strict);
-export type DashboardLayoutRow = Static<typeof DashboardLayoutRowSchema>;
 
 export const DashboardLayoutSchema = Type.Object({
   /** Every view appears in exactly one row. */
   rows: Type.Array(DashboardLayoutRowSchema, { minItems: 1, maxItems: 20 }),
 }, Strict);
-export type DashboardLayout = Static<typeof DashboardLayoutSchema>;
 
 export const DashboardSpecSchema = Type.Object({
   version: Type.Literal(DASHBOARD_SPEC_VERSION),

@@ -12,7 +12,7 @@
   border-color: var(--border);
 }
 
-/* The app has always set text at the browser's normal line height; Preflight's 1.5 would loosen every line. */
+/* Text sits at the browser's normal line height; Preflight's 1.5 would loosen every line. */
 html,
 :host {
   line-height: normal;

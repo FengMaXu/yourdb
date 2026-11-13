@@ -24,25 +24,26 @@ function validateLineRange({ startLine, endLine }: LineRange): void {
   }
 }
 
-function truncateUtf8(content: string): BoundedReadResult {
+/** Cuts text to at most `maxBytes` of UTF-8 without splitting a code point. */
+export function truncateUtf8(content: string, maxBytes: number): BoundedReadResult {
   const bytes = Buffer.from(content, "utf8");
-  if (bytes.byteLength <= MAX_TEXT_BYTES) return { content, truncated: false };
+  if (bytes.byteLength <= maxBytes) return { content, truncated: false };
 
-  // Never return a partial UTF-8 code point. The next excluded byte being a
-  // continuation byte means the final included code point is incomplete.
-  let end = MAX_TEXT_BYTES;
-  while (end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end -= 1;
+  // The next excluded byte being a continuation byte means the final included
+  // code point is incomplete.
+  let end = maxBytes;
+  while (end > 0 && end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end -= 1;
   return { content: bytes.subarray(0, end).toString("utf8"), truncated: true };
 }
 
 export function boundTextByLines(content: string, range: LineRange = {}): BoundedReadResult {
   validateLineRange(range);
   // Preserve exact text and line endings when no line range is requested.
-  if (range.startLine === undefined && range.endLine === undefined) return truncateUtf8(content);
+  if (range.startLine === undefined && range.endLine === undefined) return truncateUtf8(content, MAX_TEXT_BYTES);
   const lines = content.split(/\r?\n/);
   const start = range.startLine ?? 1;
   const end = range.endLine ?? lines.length;
-  return truncateUtf8(lines.slice(start - 1, end).join("\n"));
+  return truncateUtf8(lines.slice(start - 1, end).join("\n"), MAX_TEXT_BYTES);
 }
 
 /** Read a file beneath root while checking both lexical and symlink escapes. */

@@ -128,19 +128,19 @@ describe("Publication Physical Profile", () => {
     await expect(resultStore.openAuthorized(receipt.resultRef, receipt, context("open"))).resolves.toMatchObject({ contentHash: candidateHash });
   });
 
-  it("keeps reading Receipts published before profiling existed", async () => {
+  it("reads a Receipt that carries no physical profile", async () => {
     const first = await publishedAnswering();
-    const published = await first.answering.publish({ candidateId: first.candidateId, format: "auto", requestId: "publish-legacy" }, context("publish-legacy"));
+    const published = await first.answering.publish({ candidateId: first.candidateId, format: "auto", requestId: "publish-unprofiled" }, context("publish-unprofiled"));
     const snapshot = first.store.snapshot();
-    const legacySnapshot = { ...snapshot, receipts: snapshot.receipts.map(({ physicalProfile: _profile, ...receipt }) => receipt) };
-    const reopened = new InMemoryAnswering({ store: new InMemoryAnsweringStore(legacySnapshot), resultStore: first.resultStore, sqlExecutor: { run: async () => { throw new Error("SQL must not re-run"); } } });
+    const unprofiledSnapshot = { ...snapshot, receipts: snapshot.receipts.map(({ physicalProfile: _profile, ...receipt }) => receipt) };
+    const reopened = new InMemoryAnswering({ store: new InMemoryAnsweringStore(unprofiledSnapshot), resultStore: first.resultStore, sqlExecutor: { run: async () => { throw new Error("SQL must not re-run"); } } });
 
-    const retried = await reopened.publish({ candidateId: first.candidateId, format: "auto", requestId: "publish-legacy" }, context("publish-legacy-retry"));
+    const retried = await reopened.publish({ candidateId: first.candidateId, format: "auto", requestId: "publish-unprofiled" }, context("publish-unprofiled-retry"));
     expect(retried.receiptId).toBe(published.receiptId);
     expect(retried.physicalProfile).toBeUndefined();
-    const view = await reopened.inspect({ taskId: first.taskId }, context("inspect-legacy"));
+    const view = await reopened.inspect({ taskId: first.taskId }, context("inspect-unprofiled"));
     expect(view.publication?.receiptId).toBe(published.receiptId);
-    await expect(first.resultStore.openAuthorized(retried.resultRef, retried, context("open-legacy"))).resolves.toMatchObject({ contentHash: published.contentHash });
+    await expect(first.resultStore.openAuthorized(retried.resultRef, retried, context("open-unprofiled"))).resolves.toMatchObject({ contentHash: published.contentHash });
   });
 
   it("keeps the profile out of model-visible publish and inspect text", async () => {

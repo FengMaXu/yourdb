@@ -99,7 +99,7 @@ import { join } from "node:path";
     await app.close(); await rm(root, { recursive: true, force: true });
   });
 
-  it("serves legacy root images through a session URL without changing their bytes", async () => {
+  it("serves workspace-root images through a session URL without changing their bytes", async () => {
     const root = await mkdtemp(join(tmpdir(), "data-agent-server-image-"));
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xff, 0x00, 0xfe]);
     await writeFile(join(root, "chart.png"), png);

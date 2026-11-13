@@ -1,6 +1,6 @@
 ; yourdb Windows installer (NSIS)
-; Packages the manually staged win-unpacked build without user data or the
-; legacy Python Web backend. Generated/invoked by scripts/package-electron-manual.mjs,
+; Packages the manually staged win-unpacked build without user data.
+; Generated/invoked by scripts/package-electron-manual.mjs,
 ; which fills the name and version from frontend/package.json.
 
 !define APP_NAME "{{APP_NAME}}"

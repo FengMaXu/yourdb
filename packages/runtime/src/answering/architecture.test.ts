@@ -71,7 +71,7 @@ describe("Answering architecture boundaries", () => {
   it("keeps the tool schemas strict where the Runtime does not parse per path", () => {
     expect(Value.Check(SET_ANSWER_SPEC_PARAMETERS, { fields: scalarSpec })).toBe(true);
     expect(Value.Check(SET_ANSWER_SPEC_PARAMETERS, { taskId: "task-1", fields: { grouping: { value: ["team_id"], reason: "per team" } } })).toBe(true);
-    // The old seven-facet envelope is not accepted under another name.
+    // Only `fields` carries the spec; any other top-level key is rejected.
     expect(Value.Check(SET_ANSWER_SPEC_PARAMETERS, { spec: scalarSpec })).toBe(false);
     expect(Value.Check(SET_ANSWER_SPEC_PARAMETERS, { fields: scalarSpec, hypotheses: [] })).toBe(false);
     expect(Value.Check(ANSWERING_QUERY_PARAMETERS, { kind: "result", taskId: "task-1", sql: "SELECT 1" })).toBe(false);

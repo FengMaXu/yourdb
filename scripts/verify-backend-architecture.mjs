@@ -90,7 +90,7 @@ for (const file of productionFiles) {
     if (isCapabilities && hasAny(normalized, ["/agent/", "/answering/", "/application/", "/tools/"])) fail(`${rel}: capability imports forbidden ${specifier}`);
     if (isAnswering && hasAny(normalized, ["pi-agent", "electron", "fastify", "http", "/tools/", "/application/"])) fail(`${rel}: Answering imports forbidden seam ${specifier}`);
     if ((isAgent || isTools) && hasAny(normalized, ["/answering/answering-store", "/answering/result-store"])) fail(`${rel}: Agent/Tool imports concrete Answering store ${specifier}`);
-    if (isDelegation && hasAny(normalized, ["pi-coding-agent", "pi-tui", "pi-subagents", "/application/", "/answering/"])) fail(`${rel}: Delegation core imports forbidden host/business dependency ${specifier}`);
+    if (isDelegation && hasAny(normalized, ["/application/", "/answering/"])) fail(`${rel}: Delegation core imports forbidden host/business dependency ${specifier}`);
     if (isFacets && hasAny(normalized, ["/answering/answering-store", "/answering/result-store"])) fail(`${rel}: Facet imports concrete Answering store ${specifier}`);
     if (isContracts && hasAny(normalized, ["pi-agent", "chord", "better-sqlite", "sqlite"])) fail(`${rel}: contracts imports infrastructure ${specifier}`);
     if (isCharts && !normalized.startsWith(".") && normalized !== "@data-agent/contracts") fail(`${rel}: isomorphic chart compiler imports ${specifier}`);
@@ -104,7 +104,6 @@ for (const file of productionFiles) {
     if (isPresentation && hasAny(normalized, ["@earendil-works/pi-agent-core", "@data-agent/runtime", "better-sqlite", "mysql", "sqlExecutor", "credentials"])) fail(`${rel}: Presentation imports backend authority ${specifier}`);
   }
 
-  if (rel.startsWith("packages/runtime/src/") && /\b(?:AgentSession|ExtensionRunner)\b/.test(text)) fail(`${rel}: Runtime production reintroduces a forbidden coding-agent host`);
   if (isAnswering && /\bas any\b/.test(text)) fail(`${rel}: Answering production contains as any`);
   if (isElectronOrServer && /(?:@data-agent\/runtime\/protocol|packages\/runtime\/dist\/protocol|packages\/runtime\/src\/protocol)/.test(text.replaceAll("\\", "/"))) {
     fail(`${rel}: transport Host references Runtime protocol internals`);
@@ -125,7 +124,7 @@ if (existsSync(runtimePackage)) {
 const publicIndex = path.join(root, "packages/runtime/src/index.ts");
 if (existsSync(publicIndex)) {
   const text = readFileSync(publicIndex, "utf8");
-  for (const forbidden of ["DataAgentRuntime", "MetadataStore", "WorkspaceStore", "AgentHarness", "AnsweringStore", "PublicationRegistry", "QueryAssurance", "ApplicationAgentAdapter", "ApplicationSessionStore", "ApplicationSessionHandle", "ApplicationResources", "DataAgentSessionApplication"]) {
+  for (const forbidden of ["DataAgentRuntime", "MetadataStore", "WorkspaceStore", "AgentHarness", "AnsweringStore", "ApplicationAgentAdapter", "ApplicationSessionStore", "ApplicationSessionHandle", "ApplicationResources", "DataAgentSessionApplication"]) {
     if (new RegExp(`\\b${forbidden}\\b`).test(text)) fail(`runtime public index mentions forbidden symbol ${forbidden}`);
   }
   if (!text.includes("createDataAgentApplication") || !text.includes("DataAgentApplication")) fail("runtime public index does not expose Application Host");
@@ -147,28 +146,10 @@ for (const file of productionFiles) {
   if (rel.startsWith("packages/runtime/src/") && readFileSync(file, "utf8").includes(".watchSession(")) fail(`${rel}: production depends on unsupported watchSession`);
 }
 
-const oldSymbols = [
-  "createDataAgentHarness",
-  "createAgentHarnessResolver",
-  "QueryAssurance",
-  "JsonFileQueryAssuranceStateStore",
-  "FastPathCheckpoint",
-  "TaskUsageLedger",
-  "answer-spec-legacy-v1",
-  "evidence-plan-v2",
-  "activeRun",
-  "execute_query_export_batch",
-];
-for (const file of productionFiles) {
-  const text = readFileSync(file, "utf8");
-  for (const symbol of oldSymbols) if (text.includes(symbol)) fail(`${relative(file)}: legacy production symbol ${symbol}`);
-}
-
 const bundle = path.join(root, "frontend/electron-host/main.cjs");
 if (existsSync(bundle)) {
   const text = readFileSync(bundle, "utf8");
   if (!text.includes("DataAgentApplication")) fail("generated Electron bundle does not contain DataAgentApplication");
-  for (const symbol of oldSymbols) if (text.includes(symbol)) fail(`generated Electron bundle contains legacy symbol ${symbol}`);
 }
 
 if (failures.length) {

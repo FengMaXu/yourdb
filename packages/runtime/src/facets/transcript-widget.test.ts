@@ -13,15 +13,13 @@ function setup() {
   });
   instance.project({ type: "message_start", message: { role: "assistant", id: "message-1" } });
   const start = (id = "call-1") => instance.project({ type: "tool_execution_start", toolCallId: id, toolName: "show_widget", args: {} });
-  const update = (result: unknown, id = "call-1") => instance.project({ type: "tool_execution_update", toolCallId: id, toolName: "show_widget", partialResult: result });
   const end = (result: unknown, isError = false, id = "call-1") => instance.project({ type: "tool_execution_end", toolCallId: id, toolName: "show_widget", result, isError });
-  return { instance, start, update, end, events: () => emitted.map((envelope) => envelope.event) };
+  return { instance, start, end, events: () => emitted.map((envelope) => envelope.event) };
 }
 
 function result(id = "call-1", title = "Sales") {
   return {
     content: [{ type: "text", text: "[widget:chart] Sales" }],
-    // Current show_widget returns lifecycle details without legacyText.
     details: {
       widgetEvent: "widget", widgetId: `widget-${id}`, toolCallId: id, toolName: "show_widget",
       widget: { widget_id: `widget-${id}`, tool_call_id: id, kind: "chart", title, contractVersion: 2,
@@ -33,50 +31,13 @@ function result(id = "call-1", title = "Sales") {
 const widgetEvents = (events: ReturnType<ReturnType<typeof setup>["events"]>) => events.filter((event) => event.type.startsWith("widget"));
 
 describe("TranscriptProjector widget delivery", () => {
-  it("creates a widget from a final-only result before marking it done", () => {
+  it("creates a widget from the result before marking it done", () => {
     const { start, end, events } = setup();
     start();
     end(result());
     expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget", "widget_done"]);
     expect(events().find((event) => event.type === "widget")).toMatchObject({ messageId: "message-1", toolCallId: "call-1", widgetId: "widget-call-1", widget: result().details.widget });
     expect(events().at(-1)).toMatchObject({ type: "agent.tool_finished", isError: false });
-  });
-
-  it("does not duplicate a full widget already delivered by an update", () => {
-    const { start, update, end, events } = setup();
-    start();
-    const full = result();
-    update({ ...full, details: { ...full.details, legacyText: full.content[0]!.text } });
-    end(result());
-    expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget", "widget_done"]);
-  });
-
-  it("delivers changed final data even when an earlier full update exists", () => {
-    const { start, update, end, events } = setup();
-    start();
-    const preview = result("call-1", "Preview");
-    update({ ...preview, details: { ...preview.details, legacyText: "Preview" } });
-    end(result());
-    expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget", "widget", "widget_done"]);
-    expect(events().filter((event) => event.type === "widget").at(-1)).toMatchObject({ widget: { title: "Sales" } });
-  });
-
-  it("creates the final widget after a partial preview", () => {
-    const { start, update, end, events } = setup();
-    start();
-    update({ details: { widgetEvent: "widget_patch", widgetId: "widget-call-1", toolCallId: "call-1", toolName: "show_widget", patch: { title: "Preview" }, legacyText: "Preview" } });
-    end(result());
-    expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget_patch", "widget", "widget_done"]);
-  });
-
-  it.each(["widget_patch", "widget_remove"])("re-delivers a full result after %s invalidates an earlier payload", (widgetEvent) => {
-    const { start, update, end, events } = setup();
-    start();
-    const full = result();
-    update({ ...full, details: { ...full.details, legacyText: "Sales" } });
-    update({ details: { widgetEvent, widgetId: "widget-call-1", toolCallId: "call-1", toolName: "show_widget", patch: { title: "Preview" }, legacyText: "Preview" } });
-    end(result());
-    expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget", widgetEvent, "widget", "widget_done"]);
   });
 
   it("does not create a chart or mark it done for a failed tool result", () => {
@@ -95,30 +56,11 @@ describe("TranscriptProjector widget delivery", () => {
     expect(events().at(-1)).toMatchObject({ type: "agent.tool_finished", isError: true });
   });
 
-  it("does not emit a second error or a false completion after an invalid update", () => {
-    const { start, update, end, events } = setup();
-    start();
-    update({ details: {} });
-    end(result());
-    expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget_error"]);
-    expect(events().at(-1)).toMatchObject({ type: "agent.tool_finished", isError: true });
-  });
-
-  it("keeps completion idempotent when an update already marked the widget done", () => {
-    const { start, update, end, events } = setup();
-    start();
-    const full = result();
-    update({ ...full, details: { ...full.details, legacyText: "Sales" } });
-    update({ details: { widgetEvent: "widget_done", widgetId: "widget-call-1", toolCallId: "call-1", toolName: "show_widget", legacyText: "Done" } });
-    end(result());
-    expect(widgetEvents(events()).map((event) => event.type)).toEqual(["widget", "widget_done"]);
-  });
-
   it.each([
     { kind: "kpi", value: 10 },
     { kind: "table", data: [{ sales: 10 }] },
     { kind: "steps", data: [{ title: "Done" }] },
-  ])("also delivers final-only non-chart widgets: $kind", (payload) => {
+  ])("also delivers non-chart widgets: $kind", (payload) => {
     const { start, end, events } = setup();
     start();
     const full = result();
