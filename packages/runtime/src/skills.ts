@@ -1,5 +1,6 @@
 import { readFile, readdir, realpath } from "node:fs/promises";
 import path from "node:path";
+import { unquoted } from "./primitives.js";
 
 export interface SkillDefinition {
   readonly name: string;
@@ -54,7 +55,7 @@ function isWithinRoot(root: string, candidate: string): boolean {
 
 function frontmatterValue(frontmatter: string, key: string): string | undefined {
   const match = new RegExp(`^${key}\\s*:\\s*(.+)$`, "mi").exec(frontmatter);
-  return match?.[1]?.trim().replace(/^['"]|['"]$/g, "");
+  return match?.[1] === undefined ? undefined : unquoted(match[1]);
 }
 
 function parseToolList(frontmatter: string, keys: readonly string[], label: string, filePath: string, diagnostics: SkillDiagnostic[]): string[] | undefined {
@@ -71,14 +72,14 @@ function parseToolList(frontmatter: string, keys: readonly string[], label: stri
     if (!inline.startsWith("[") || !inline.endsWith("]")) {
       diagnostics.push(diagnostic(filePath, `${label} must be a list`, "invalid_metadata"));
     } else {
-      values.push(...inline.slice(1, -1).split(",").map((value) => value.trim().replace(/^['"]|['"]$/g, "")).filter(Boolean));
+      values.push(...inline.slice(1, -1).split(",").map(unquoted).filter(Boolean));
     }
   } else {
     const start = frontmatter.slice(key.index + key[0].length);
     for (const item of start.split("\n")) {
       if (/^\s*-\s*/.test(item)) {
         const value = /^\s*-\s*(\S.*?)\s*$/.exec(item)?.[1];
-        if (value) values.push(value.replace(/^['"]|['"]$/g, ""));
+        if (value) values.push(unquoted(value));
       } else if (item.trim() && !/^\s/.test(item)) break;
     }
   }

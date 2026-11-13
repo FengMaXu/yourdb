@@ -3,6 +3,7 @@ import { readFile, readdir, realpath } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { boundTextByLines, truncateUtf8 } from "./bounded-read.js";
+import { unquoted } from "./primitives.js";
 
 export const DEFAULT_KNOWLEDGE_RESULTS = 5;
 export const MAX_KNOWLEDGE_RESULTS = 8;
@@ -171,14 +172,6 @@ function tokenize(text: string): string[] {
   return [...ascii, ...bigrams];
 }
 
-function unquoted(value: string): string {
-  const trimmed = value.trim();
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-    return trimmed.slice(1, -1).trim();
-  }
-  return trimmed;
-}
-
 function parseFrontmatter(text: string, relativePath: string, requireMetadata: boolean): ParsedFrontmatter {
   const lines = physicalLines(text);
   const first = lines[0]?.replace(/^\uFEFF/, "").trim();
@@ -223,8 +216,8 @@ function fallbackMetadata(relativePath: string, contentLines: readonly string[])
     .replace(/^-+|-+$/g, "")
     .toLowerCase() || "knowledge";
   return {
-    // Evidence cites knowledge ids, so this derived form is fixed: `legacy-` plus the path slug.
-    knowledgeId: `legacy-${id}`.slice(0, 64),
+    // `path-` marks an id derived from the file path and keeps it apart from ids authors declare.
+    knowledgeId: `path-${id}`.slice(0, 64),
     name: heading || path.basename(relativePath, ".md"),
     description: `Knowledge document ${relativePath}`,
   };

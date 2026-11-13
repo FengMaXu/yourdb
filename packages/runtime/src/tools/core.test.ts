@@ -52,20 +52,20 @@ describe("model-facing knowledge tools", () => {
       expect(Buffer.byteLength((located.content[0] as { text: string }).text, "utf8")).toBeLessThanOrEqual(16 * 1024);
       expect((located.details as { hits: unknown[] }).hits.length).toBeGreaterThan(0);
 
-      const document = knowledge.getDocument("legacy-large");
+      const document = knowledge.getDocument("path-large");
       const sectionId = document.sections[0]!.sectionId;
-      const whole = await read.execute("whole", { knowledgeId: "legacy-large" } as never, undefined, undefined, undefined as never, {} as never);
+      const whole = await read.execute("whole", { knowledgeId: "path-large" } as never, undefined, undefined, undefined as never, {} as never);
       expect(whole.details).toMatchObject({ mode: "full_document", truncated: true });
       expect(whole.details).not.toHaveProperty("continuationToken");
       expect(Buffer.byteLength((whole.content[0] as { text: string }).text, "utf8")).toBeLessThanOrEqual(16 * 1024);
 
-      const first = await read.execute("first", { knowledgeId: "legacy-large", sectionId } as never, undefined, undefined, undefined as never, {} as never);
+      const first = await read.execute("first", { knowledgeId: "path-large", sectionId } as never, undefined, undefined, undefined as never, {} as never);
       expect(first.details).toMatchObject({ mode: "section", truncated: true, continuationToken: expect.any(String) });
       expect(Buffer.byteLength((first.content[0] as { text: string }).text, "utf8")).toBeLessThanOrEqual(16 * 1024);
       expect((first.details as { endLine: number }).endLine).toBeLessThan(document.sections[0]!.endLine);
       const continuationToken = (first.details as { continuationToken: string }).continuationToken;
-      await expect(read.execute("mismatch", { knowledgeId: "legacy-large", sectionId: "other-section", continuationToken } as never, undefined, undefined, undefined as never, {} as never)).rejects.toThrow("KNOWLEDGE_CONTINUATION_SECTION_MISMATCH");
-      const second = await read.execute("second", { knowledgeId: "legacy-large", continuationToken } as never, undefined, undefined, undefined as never, {} as never);
+      await expect(read.execute("mismatch", { knowledgeId: "path-large", sectionId: "other-section", continuationToken } as never, undefined, undefined, undefined as never, {} as never)).rejects.toThrow("KNOWLEDGE_CONTINUATION_SECTION_MISMATCH");
+      const second = await read.execute("second", { knowledgeId: "path-large", continuationToken } as never, undefined, undefined, undefined as never, {} as never);
       expect(second.details).toMatchObject({ mode: "section", sectionId });
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -79,10 +79,10 @@ describe("model-facing knowledge tools", () => {
       const knowledge = new KnowledgeIndex();
       await knowledge.loadDirectory(root);
       const read = createCoreAgentToolDefinitions({ workspace: new WorkspaceStore(root), knowledge, knowledgeRoot: root }).map((definition) => definition.tool).find((tool) => tool.name === "read_knowledge")!;
-      const sectionId = knowledge.getDocument("legacy-long").sections[0]!.sectionId;
-      const first = await read.execute("first", { knowledgeId: "legacy-long", sectionId } as never, undefined, undefined, undefined as never, {} as never);
+      const sectionId = knowledge.getDocument("path-long").sections[0]!.sectionId;
+      const first = await read.execute("first", { knowledgeId: "path-long", sectionId } as never, undefined, undefined, undefined as never, {} as never);
       const token = (first.details as { continuationToken: string }).continuationToken;
-      const blocked = await read.execute("blocked", { knowledgeId: "legacy-long", continuationToken: token } as never, undefined, undefined, undefined as never, {} as never);
+      const blocked = await read.execute("blocked", { knowledgeId: "path-long", continuationToken: token } as never, undefined, undefined, undefined as never, {} as never);
       expect(blocked.details).toMatchObject({ mode: "section", content: "", truncated: true, oversizedLine: { lineNumber: 2, byteLength: 20 * 1024 } });
       expect(blocked.details).not.toHaveProperty("continuationToken");
     } finally {
@@ -103,13 +103,13 @@ describe("model-facing knowledge tools", () => {
       const tools = createCoreAgentToolDefinitions({ workspace: new WorkspaceStore(root), knowledge, knowledgeRoot: root }).map((definition) => definition.tool);
       const read = tools.find((tool) => tool.name === "read_knowledge")!;
 
-      const short = await read.execute("short", { knowledgeId: "legacy-doc-short" } as never, undefined, undefined, undefined as never, {} as never);
+      const short = await read.execute("short", { knowledgeId: "path-doc-short" } as never, undefined, undefined, undefined as never, {} as never);
       expect(short.details).toMatchObject({ mode: "full_document", lineCount: 3 });
-      const boundary499 = await read.execute("boundary499", { knowledgeId: "legacy-doc-boundary499" } as never, undefined, undefined, undefined as never, {} as never);
+      const boundary499 = await read.execute("boundary499", { knowledgeId: "path-doc-boundary499" } as never, undefined, undefined, undefined as never, {} as never);
       expect(boundary499.details).toMatchObject({ mode: "full_document", lineCount: 499 });
-      const boundary500 = await read.execute("boundary500", { knowledgeId: "legacy-doc-boundary500" } as never, undefined, undefined, undefined as never, {} as never);
+      const boundary500 = await read.execute("boundary500", { knowledgeId: "path-doc-boundary500" } as never, undefined, undefined, undefined as never, {} as never);
       expect(boundary500.details).toMatchObject({ mode: "section_required", lineCount: 500, sections: expect.any(Array), omittedSectionCount: 0 });
-      const manySections = await read.execute("many-sections", { knowledgeId: "legacy-doc-many-sections" } as never, undefined, undefined, undefined as never, {} as never);
+      const manySections = await read.execute("many-sections", { knowledgeId: "path-doc-many-sections" } as never, undefined, undefined, undefined as never, {} as never);
       expect(manySections.details).toMatchObject({ mode: "section_required", lineCount: 500, omittedSectionCount: expect.any(Number) });
       expect((manySections.details as { omittedSectionCount: number }).omittedSectionCount).toBeGreaterThan(0);
       expect(Buffer.byteLength((manySections.content[0] as { text: string }).text, "utf8")).toBeLessThanOrEqual(16 * 1024);
