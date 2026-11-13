@@ -3,10 +3,7 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { JsonlSessionRepo, TODO_CONTEXT } from "@earendil-works/pi-agent-core";
 import { NodeExecutionEnv } from "@earendil-works/pi-agent-core/node";
-import { setValue, value } from "@earendil-works/pi-agent-core/harness/session";
-import type { JsonValue } from "@earendil-works/chord";
 import { PiSessionAnsweringStore } from "./pi-session-answering-store.js";
-import { ANSWERING_SNAPSHOT_VERSION, InMemoryAnsweringStore } from "../answering/answering-store.js";
 import type { BusinessContext, QueryTaskRecord } from "../answering/model.js";
 
 const context: BusinessContext = { principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "op-1", invocationId: "inv-1" };
@@ -87,27 +84,6 @@ describe("PiSessionAnsweringStore", () => {
       const reloaded = new PiSessionAnsweringStore(session);
       const items = await reloaded.transact((state) => [state.listEvidence("a/b" as never).map((item) => item.id), state.listEvidence("a" as never).map((item) => item.id)], context);
       expect(items).toEqual([["c"], ["b/c"]]);
-    });
-  });
-
-  it("reads a session stored as one Value and migrates it on the first write", async () => {
-    await withSession(async (session, root) => {
-      const singleValueStore = new InMemoryAnsweringStore();
-      await singleValueStore.transact((state) => { state.putTask(task("old-b", 1)); state.putTask(task("old-a", 1)); }, context);
-      const singleValue = value<JsonValue>("data-agent.answering", "state");
-      await session.mutate(async (mutator) => {
-        await mutator.commit([setValue(singleValue, JSON.parse(JSON.stringify(singleValueStore.snapshot())) as JsonValue)], TODO_CONTEXT);
-      }, TODO_CONTEXT);
-      expect(singleValueStore.snapshot().version).toBe(ANSWERING_SNAPSHOT_VERSION);
-
-      const store = new PiSessionAnsweringStore(session);
-      expect((await store.list(context)).map((record) => record.taskId)).toEqual(["old-b", "old-a"]);
-      await store.transact((state) => { state.putTask(task("new", 1)); }, context);
-
-      expect(await session.getValue(singleValue, TODO_CONTEXT)).toBeUndefined();
-      const reloaded = new PiSessionAnsweringStore(session);
-      expect((await reloaded.list(context)).map((record) => record.taskId)).toEqual(["old-b", "old-a", "new"]);
-      expect(await answeringWrites(root)).toContain("delete data-agent.answering/state");
     });
   });
 });

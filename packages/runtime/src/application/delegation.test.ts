@@ -150,7 +150,7 @@ describe("Subagent delegation resolver", () => {
       expect(Value.Check(search.parameters, { query: "marker", maxResults: 8 })).toBe(true);
       expect(Value.Check(search.parameters, { query: "marker", maxResults: 9 })).toBe(false);
       const read = tools(resolved).find((tool) => tool.name === "read_knowledge")!;
-      await expect(read.execute("read", { knowledgeId: "legacy-rules" }, undefined, childContext, childInvocation("read"), TODO_CONTEXT)).resolves.toBeTruthy();
+      await expect(read.execute("read", { knowledgeId: "path-rules" }, undefined, childContext, childInvocation("read"), TODO_CONTEXT)).resolves.toBeTruthy();
     });
   });
 
@@ -174,7 +174,7 @@ describe("Subagent delegation resolver", () => {
       const resolved = await resolver.resolve({ key: "x", role: "explorer", task: "read" }, { runId: "run-x", childSessionId: "child-x" }, trusted);
       const read = tools(resolved).find((tool) => tool.name === "read_knowledge")!;
       await expect(read.execute("read", { path: "allowed.md" }, undefined, childContext, childInvocation("read"), TODO_CONTEXT)).rejects.toThrow("SUBAGENT_KNOWLEDGE_INPUT_INVALID");
-      await expect(read.execute("read", { knowledgeId: "legacy-secret" }, undefined, childContext, childInvocation("read"), TODO_CONTEXT)).rejects.toThrow("SUBAGENT_KNOWLEDGE_PATH_NOT_AUTHORIZED");
+      await expect(read.execute("read", { knowledgeId: "path-secret" }, undefined, childContext, childInvocation("read"), TODO_CONTEXT)).rejects.toThrow("SUBAGENT_KNOWLEDGE_PATH_NOT_AUTHORIZED");
     });
   });
 

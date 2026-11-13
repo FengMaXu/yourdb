@@ -10,8 +10,7 @@ await mkdir(output, { recursive: true });
 await cp(source, output, { recursive: true, force: true });
 const hash = createHash("sha256");
 const requiredSqlglotVersion = "30.17.0";
-const executableRelative = process.platform === "win32" ? (await readFile(path.join(output, "python.exe")).then(() => "python.exe").catch(() => "Scripts/python.exe")) : "bin/python";
-const executable = path.join(output, executableRelative);
+const executable = path.join(output, process.platform === "win32" ? "python.exe" : "bin/python");
 const files = await readFile(executable);
 
 // Charts are drawn from ChartSpec, never in Python (ADR-0008), so the pack ships no plotting library.

@@ -13,6 +13,15 @@ export function trimmedText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+/** A frontmatter scalar: trimmed, with one pair of matching outer quotes removed. */
+export function unquoted(value: string): string {
+  const trimmed = value.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 /** JSON text in which a bigint survives as `{ __type: "bigint", value }`. */
 export function bigintSafeJson(value: unknown): string {
   return JSON.stringify(value, (_key, item) => typeof item === "bigint" ? { __type: "bigint", value: item.toString() } : item);
