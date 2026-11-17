@@ -14,7 +14,7 @@ import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigg
 import { cn } from '@/lib/utils';
 import { subagentChildrenOf, type ToolCallState } from './tool-event-state';
 import { type ToolPanelFocusTarget } from './ToolPanel';
-import { extractBasisAudit, formatDisclosureHeadline, formatTurnBasisSummary, isBasisAuditVerified, type ToolData } from './tool-audit';
+import { extractBasisAudit, formatDisclosureHeadline, isBasisAuditVerified, type ToolData } from './tool-audit';
 
 export interface TurnAgentMessage extends TurnAgentLike {
     messageId: string;
@@ -59,19 +59,6 @@ function Dot({ live }: { live: boolean }) {
             aria-hidden="true"
         />
     );
-}
-
-/** Extract a trailing basis note (`口径：...` or `Basis: ...`) so it renders in a structured footer. */
-export function extractTrailingBasis(markdown: string): { body: string; basis?: string } {
-    const trimmed = markdown.trimEnd();
-    const match = /^(?:([\s\S]*?)\n\s*\n)?(?:\*\*)?(?:(?:数据)?口径(?:说明)?|Basis)(?:\*\*)?[：:]\s*([^\n]+)$/.exec(trimmed);
-    if (!match) {
-        return { body: markdown };
-    }
-    return {
-        body: (match[1] ?? '').trimEnd(),
-        basis: match[2].trim(),
-    };
 }
 
 /**
@@ -150,17 +137,14 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
         : (duration ? t('trace.worked').replace('{duration}', duration) : t('trace.process'));
     const hasProcess = visibleSteps.length > 0 || (running && !resultText);
     const bodyId = `trace-${lastAgent?.id ?? 'pending'}`;
-    const { body: answerBody, basis: answerBasis } = resultText
-        ? extractTrailingBasis(resultText)
-        : { body: '', basis: undefined };
-    const synthesizedBasis = !answerBasis && !running && resultText
-        ? formatTurnBasisSummary(turnAudit, lang === 'en')
-        : undefined;
-    const footerBasisNode = answerBasis
-        ? <AgentMarkdown currentSessionId={currentSessionId}>{answerBasis}</AgentMarkdown>
-        : synthesizedBasis;
-    // One line in the answer; the full, per-clause disclosure lives in the Basis panel.
+    const answerBody = resultText;
+    // Three places, three questions: the answer says what the result is (and what could
+    // mislead), the footer says whether to trust it, the Basis panel says how it was defined.
+    // So the footer never restates the definition — only trust state and check findings.
+    const hasAuditBasis = turnAudit.specItems.length > 0 || Boolean(turnAudit.publicationReceipt) || Boolean(turnAudit.sqlText);
+    const showFooter = !running && Boolean(resultText) && hasAuditBasis;
     const footerDisclosure = formatDisclosureHeadline(turnAudit, lang === 'en');
+    const assumedCount = turnAudit.specItems.filter((item) => item.status === 'assumed').length;
 
     const renderStep = (step: TraceStep<A>, index: number) => {
         const live = running && index === visibleSteps.length - 1;
@@ -254,10 +238,10 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
                     <WidgetRenderer key={widget.tool_call_id || widget.widget_id} widget={widget} currentSessionId={currentSessionId} />
                 ))}
 
-                {(footerBasisNode || footerDisclosure) && (
+                {showFooter && (
                     <BasisDisclosureFooter
-                        basis={footerBasisNode}
                         disclosure={footerDisclosure}
+                        assumedCount={assumedCount}
                         onOpenAudit={onOpenToolPanel ? () => onOpenToolPanel({ turnKey, messageId: lastAgent?.messageId, tab: 'basis' }) : undefined}
                         verified={turnVerified}
                     />

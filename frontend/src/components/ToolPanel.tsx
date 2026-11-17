@@ -16,7 +16,6 @@ import {
     extractBasisAudit,
     extractQueryRowCount,
     extractTabularDetails,
-    formatTurnBasisSummary,
     isTurnAuditVerified,
     parseArgsRecord,
     type AuditSpecRow,
@@ -29,7 +28,6 @@ import {
 
 export {
     extractBasisAudit,
-    formatTurnBasisSummary,
     isTurnAuditVerified,
     type AuditSpecRow,
     type AuditStatus,

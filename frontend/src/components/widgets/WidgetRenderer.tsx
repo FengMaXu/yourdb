@@ -5,6 +5,7 @@ import type { FieldMeta } from '@data-agent/contracts';
 import { useLanguage } from '../../context/LanguageContext';
 import { usePreview } from '../../context/PreviewContext';
 import { resolveWorkspaceDownloadUrl, resolveWorkspacePreviewUrl } from '../../utils/resolveInternalUrl';
+import type { DisclosureNote } from '../tool-audit';
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from 'lucide-react';
 
 export type WidgetKind = 'kpi' | 'metric_cards' | 'table' | 'chart' | 'steps' | 'rich_text' | 'echarts' | 'file_link';
@@ -40,6 +41,7 @@ export interface WidgetSpec {
     chartSpec?: unknown;
     dataset?: ChartDataset;
     disclosure?: string;
+    disclosureItems?: DisclosureNote[];
     declaredFields?: string[];
     semanticChecks?: SemanticsCheck[];
     derivedFrom?: string;
@@ -709,7 +711,7 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
             case 'chart':
                 // A transcript can hold charts without a resolved ChartSpec; those are drawn from their data rows.
                 return widget.contractVersion === CURRENT_WIDGET_CONTRACT && widget.chartSpec && widget.dataset
-                    ? <Suspense fallback={<div style={{ height: 360 }} />}><ChartSpecWidget widget={{ title: widget.title, chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} /></Suspense>
+                    ? <Suspense fallback={<div style={{ height: 360 }} />}><ChartSpecWidget widget={{ title: widget.title, chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.disclosureItems ? { disclosureItems: widget.disclosureItems } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} /></Suspense>
                     : renderChart(widget, t);
             case 'steps':
                 return renderSteps(widget, t);

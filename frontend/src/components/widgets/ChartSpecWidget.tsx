@@ -3,6 +3,7 @@ import * as echarts from 'echarts';
 import { Download, Maximize2 } from 'lucide-react';
 import { compileChart, type ChartDataset, type PresentationNotice, type SemanticsCheck } from '@data-agent/charts';
 import BasisDisclosureFooter from '../common/BasisDisclosureFooter';
+import { countAssumedPaths, formatNotesHeadline, type DisclosureNote } from '../tool-audit';
 import { useLanguage } from '../../context/LanguageContext';
 import { useOptionalPreview } from '../../context/PreviewContext';
 
@@ -11,7 +12,10 @@ export interface ChartSpecWidgetData {
     readonly chartSpec: unknown;
     readonly dataset: ChartDataset;
     readonly notices?: readonly PresentationNotice[];
+    /** The source receipts' disclosure summary: model-facing text, not shown here. */
     readonly disclosure?: string;
+    /** The source receipts' disclosure, structured. */
+    readonly disclosureItems?: readonly DisclosureNote[];
     readonly declaredFields?: readonly string[];
     /** Declared semantics the published result's profile makes doubtful. */
     readonly semanticChecks?: readonly SemanticsCheck[];
@@ -28,7 +32,7 @@ const CANVAS_SIZE = { width: '100%', height: 360 } as const;
  * formatters and viewports work without any option crossing the wire.
  */
 const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) => {
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const preview = useOptionalPreview();
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<echarts.ECharts | null>(null);
@@ -92,6 +96,16 @@ const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) 
 
     const notices = compiled.notices;
     const checks = widget.semanticChecks ?? [];
+    // Same reading as the answer footer: a trust badge and one line of what to watch;
+    // the per-clause detail lives in the Basis panel, never as the raw summary here.
+    const items = widget.disclosureItems ?? [];
+    const declared = widget.declaredFields ?? [];
+    const isEn = language === 'en';
+    const headline = formatNotesHeadline(items, isEn, declared.length > 0
+        ? [isEn ? `field meanings declared by the model: ${declared.join(', ')}` : `字段含义由模型声明，未经业务定义核实：${declared.join('、')}`]
+        : []);
+    const assumedCount = countAssumedPaths(items);
+    const flagged = Boolean(widget.disclosure) || items.length > 0 || declared.length > 0;
     return (
         <div>
             <div className="mb-1 flex items-center justify-end gap-1.5">
@@ -119,14 +133,14 @@ const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) 
                 </button>
             </div>
             <div ref={containerRef} data-testid="chart-spec-canvas" style={CANVAS_SIZE} />
-            {(notices.length > 0 || checks.length > 0 || widget.derivedFrom || widget.disclosure || (widget.declaredFields?.length ?? 0) > 0) && (
+            {(notices.length > 0 || checks.length > 0 || widget.derivedFrom || flagged) && (
                 <BasisDisclosureFooter
                     basis={widget.derivedFrom}
                     notices={notices}
                     checks={checks}
-                    disclosure={widget.disclosure}
-                    declaredFields={widget.declaredFields}
-                    verified={!widget.disclosure && !(widget.declaredFields?.length)}
+                    disclosure={headline}
+                    assumedCount={assumedCount}
+                    verified={!flagged}
                 />
             )}
         </div>

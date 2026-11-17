@@ -813,14 +813,27 @@ export function disclosureNoteText(note: DisclosureNote, isEn: boolean, withFiel
  * which the basis summary already states. Undefined when there is nothing more.
  */
 export function formatDisclosureHeadline(audit: BasisAuditData, isEn: boolean): string | undefined {
-    const lines = (audit.publicationReceipt?.notes ?? [])
+    return formatNotesHeadline(audit.publicationReceipt?.notes ?? [], isEn, audit.fanoutFinding ? [audit.fanoutFinding] : []);
+}
+
+/**
+ * The same one line from raw notes (a chart carries its source receipts' notes):
+ * assumptions are left to the badge count; at most two items, then "N more".
+ */
+export function formatNotesHeadline(notes: readonly DisclosureNote[], isEn: boolean, extra: readonly string[] = []): string | undefined {
+    const lines = notes
         .filter((note) => note.kind !== 'assumed')
         .map((note) => disclosureNoteText(note, isEn, true))
         .filter((text): text is string => Boolean(text));
-    if (audit.fanoutFinding) lines.push(audit.fanoutFinding);
+    lines.push(...extra);
     if (lines.length === 0) return undefined;
     const shown = lines.slice(0, 2).join(isEn ? '; ' : '；');
     return lines.length > 2 ? `${shown}${isEn ? `; ${lines.length - 2} more` : `；另有 ${lines.length - 2} 项`}` : shown;
+}
+
+/** How many clauses the notes say were assumed by the model. */
+export function countAssumedPaths(notes: readonly DisclosureNote[]): number {
+    return new Set(notes.filter((note) => note.kind === 'assumed').flatMap((note) => note.paths)).size;
 }
 
 /**
@@ -839,32 +852,4 @@ export function isBasisAuditVerified(audit: BasisAuditData): boolean {
     }
     if (audit.specItems.length === 0) return true;
     return audit.specItems.every((item) => item.status === 'verified');
-}
-
-/** Formats a compact one-line basis summary for BasisDisclosureFooter when no trailing `口径：` text was written. */
-export function formatTurnBasisSummary(audit: BasisAuditData, isEn: boolean): string | undefined {
-    if (audit.specItems.length === 0 && !audit.publicationReceipt) {
-        return undefined;
-    }
-    const findValue = (prefix: string) => audit.specItems.find((item) => item.path === prefix)?.value;
-    const entity = findValue('population.entity') ?? findValue('population');
-    const time = findValue('population.time') ?? findValue('time');
-    const grouping = findValue('grouping');
-    const verifiedCount = audit.specItems.filter((item) => item.status === 'verified').length;
-    const assumedCount = audit.specItems.filter((item) => item.status === 'assumed').length;
-
-    const parts: string[] = [];
-    if (entity) parts.push(entity.split('\n')[0]);
-    if (time) parts.push(time);
-    if (grouping) parts.push(isEn ? `by ${grouping}` : `按 ${grouping} 分组`);
-    if (audit.specItems.length > 0) {
-        if (isEn) {
-            parts.push(`${verifiedCount}/${audit.specItems.length} clauses verified`);
-        } else {
-            parts.push(assumedCount > 0 ? `已核实 ${verifiedCount} 项，含 ${assumedCount} 项假设` : `已核实 ${verifiedCount} 项口径`);
-        }
-    } else if (audit.publicationReceipt) {
-        parts.push(isEn ? `Receipt ${audit.publicationReceipt.receiptId.slice(0, 12)}` : `发布回执 ${audit.publicationReceipt.receiptId.slice(0, 12)}`);
-    }
-    return parts.join(' · ');
 }

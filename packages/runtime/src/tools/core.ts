@@ -48,6 +48,7 @@ async function chartWidget(options: CoreToolOptions, spec: unknown, widgetId: st
     dataset,
     notices: compiled.notices,
     ...(disclosure ? { disclosure } : {}),
+    ...(data.disclosureItems.length > 0 ? { disclosureItems: data.disclosureItems } : {}),
     ...(declared.length > 0 ? { declaredFields: declared } : {}),
     ...(checks.length > 0 ? { semanticChecks: checks } : {}),
   };

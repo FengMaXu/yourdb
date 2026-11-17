@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import AgentTurn, { extractTrailingBasis, type TurnAgentMessage } from '../AgentTurn';
+import AgentTurn, { type TurnAgentMessage } from '../AgentTurn';
 import { LanguageProvider } from '../../context/LanguageContext';
 import { PreviewProvider } from '../../context/PreviewContext';
 
@@ -73,11 +73,7 @@ describe('AgentTurn', () => {
         expect(screen.getAllByRole('button', { expanded: true })).toHaveLength(1);
     });
 
-    it('extracts trailing basis notes and renders them in the structured BasisDisclosureFooter', () => {
-        const parsed = extractTrailingBasis('结论如下。\n\n口径：`fact_sales_monthly.sales_ytd`，按行业汇总。');
-        expect(parsed.body).toBe('结论如下。');
-        expect(parsed.basis).toBe('`fact_sales_monthly.sales_ytd`，按行业汇总。');
-
+    it('keeps a model-written basis line in the answer and shows no footer without query evidence', () => {
         render(
             <LanguageProvider><PreviewProvider><AgentTurn
                 agents={[step('a-basis', { content: '结论如下。\n\n口径：`fact_sales_monthly.sales_ytd`，按行业汇总。' })]}
@@ -90,10 +86,8 @@ describe('AgentTurn', () => {
             /></PreviewProvider></LanguageProvider>,
         );
 
-        expect(screen.getByText('-- BASIS')).toBeInTheDocument();
-        expect(screen.getByText('已核实')).toBeInTheDocument();
-        expect(screen.getByText('fact_sales_monthly.sales_ytd')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /口径与 SQL 依据/ })).toBeInTheDocument();
+        expect(screen.getByText(/口径：/)).toBeInTheDocument();
+        expect(screen.queryByText('-- BASIS')).not.toBeInTheDocument();
     });
 
     it('marks unverified SQL turns as assumed and deep-links trace & basis targets', () => {
@@ -123,7 +117,7 @@ describe('AgentTurn', () => {
             /></PreviewProvider></LanguageProvider>,
         );
 
-        expect(screen.getByText('含模型假设')).toBeInTheDocument();
+        expect(screen.getByText(/含 \d+ 项模型假设/)).toBeInTheDocument();
         fireEvent.click(screen.getByRole('button', { name: /口径与 SQL 依据/ }));
         expect(onOpenToolPanel).toHaveBeenCalledWith({ turnKey: 'turn-1', messageId: 'a2', tab: 'basis' });
 
@@ -195,8 +189,10 @@ describe('AgentTurn', () => {
         expect(screen.queryByRole('button', { name: /show_widget/ })).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: /步骤:set_answer_spec/ })).toBeInTheDocument();
 
+        // The footer states trust only; the definition itself lives in the Basis panel.
         expect(screen.getByText('-- BASIS')).toBeInTheDocument();
         expect(screen.getByText('已核实')).toBeInTheDocument();
-        expect(screen.getByText(/已核实 3 项口径/)).toBeInTheDocument();
+        expect(screen.queryByText(/已核实 3 项口径/)).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /口径与 SQL 依据/ })).toBeInTheDocument();
     });
 });
