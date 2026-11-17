@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { AGENT_ICON_SVG, AGENT_ROW, MESSAGE_COLUMN, USER_ROW, agentIcon } from './chat-styles';
 import {
+    ArrowDown,
     Loader2,
     Send,
     Square,
     Paperclip,
     Plus,
+    Upload,
     X,
     ChevronRight,
 } from 'lucide-react';
@@ -21,9 +23,10 @@ import {
 import { answerClarificationViaRuntime, getSessionStateViaRuntime, getTranscriptViaRuntime, steerAgentViaRuntime, stopAgentViaRuntime, type RuntimeResyncReason, type RuntimeSessionState } from '../api/runtime-client';
 import { attachRunViaRuntime, sendChatViaRuntime, type ChatStreamOptions, type RuntimeChatHandle } from '../api/chat-events';
 import { isModelNotConfiguredError } from './ModelSetupPrompt';
-import type { ToolData } from './ToolPanel';
+import type { ToolData, ToolPanelFocusTarget } from './ToolPanel';
+import { asRecord, extractQueryRowCount, specPathLabel } from './tool-audit';
 import { useSession, type Session, type Task } from '../hooks/useSession';
-import { useLanguage } from '../context/LanguageContext';
+import { useLanguage, type Language } from '../context/LanguageContext';
 import AgentOrbitIcon from './AgentOrbitIcon';
 import { IdCard } from 'lucide-react';
 import { isAgentMessageEmpty } from '../utils/agent-message';
@@ -79,7 +82,7 @@ type ChatMessage = AgentMessage | UserMessage;
 
 interface ChatAreaProps {
     onUpdateTools?: (tools: ToolData[]) => void;
-    onOpenToolPanel?: () => void;
+    onOpenToolPanel?: (target?: Omit<ToolPanelFocusTarget, 'seq'>) => void;
     onToggleToolPanel?: () => void;
     isToolPanelOpen?: boolean;
     hasTools?: boolean;
@@ -214,7 +217,140 @@ const dedupeSkillActivations = (skills: SkillActivation[]) => {
     });
 };
 
-export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string) => {
+const formatBusinessToolLabel = (tool: ToolCallState, language: Language): string | null => {
+    if (tool.status === 'error' || tool.isError) return null;
+    const isEn = language === 'en';
+    const args = asRecord(tool.arguments);
+    const details = asRecord(tool.details);
+    const done = tool.status === 'done';
+
+    if (tool.name === 'search_knowledge') {
+        const query = typeof args?.query === 'string' ? args.query.trim() : '';
+        if (isEn) return `${done ? 'Searched knowledge' : 'Searching knowledge'}${query ? `: ${query}` : ''}`;
+        return `${done ? '检索知识库' : '正在检索知识库'}${query ? `：${query}` : ''}`;
+    }
+    if (tool.name === 'read_knowledge') {
+        const path = typeof args?.path === 'string' ? args.path.trim() : '';
+        if (isEn) return `${done ? 'Read knowledge' : 'Reading knowledge'}${path ? `: ${path}` : ''}`;
+        return `${done ? '读取知识文档' : '正在读取知识文档'}${path ? `：${path}` : ''}`;
+    }
+    if (tool.name === 'subagent') {
+        const tasks = Array.isArray(args?.tasks) ? args.tasks : [];
+        const keys = tasks.map((item: any) => item?.key).filter((k: unknown): k is string => typeof k === 'string' && k.trim().length > 0);
+        const reviewerOnly = tasks.length > 0 && tasks.every((item: any) => item?.role === 'reviewer');
+        const keySuffix = keys.length > 0 ? (isEn ? ` (${keys.join(', ')})` : `（${keys.join('、')}）`) : '';
+        if (isEn) {
+            if (reviewerOnly) return `${done ? 'Reviewed query candidate' : 'Reviewing query candidate'}${keySuffix}`;
+            return `${done ? 'Collected docs & schema' : 'Collecting docs & schema'}${keySuffix}`;
+        }
+        if (reviewerOnly) return `${done ? '复核查询结果与口径' : '正在复核查询结果'}${keySuffix}`;
+        return `${done ? '并行查阅文档与库表结构' : '正在查阅文档与库表结构'}${keySuffix}`;
+    }
+    if (tool.name === 'set_answer_spec') {
+        const fieldsArgs = asRecord(args?.fields);
+        const argPaths = fieldsArgs ? Object.keys(fieldsArgs) : [];
+        if (!done) {
+            const countSuffix = argPaths.length > 0 ? (isEn ? ` (${argPaths.length})` : `（${argPaths.length} 项）`) : '';
+            return isEn ? `Setting Answer Spec${countSuffix}` : `正在设定统计口径${countSuffix}`;
+        }
+        const openCount = Array.isArray(details?.open) ? details.open.length : 0;
+        const undeclaredCount = Array.isArray(details?.undeclared) ? details.undeclared.length : 0;
+        if (openCount > 0) {
+            return isEn ? `Identified open spec fields (${openCount} pending probe)` : `梳理口径歧义与待定项（${openCount} 项待验证）`;
+        }
+        if (undeclaredCount > 0) {
+            return isEn ? `Set base Answer Spec (${undeclaredCount} remaining)` : `设定统计范围与基础口径（尚余 ${undeclaredCount} 项）`;
+        }
+        const revisionFields = Array.isArray(details?.fields) ? details.fields : [];
+        if (argPaths.length === 1) {
+            const pathLabel = specPathLabel(argPaths[0], isEn);
+            return isEn ? `Confirmed spec decision: ${pathLabel}` : `确认关键口径决策：${pathLabel}`;
+        }
+        const activeCount = revisionFields.filter((f: any) => f?.status && f.status !== 'not_applicable').length;
+        if (activeCount > 0) {
+            return isEn ? `Locked Answer Spec (${activeCount} clauses ready)` : `锁定统计口径与指标公式（${activeCount} 项已就绪）`;
+        }
+        return isEn ? `Set Answer Spec (${argPaths.length} clauses)` : `设定统计口径（${argPaths.length} 项）`;
+    }
+    if (tool.name === 'begin_query_task') {
+        return isEn
+            ? (done ? 'Started query audit task' : 'Starting query audit task')
+            : (done ? '建立查询审计任务' : '正在建立查询审计任务');
+    }
+    if (tool.name === 'query_database') {
+        const rowInfo = extractQueryRowCount(tool);
+        const rows = rowInfo?.count;
+        const probe = asRecord(args?.probe);
+        const countLabel = rows !== undefined
+            ? (isEn ? ` (${rows}${rowInfo?.truncated ? '+' : ''} rows)` : `（返回 ${rows}${rowInfo?.truncated ? '+' : ''} 行）`)
+            : '';
+        if (probe && typeof probe.path === 'string') {
+            const label = specPathLabel(probe.path, isEn);
+            return isEn
+                ? `${done ? 'Probed candidate spec' : 'Probing candidate spec'}: ${label}${countLabel}`
+                : `${done ? '探针比对候选口径' : '正在探针验证'}：${label}${countLabel}`;
+        }
+        if (args?.kind === 'exploration') {
+            return isEn
+                ? `${done ? 'Explored schema & values' : 'Exploring schema & values'}${countLabel}`
+                : `${done ? '探测表结构与数据分布' : '正在探测数据分布'}${countLabel}`;
+        }
+        if (isEn) {
+            return `${done ? 'Queried database' : 'Querying database'}${countLabel}`;
+        }
+        return `${done ? '执行数据查询' : '正在执行数据查询'}${countLabel}`;
+    }
+    if (tool.name === 'publish_query_result' || tool.name === 'export_query') {
+        const isCsv = tool.name === 'export_query' || details?.format === 'csv' || args?.format === 'csv';
+        const hasDisclosure = Boolean(details?.disclosure) || Boolean(tool.result?.includes('[DISCLOSURE]'));
+        const rowCount = asRecord(details?.physicalProfile)?.rowCount;
+        const rowsText = typeof rowCount === 'number'
+            ? (isEn ? ` (${rowCount} rows)` : `（${rowCount} 行）`)
+            : '';
+        if (isEn) {
+            if (isCsv) return `${done ? 'Verified & exported CSV' : 'Exporting CSV'}${rowsText}`;
+            return `${done ? 'Verified & published result' : 'Publishing result'}${hasDisclosure ? ' (with disclosure)' : ''}`;
+        }
+        if (isCsv) return `${done ? '核验并导出完整数据 (CSV)' : '正在导出完整数据 (CSV)'}${rowsText}`;
+        return `${done ? '核验口径并发布查询结果' : '正在核验并发布结果'}${hasDisclosure ? '（附口径披露）' : ''}`;
+    }
+    if (tool.name === 'inspect_answer') {
+        return isEn
+            ? (done ? 'Inspected Answer Spec status' : 'Inspecting Answer Spec status')
+            : (done ? '核查口径修订与发布状态' : '正在核查口径状态');
+    }
+    if (tool.name === 'ask_user_clarification') {
+        return isEn
+            ? (done ? 'Clarified ambiguity with user' : 'Waiting for user clarification')
+            : (done ? '向用户确认口径歧义' : '等待用户澄清口径');
+    }
+    if (tool.name === 'list_tables' || tool.name === 'describe_schema') {
+        return isEn
+            ? (done ? 'Inspected database schema' : 'Inspecting database schema')
+            : (done ? '查阅数据库表结构' : '正在查阅数据库表结构');
+    }
+    if (tool.name === 'show_widget') {
+        const widget = asRecord(details?.widget);
+        const kind = (typeof widget?.kind === 'string' ? widget.kind : typeof args?.kind === 'string' ? args.kind : typeof args?.type === 'string' ? args.type : '').toLowerCase();
+        const title = typeof widget?.title === 'string' ? widget.title.trim() : typeof args?.title === 'string' ? args.title.trim() : '';
+        if (isEn) {
+            return `${done ? 'Rendered' : 'Rendering'} ${kind || 'widget'}${title ? `: ${title}` : ''}`;
+        }
+        const kindLabel = kind === 'metric_cards' || kind === 'kpi'
+            ? '指标卡'
+            : kind === 'table'
+                ? '数据表'
+                : kind === 'chart'
+                    ? '图表'
+                    : kind === 'file_link'
+                        ? '文件卡片'
+                        : '视图组件';
+        return `${done ? '生成' : '正在生成'}${kindLabel}${title ? `：${title}` : ''}`;
+    }
+    return null;
+};
+
+export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string, language: Language = 'zh') => {
     if (tool.progressText) {
         return tool.progressText;
     }
@@ -225,6 +361,10 @@ export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string
         if (typeof details?.nativeSkill === 'string' && details.nativeSkill.trim()) {
             return t('chat.skillLoaded').replace('{name}', details.nativeSkill);
         }
+    }
+    const businessLabel = formatBusinessToolLabel(tool, language);
+    if (businessLabel) {
+        return businessLabel;
     }
     const key = tool.status === 'done' ? 'chat.toolCompleted' : tool.status === 'error' ? 'chat.toolFailed' : 'chat.toolCalling';
     return t(key).replace('{name}', tool.name);
@@ -257,7 +397,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         runActivity,
     } = useSession();
 
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     // Until a model and a database are both set up, the empty page walks the user through them first.
     const { ready: setupDone, usingSample } = useReadiness();
 
@@ -275,6 +415,10 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     const [uploadError, setUploadError] = useState(false);
     const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
     const [clarificationInput, setClarificationInput] = useState('');
+    const [selectedClarificationOption, setSelectedClarificationOption] = useState<string | null>(null);
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+    const dragDepthRef = useRef(0);
 
     const currentSessionIdRef = useRef(currentSession.id);
     const activeAgentMessageIdRef = useRef<string | null>(null);
@@ -366,6 +510,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         replaceWithSnapshot(currentTranscript);
         dispatchRun({ type: 'session_reset' });
         setClarificationInput('');
+        setSelectedClarificationOption(null);
         onUpdateToolsRef.current?.([]);
 
         // A run may still be going (or waiting on a clarification): resume following it.
@@ -402,28 +547,32 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     }, [messages, setCurrentTranscript]);
 
     useEffect(() => {
-        const allTools = messages.flatMap((message) => {
-            if (message.role !== 'agent') return [];
-            return Object.values(message.toolCallsById).map((tool) => ({
-                toolCallId: tool.toolCallId,
-                messageId: message.messageId,
-                name: tool.name,
-                args: tool.arguments,
-                result: tool.result,
-                details: tool.details,
-                status: tool.status,
-                widgetId: tool.widgetId,
-                widget: tool.widgetId ? message.widgetsById[tool.widgetId] : undefined,
-            }));
+        const turns = groupIntoTurns<UserMessage, AgentMessage>(messages);
+        const allTools = turns.flatMap((item) => {
+            if (item.kind !== 'turn') return [];
+            return item.agents.flatMap((message) => (
+                Object.values(message.toolCallsById).map((tool) => ({
+                    toolCallId: tool.toolCallId,
+                    messageId: message.messageId,
+                    turnKey: item.key,
+                    name: tool.name,
+                    args: tool.arguments,
+                    result: tool.result,
+                    details: tool.details,
+                    status: tool.status,
+                    widgetId: tool.widgetId,
+                    widget: tool.widgetId ? message.widgetsById[tool.widgetId] : undefined,
+                }))
+            ));
         });
         onUpdateToolsRef.current?.(allTools);
     }, [messages]);
 
     useEffect(() => {
         if (shouldAutoScroll) {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'instant' : 'smooth' });
         }
-    }, [messages, shouldAutoScroll, pendingClarification]);
+    }, [messages, shouldAutoScroll, pendingClarification, isStreaming]);
 
     useEffect(() => {
         const textarea = textareaRef.current;
@@ -531,15 +680,14 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         fileInputRef.current?.click();
     };
 
-    const handleUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-        const files = event.target.files;
-        if (!files || files.length === 0) return;
+    const uploadFiles = async (files: File[]) => {
+        if (files.length === 0 || isUploading || isStreaming || Boolean(pendingClarification)) return;
 
         setIsUploading(true);
         setUploadError(false);
         const uploadedPaths: string[] = [];
         try {
-            for (const file of Array.from(files)) {
+            for (const file of files) {
                 const uploaded = await uploadWorkspaceFile(file, currentSession.id);
                 uploadedPaths.push(uploaded.relative_path);
             }
@@ -550,17 +698,23 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             // Keep whatever did upload attached, even when a later file failed.
             if (uploadedPaths.length > 0) setAttachedFiles([...attachedFiles, ...uploadedPaths]);
             setIsUploading(false);
-            event.target.value = '';
         }
     };
 
-    const handleSend = async (overrideContent?: string) => {
+    const handleUploadChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const files = event.target.files ? Array.from(event.target.files) : [];
+        event.target.value = '';
+        await uploadFiles(files);
+    };
+
+    /** `retry` re-sends an earlier prompt with its own attachments and leaves the current draft alone. */
+    const handleSend = async (overrideContent?: string, retry?: { attachments: string[] }) => {
         const content = (overrideContent ?? inputValue).trim();
         if (!content) return;
 
         void currentSession.id;
         // Attachments go with a new prompt; a steer while running carries text only.
-        const attachments = isStreaming ? [] : [...attachedFiles];
+        const attachments = isStreaming ? [] : retry ? [...retry.attachments] : [...attachedFiles];
         const userMsg: UserMessage = {
             id: `user-${Date.now()}`,
             role: 'user',
@@ -570,7 +724,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         setMessages((prev) => [...prev, userMsg]);
-        setInputValue('');
+        if (!retry) setInputValue('');
         setShouldAutoScroll(true);
 
         if (isStreaming) {
@@ -585,12 +739,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
 
         dispatchRun({ type: 'run_started' });
         setClarificationInput('');
+        setSelectedClarificationOption(null);
         activeAgentMessageIdRef.current = null;
         pendingAgentMessageIdRef.current = `pending-${Date.now()}`;
         promoteStage(pendingAgentMessageIdRef.current, 'sent');
         flushBufferedMessage(pendingAgentMessageIdRef.current);
 
-        if (attachments.length > 0) clearAttachedFiles();
+        if (!retry && attachments.length > 0) clearAttachedFiles();
         followRun(currentSession.id, (onEvent, onError, onFinish, sessionId, stream) => sendChatViaRuntime(content, onEvent, onError, onFinish, sessionId, stream, attachments));
     };
 
@@ -625,6 +780,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         let streamLostEvents = lostEvents;
+        // eslint-disable-next-line prefer-const
         let handle!: RuntimeChatHandle;
         const current = () => streamHandleRef.current === handle && currentSessionIdRef.current === runSessionId;
         handle = start(
@@ -648,6 +804,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         },
                     });
                     setClarificationInput('');
+                    setSelectedClarificationOption(null);
                     setShouldAutoScroll(true);
                     return;
                 }
@@ -655,6 +812,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 if (event.type === 'clarification_settled') {
                     dispatchRun({ type: 'clarification_settled', clarificationId: event.clarification_id });
                     setClarificationInput('');
+                    setSelectedClarificationOption(null);
                     return;
                 }
 
@@ -687,6 +845,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 if (event.type === 'done') {
                     dispatchRun({ type: 'terminal_reported', reason: event.reason });
                     setClarificationInput('');
+                    setSelectedClarificationOption(null);
                     markTerminalReason(event.reason);
                     flushAllBuffers();
                     return;
@@ -992,17 +1151,22 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         endRun(reason === 'restarted' ? 'interrupted' : lastAgent?.terminalReason === 'error' ? 'error' : null, true);
     };
 
+    const mainComposerLocked = Boolean(pendingClarification);
+    const showStopButton = isStreaming && (mainComposerLocked || !inputValue.trim());
+    const effectiveClarificationAnswer = (selectedClarificationOption !== null ? selectedClarificationOption : clarificationInput).trim();
+
     const handlePrimaryAction = async () => {
-        if (isStreaming && !inputValue.trim()) {
+        if (showStopButton) {
             await handleStop();
             return;
         }
+        if (mainComposerLocked) return;
         await handleSend();
     };
 
     const handleSubmitClarification = async (answerText?: string) => {
         if (!pendingClarification || isSubmittingClarification) return;
-        const answer = (answerText ?? clarificationInput).trim();
+        const answer = (answerText ?? (selectedClarificationOption !== null ? selectedClarificationOption : clarificationInput)).trim();
         if (!answer) return;
 
         dispatchRun({ type: 'clarification_submitting', submitting: true });
@@ -1011,6 +1175,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
             await answerClarificationViaRuntime(pendingClarification.clarification_id, answer, currentSession.id);
             dispatchRun({ type: 'clarification_answered', clarificationId: pendingClarification.clarification_id });
             setClarificationInput('');
+            setSelectedClarificationOption(null);
         } catch (err) {
             console.error('Failed to answer clarification:', err);
         } finally {
@@ -1019,6 +1184,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (mainComposerLocked) return;
         // Enter that confirms an IME candidate (pinyin and the like) is not a send.
         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
@@ -1058,9 +1224,50 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         ? `${t('chat.requestFailed')} ${t('chat.retryHint')}`
         : turnNotice || latestAgentMessage?.statusNotice || latestAgentMessage?.retryNotice;
 
+    const handleDragEnter = (event: React.DragEvent<HTMLElement>) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        dragDepthRef.current += 1;
+        if (!isStreaming && !mainComposerLocked) {
+            setIsDraggingOver(true);
+        }
+    };
+
+    const handleDragOver = (event: React.DragEvent<HTMLElement>) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+    };
+
+    const handleDragLeave = (event: React.DragEvent<HTMLElement>) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+        if (dragDepthRef.current === 0) {
+            setIsDraggingOver(false);
+        }
+    };
+
+    const handleDrop = (event: React.DragEvent<HTMLElement>) => {
+        if (!event.dataTransfer.types.includes('Files')) return;
+        event.preventDefault();
+        dragDepthRef.current = 0;
+        setIsDraggingOver(false);
+        if (event.dataTransfer.files.length > 0) {
+            void uploadFiles(Array.from(event.dataTransfer.files));
+        }
+    };
+
     return (
-        <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
-            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:px-3">
+        <main
+            id="main-content"
+            className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent"
+            aria-labelledby="chat-page-title"
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+        >
+            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:pr-3 max-[720px]:pl-11">
                 <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
                 <div className="flex min-w-0 flex-auto items-center gap-2 overflow-hidden max-[480px]:gap-[5px]">
                     <span className="-ml-1 inline-flex items-center justify-center p-1 text-body" aria-hidden="true">
@@ -1095,6 +1302,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 {liveStatus}
             </div>
 
+            <div className="relative flex min-h-0 flex-1 flex-col">
             <div
                 ref={chatContainerRef}
                 onScroll={handleScroll}
@@ -1159,21 +1367,26 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                     </ul>
                                 )}
                             </div>
-                            <div className="mt-[7.5px] flex size-8 shrink-0 items-center justify-center rounded-xl bg-[linear-gradient(145deg,var(--foreground),var(--body-strong))] text-sm font-semibold text-white shadow-[0_12px_24px_-18px_rgba(28,25,23,0.9)]">U</div>
                         </div>
-                    ) : (
-                        <AgentTurn
-                            key={item.key}
-                            agents={item.agents}
-                            running={isStreaming && index === chatItems.length - 1}
-                            startedAt={item.startedAt}
-                            currentSessionId={currentSession.id}
-                            connectionNotice={index === chatItems.length - 1 ? turnNotice : ''}
-                            toolLabel={(tool) => getToolHintLabel(tool, t)}
-                            skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
-                            onOpenToolPanel={onOpenToolPanel}
-                        />
-                    )
+                    ) : (() => {
+                        const prevItem = index > 0 ? chatItems[index - 1] : undefined;
+                        const retryPrompt = prevItem?.kind === 'user' ? prevItem.message.content : undefined;
+                        return (
+                            <AgentTurn
+                                key={item.key}
+                                turnKey={item.key}
+                                agents={item.agents}
+                                running={isStreaming && index === chatItems.length - 1}
+                                startedAt={item.startedAt}
+                                currentSessionId={currentSession.id}
+                                connectionNotice={index === chatItems.length - 1 ? turnNotice : ''}
+                                toolLabel={(tool) => getToolHintLabel(tool, t, language)}
+                                skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
+                                onOpenToolPanel={onOpenToolPanel}
+                                onRetry={retryPrompt && !isStreaming && !mainComposerLocked ? () => void handleSend(retryPrompt, { attachments: prevItem?.kind === 'user' ? prevItem.message.attachments ?? [] : [] }) : undefined}
+                            />
+                        );
+                    })()
                 ))}
 
                 {pendingClarification && (
@@ -1188,17 +1401,16 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                 {pendingClarification.options.length > 0 && (
                                     <div className="mt-2.5 flex flex-col gap-1.5" role="radiogroup" aria-label={t('chat.clarificationOptions')}>
                                         {pendingClarification.options.map((option) => {
-                                            const isSelected = clarificationInput === option;
+                                            const isSelected = selectedClarificationOption === option;
                                             return (
                                                 <button
                                                     key={option}
                                                     type="button"
                                                     role="radio"
                                                     aria-checked={isSelected}
-                                                    className={`group/option flex w-full cursor-pointer items-start gap-2.5 rounded-[var(--radius-sm)] border bg-[var(--frame-surface)] px-3 py-2 text-left text-[length:var(--font-size-body-sm)] leading-normal text-foreground transition-[border-color,background-color] disabled:cursor-not-allowed disabled:opacity-58 motion-reduce:transition-none ${isSelected ? 'border-[rgba(194,65,12,0.36)]' : 'border-border enabled:hover:border-border-strong'}`}
+                                                    className={`group/option flex w-full cursor-pointer items-start gap-2.5 rounded-[var(--radius-sm)] border px-3 py-2 text-left text-[length:var(--font-size-body-sm)] leading-normal text-foreground transition-[border-color,background-color] disabled:cursor-not-allowed disabled:opacity-58 motion-reduce:transition-none ${isSelected ? 'border-brand/50 bg-brand-soft' : 'border-border bg-[var(--frame-surface)] enabled:hover:border-border-strong'}`}
                                                     onClick={() => {
-                                                        setClarificationInput(option);
-                                                        clarificationInputRef.current?.focus();
+                                                        setSelectedClarificationOption((prev) => (prev === option ? null : option));
                                                     }}
                                                     disabled={isSubmittingClarification}
                                                 >
@@ -1218,14 +1430,14 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                         onChange={(e) => setClarificationInput(e.target.value)}
                                         onKeyDown={handleClarificationKeyDown}
                                         aria-label={t('chat.inputAnswer')}
-                                        placeholder={pendingClarification.options.length > 0 ? t('chat.clarificationEditHint') : t('chat.inputAnswer')}
+                                        placeholder={selectedClarificationOption !== null ? t('chat.clarificationOptionSelectedHint') : t('chat.inputAnswer')}
                                         disabled={isSubmittingClarification}
                                     />
                                     <button
                                         type="button"
-                                        className={sendButton(clarificationInput.trim() ? 'ready' : 'idle', 'size-8 rounded-lg')}
+                                        className={sendButton(effectiveClarificationAnswer ? 'ready' : 'idle', 'size-8 rounded-lg')}
                                         onClick={() => void handleSubmitClarification()}
-                                        disabled={isSubmittingClarification || !clarificationInput.trim()}
+                                        disabled={isSubmittingClarification || !effectiveClarificationAnswer}
                                         aria-label={isSubmittingClarification ? t('chat.submitting') : t('chat.submit')}
                                     >
                                         <Send size={16} aria-hidden="true" />
@@ -1237,6 +1449,24 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                 )}
 
                 <div ref={messagesEndRef} />
+            </div>
+            {!shouldAutoScroll && messages.length > 0 && (
+                <button
+                    type="button"
+                    onClick={() => {
+                        setShouldAutoScroll(true);
+                        if (chatContainerRef.current) {
+                            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+                        } else {
+                            messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+                        }
+                    }}
+                    className="absolute bottom-3 left-1/2 z-10 inline-flex -translate-x-1/2 cursor-pointer items-center gap-1.5 rounded-full border border-border bg-white/95 px-3 py-1.5 text-[0.78rem] font-medium text-foreground shadow-[0_6px_20px_-8px_rgba(28,25,23,0.35)] backdrop-blur-xs transition-[transform,border-color,background-color] hover:border-border-strong hover:bg-paper active:scale-[0.97] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand motion-reduce:transition-none"
+                >
+                    <ArrowDown size={13} aria-hidden="true" />
+                    <span>{t('chat.scrollToBottom')}</span>
+                </button>
+            )}
             </div>
 
             <div className="bg-[var(--frame-surface)] px-11 pt-5 pb-7 max-[1100px]:px-7 max-[1100px]:pt-6 max-[1100px]:pb-8 max-[720px]:p-3">
@@ -1277,7 +1507,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         type="button"
                         className="inline-flex size-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border-0 bg-transparent text-muted-foreground transition-[background-color,color,box-shadow,transform] disabled:cursor-not-allowed disabled:opacity-58 enabled:active:scale-[0.97] motion-reduce:transition-none motion-reduce:enabled:active:scale-100 pointer-fine:enabled:hover:bg-[rgba(120,53,15,0.07)] pointer-fine:enabled:hover:text-foreground"
                         onClick={handleUploadClick}
-                        disabled={isUploading || isStreaming}
+                        disabled={isUploading || isStreaming || mainComposerLocked}
                         title={t('chat.uploadTooltip')}
                         aria-label={t('chat.uploadTooltip')}
                     >
@@ -1285,25 +1515,41 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                     </button>
                     <textarea
                         ref={textareaRef}
-                        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 text-[15px] leading-normal wrap-anywhere whitespace-pre-wrap text-foreground outline-none placeholder:text-muted-foreground"
-                        placeholder={isStreaming ? (t('chat.steerPlaceholder') || '执行中补充说明...') : t('chat.placeholder')}
+                        className="max-h-40 min-h-10 flex-1 resize-none overflow-y-auto border-0 bg-transparent px-1 py-2 text-[15px] leading-normal wrap-anywhere whitespace-pre-wrap text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+                        placeholder={mainComposerLocked ? t('chat.clarificationLockedPlaceholder') : isStreaming ? (t('chat.steerPlaceholder') || '执行中补充说明...') : t('chat.placeholder')}
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
+                        onPaste={(event) => {
+                            // Only a pure file paste becomes an upload. Spreadsheet copies carry text plus a
+                            // bitmap and must paste as text; while uploads are blocked, let the paste through.
+                            const clipboard = event.clipboardData;
+                            if (!clipboard?.files?.length || clipboard.getData('text/plain')) return;
+                            if (isUploading || isStreaming || Boolean(pendingClarification)) return;
+                            event.preventDefault();
+                            void uploadFiles(Array.from(clipboard.files));
+                        }}
+                        disabled={mainComposerLocked}
                         rows={1}
                     />
                     <button
                         type="button"
-                        className={sendButton(isStreaming && !inputValue.trim() ? 'stop' : inputValue.trim() ? 'ready' : 'idle')}
+                        className={sendButton(showStopButton ? 'stop' : !mainComposerLocked && inputValue.trim() ? 'ready' : 'idle')}
                         onClick={() => void handlePrimaryAction()}
-                        disabled={isUploading || (!isStreaming && !inputValue.trim())}
-                        title={isStreaming && !inputValue.trim() ? t('chat.stop') : t('chat.send')}
-                        aria-label={isStreaming && !inputValue.trim() ? t('chat.stop') : t('chat.send')}
+                        disabled={isUploading || (mainComposerLocked ? !isStreaming : (!isStreaming && !inputValue.trim()))}
+                        title={showStopButton ? t('chat.stop') : t('chat.send')}
+                        aria-label={showStopButton ? t('chat.stop') : t('chat.send')}
                     >
-                        {isStreaming && !inputValue.trim() ? <Square size={18} /> : <Send size={18} />}
+                        {showStopButton ? <Square size={18} /> : <Send size={18} />}
                     </button>
                 </div>
             </div>
+            {isDraggingOver && (
+                <div className="pointer-events-none absolute inset-3 z-30 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-brand bg-brand-soft/90 text-brand backdrop-blur-[2px]">
+                    <Upload size={26} aria-hidden="true" />
+                    <span className="text-[0.95rem] font-semibold">{t('chat.dropFilesHint')}</span>
+                </div>
+            )}
         </main>
     );
 };
@@ -1328,7 +1574,7 @@ const ChatArea: React.FC<ChatAreaProps> = (props) => {
 
     return (
         <main id="main-content" className="relative flex h-full min-w-0 flex-auto flex-col overflow-hidden bg-transparent" aria-labelledby="chat-page-title">
-            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:px-3">
+            <header className="flex h-14 items-center justify-between gap-3 border-b border-border bg-[var(--frame-surface)] px-6 text-[0.85rem] font-medium text-body max-[720px]:pr-3 max-[720px]:pl-11">
                 <h1 id="chat-page-title" className="sr-only">{t('chat.pageTitle')}</h1>
                 <div className="flex min-w-0 flex-auto items-center gap-2 overflow-hidden max-[480px]:gap-[5px]">
                     <span className="-ml-1 inline-flex items-center justify-center p-1 text-body" aria-hidden="true">

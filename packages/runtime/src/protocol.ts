@@ -298,11 +298,21 @@ export class DataAgentRuntime implements ApplicationCommandHost {
       const given = (command.command as { profile: Record<string, unknown> }).profile;
       // An empty profile means "the model chats use now", which on the desktop includes a key the renderer never sees.
       let profile = given;
-      if (Object.keys(given).length === 0 && this.savedModelProfile) {
+      const givenKey = String(given.api_key ?? "").trim();
+      if (!givenKey && this.savedModelProfile) {
         try {
-          profile = await this.savedModelProfile(context);
+          const saved = await this.savedModelProfile(context);
+          if (Object.keys(given).length === 0) {
+            profile = saved;
+          } else if (saved.provider === given.provider && String(saved.base_url ?? "") === String(given.base_url ?? "")) {
+            // Unsaved edits (e.g. the model name) tested with the stored key of the same endpoint.
+            profile = { ...given, api_key: saved.api_key };
+          }
         } catch (error) {
-          return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: false, message: error instanceof Error ? error.message : String(error) } };
+          // Only "test the saved model" depends on the lookup; an edited profile goes to the tester as given.
+          if (Object.keys(given).length === 0) {
+            return { protocolVersion: ProtocolVersion, requestId: command.requestId, response: { type: "test.result", success: false, message: error instanceof Error ? error.message : String(error) } };
+          }
         }
       }
       const result = await this.llmTester.test(profile);

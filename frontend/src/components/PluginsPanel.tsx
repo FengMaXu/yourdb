@@ -72,7 +72,6 @@ function RevealButton({ label, onClick, disabled, children }: { label: string; o
 const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings }) => {
     const { t } = useLanguage();
     const [mcpTab, setMcpTab] = useState('已安装');
-    const [skillsTab, setSkillsTab] = useState('已安装');
 
     const [mcpConfig, setMcpConfig] = useState<MCPConfig>({ servers: [] });
     const [mcpServers, setMcpServers] = useState<MCPServerStatus[]>([]);
@@ -367,7 +366,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
 
     return (
         <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="plugins-page-title">
-            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
+            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:pr-4 max-[720px]:pl-12 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
                 <h1 id="plugins-page-title">{tab === 'MCP' ? t('plugins.mcp') : t('plugins.skills')}</h1>
             </header>
 
@@ -481,8 +480,6 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                 {/* Skills */}
                 {tab === 'Skills' && (
                     <div className="flex min-h-0 flex-1 flex-col">
-                        <PaneTabs label={t('plugins.skills')} value={skillsTab} onChange={setSkillsTab} items={[{ value: '已安装', label: t('plugins.installed') }, { value: '设置', label: t('plugins.settings') }]} />
-
                         <div className="mb-6 flex flex-wrap items-start justify-between gap-3 min-[721px]:flex-nowrap min-[721px]:items-center min-[721px]:gap-4">
                             <div className="relative w-[min(320px,100%)] [&_input]:pl-9 [&_svg]:pointer-events-none [&_svg]:absolute [&_svg]:top-1/2 [&_svg]:left-3 [&_svg]:-translate-y-1/2 [&_svg]:text-faint">
                                 <Search className="size-[15px]" aria-hidden="true" />
@@ -522,7 +519,7 @@ const PluginsPanel: React.FC<PluginsPanelProps> = ({ tab, onOpenDatabaseSettings
                                                 <p className={cn(UI.mono, 'mt-2.5 mb-0 text-[0.8rem] leading-[1.6] break-all text-body [&_span]:text-muted-foreground')}><span>{t('plugins.path')}：</span>{skill.location}</p>
                                             )}
                                         </div>
-                                        <span className={UI.pill}>{skill.source_scope}</span>
+                                        <span className={cn(UI.pill, 'w-fit self-start')}>{skill.source_scope}</span>
                                     </li>
                                 ))}
                             </ul>

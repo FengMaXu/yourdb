@@ -36,10 +36,13 @@ import {
 } from '../api/client';
 import { listKnowledgeViaRuntime, readKnowledgeViaRuntime, saveKnowledgeViaRuntime } from '../api/runtime-client';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useSession } from '../hooks/useSession';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../hooks/useAuth';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { CHAT_VIEW, type WorkspaceView } from './workspace-view';
 import type { PluginsTab } from './PluginsPanel';
 import type { SettingsSection } from './SettingsPanel';
@@ -54,6 +57,7 @@ interface SidebarProps {
     pinned?: boolean;
     onExpand?: () => void;
     onTogglePinned?: () => void;
+    onCloseMobile?: () => void;
 }
 
 const SETTINGS_SECTIONS: { id: SettingsSection; icon: React.FC<{ size?: number }> }[] = [
@@ -74,10 +78,27 @@ const knowledgeLabel = (file: KnowledgeFile): string => (
     file.knowledgeId ? `${file.title ?? file.name}（${file.knowledgeId}）` : file.name
 );
 
+/** Strips leading YAML frontmatter from a knowledge Markdown file and extracts its description. */
+export function parseKnowledgeFrontmatter(content: string): { description?: string; body: string } {
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n*/);
+    if (!match) {
+        return { body: content };
+    }
+    const descMatch = match[1].match(/^description:\s*(.+)$/m);
+    const rawDescription = descMatch?.[1]?.trim();
+    const description = rawDescription
+        ? rawDescription.replace(/^(['"])(.*)\1$/, '$2').trim() || undefined
+        : undefined;
+    return {
+        ...(description ? { description } : {}),
+        body: content.slice(match[0].length),
+    };
+}
+
 /** Footer entries sit a little tighter than the main ones, and keep their height on the rail. */
 const FOOTER_ITEM = 'min-h-9 justify-start rounded-lg group-data-[rail=true]/sidebar:h-auto group-data-[rail=true]/sidebar:min-h-9';
 
-const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = false, pinned = true, onExpand, onTogglePinned }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = false, pinned = true, onExpand, onTogglePinned, onCloseMobile }) => {
     const {
         tasks,
         sessions,
@@ -90,6 +111,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         deleteTask,
         deleteSession,
         updateTaskName,
+        updateSessionName,
     } = useSession();
     const { t, toggleLanguage } = useLanguage();
     const { user, logout } = useAuth();
@@ -99,6 +121,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     const [expandedTaskIds, setExpandedTaskIds] = useState<Set<string>>(() => new Set());
     const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
     const [editTaskName, setEditTaskName] = useState('');
+    const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+    const [editSessionName, setEditSessionName] = useState('');
+    const [newKnowledgeDialogOpen, setNewKnowledgeDialogOpen] = useState(false);
+    const [newKnowledgePath, setNewKnowledgePath] = useState('doc/');
+    const [pendingDelete, setPendingDelete] = useState<{ kind: 'task' | 'session'; id: string; name: string } | null>(null);
     const [knowledgeExpanded, setKnowledgeExpanded] = useState(false);
     const [pluginsExpanded, setPluginsExpanded] = useState(false);
     const [settingsExpanded, setSettingsExpanded] = useState(false);
@@ -148,6 +175,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         if (knowledgeExpanded) void loadKnowledgeFiles();
     }, [knowledgeExpanded, loadKnowledgeFiles]);
 
+    useEffect(() => {
+        if (!currentTask?.id) return;
+        setExpandedTaskIds((prev) => (prev.has(currentTask.id) ? prev : new Set(prev).add(currentTask.id)));
+    }, [currentTask?.id]);
+
 
     const toggleExclusiveSection = (section: 'tasks' | 'knowledge' | 'plugins') => {
         // From the icon rail, a section icon expands the sidebar straight into that section.
@@ -180,6 +212,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
         setEditingTaskId(null);
     };
 
+    const commitSessionName = (sessionId: string) => {
+        updateSessionName(sessionId, editSessionName);
+        setEditingSessionId(null);
+    };
+
     const openKnowledgeFile = async (file: KnowledgeFile) => {
         if (file.type === 'directory') return;
         setSelectedFile(file);
@@ -188,6 +225,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
             const response = await readKnowledgeViaRuntime(file.path);
             setFileContent(response);
             setEditorOpen(true);
+            onCloseMobile?.();
         } catch (error) {
             console.error('Failed to load knowledge file:', error);
             showToast(t('editor.loadFailed'), 'error');
@@ -195,15 +233,21 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
     };
 
     const handleNewKnowledgeFile = () => {
-        const suggested = 'doc/';
-        const name = window.prompt(t('common.knowledgeNamePrompt'), suggested);
-        if (!name || !name.trim()) return;
-        const normalized = name.trim().replace(/^\/+/, '');
+        setNewKnowledgePath('doc/');
+        setNewKnowledgeDialogOpen(true);
+    };
+
+    const confirmNewKnowledgeFile = (event: React.FormEvent) => {
+        event.preventDefault();
+        const normalized = newKnowledgePath.trim().replace(/^\/+/, '');
+        if (!normalized || normalized.endsWith('/')) return;
         const fileName = /\.(md|markdown|txt)$/i.test(normalized) ? normalized : `${normalized}.md`;
+        setNewKnowledgeDialogOpen(false);
         setSelectedFile({ name: fileName.split('/').pop() || fileName, path: fileName, size: 0, modified_at: new Date().toISOString(), type: 'file' });
         setFileContent('');
         setIsEditing(true);
         setEditorOpen(true);
+        onCloseMobile?.();
     };
 
     const handleImportKnowledge = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -323,6 +367,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
 
     const knowledgeFileTree = buildKnowledgeFileTree();
     const isMarkdown = selectedFile?.name.toLowerCase().endsWith('.md');
+    const parsedKnowledge = parseKnowledgeFrontmatter(fileContent);
+    const knowledgeDescription = selectedFile?.description || parsedKnowledge.description;
 
     return (
         <>
@@ -358,6 +404,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         <button type="button" className={cn(NAV_ITEM, 'mb-2')} title={t('sidebar.newTask')} aria-label={t('sidebar.newTask')} onClick={() => {
                             createTask();
                             onNavigate(CHAT_VIEW);
+                            onCloseMobile?.();
                             showToast(t('task.created') || '新任务创建成功');
                         }}>
                             <SquareCheck className="shrink-0" size={18} />
@@ -384,11 +431,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                 label={task.name}
                                                 title={task.name}
                                                 expanded={expanded}
-                                                active={activeView.kind === 'chat' && currentTask?.id === task.id && !currentSession}
+                                                active={activeView.kind === 'chat' && currentTask?.id === task.id && (!currentSession || !expanded)}
                                                 onSelect={() => {
+                                                    const switchingToDifferentTask = currentTask?.id !== task.id;
                                                     switchTask(task.id);
                                                     onNavigate(CHAT_VIEW);
-                                                    toggleTask(task.id);
+                                                    if (switchingToDifferentTask) {
+                                                        setExpandedTaskIds((prev) => new Set(prev).add(task.id));
+                                                    } else {
+                                                        toggleTask(task.id);
+                                                    }
                                                 }}
                                                 editor={editing ? (
                                                     <input
@@ -414,15 +466,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                                             setExpandedTaskIds((prev) => new Set(prev).add(task.id));
                                                             createSession(task.id);
                                                             onNavigate(CHAT_VIEW);
+                                                            onCloseMobile?.();
                                                         }}>
                                                             <Plus size={14} aria-hidden="true" />
                                                         </TreeAction>
                                                         <TreeAction label={t('common.edit')} onClick={() => { setEditTaskName(task.name); setEditingTaskId(task.id); }}>
                                                             <Edit3 size={14} aria-hidden="true" />
                                                         </TreeAction>
-                                                        <TreeAction label={t('common.delete')} tone="danger" onClick={() => {
-                                                            if (window.confirm(t('task.confirmDelete').replace('{name}', task.name))) deleteTask(task.id);
-                                                        }}>
+                                                        <TreeAction label={t('common.delete')} tone="danger" onClick={() => setPendingDelete({ kind: 'task', id: task.id, name: task.name })}>
                                                             <Trash2 size={14} aria-hidden="true" />
                                                         </TreeAction>
                                                     </>
@@ -431,27 +482,52 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                             {expanded && (
                                                 <TreeGroup depth={0}>
                                                     {taskSessions.length === 0 && <TreeNote depth={1}>{t('session.empty')}</TreeNote>}
-                                                    {taskSessions.map((session) => (
-                                                        <TreeRow
-                                                            key={session.id}
-                                                            depth={1}
-                                                            icon={<MessageSquare size={15} />}
-                                                            label={session.name}
-                                                            title={session.name}
-                                                            active={activeView.kind === 'chat' && currentSession?.id === session.id}
-                                                            onSelect={() => {
-                                                                switchSession(session.id);
-                                                                onNavigate(CHAT_VIEW);
-                                                            }}
-                                                            actions={(
-                                                                <TreeAction label={t('common.delete')} tone="danger" onClick={() => {
-                                                                    if (window.confirm(t('session.confirmDelete').replace('{name}', session.name))) deleteSession(session.id);
-                                                                }}>
-                                                                    <Trash2 size={14} aria-hidden="true" />
-                                                                </TreeAction>
-                                                            )}
-                                                        />
-                                                    ))}
+                                                    {taskSessions.map((session) => {
+                                                        const editingSess = editingSessionId === session.id;
+                                                        return (
+                                                            <TreeRow
+                                                                key={session.id}
+                                                                depth={1}
+                                                                icon={<MessageSquare size={15} />}
+                                                                label={session.name}
+                                                                title={session.name}
+                                                                active={activeView.kind === 'chat' && currentSession?.id === session.id}
+                                                                onSelect={() => {
+                                                                    switchSession(session.id);
+                                                                    onNavigate(CHAT_VIEW);
+                                                                    onCloseMobile?.();
+                                                                }}
+                                                                editor={editingSess ? (
+                                                                    <input
+                                                                        className="mr-[30px] h-6 min-w-0 flex-auto rounded-md border border-border bg-[var(--frame-surface)] px-1.5 text-[0.82rem] text-foreground outline-none focus:border-[rgba(194,65,12,0.45)]"
+                                                                        value={editSessionName}
+                                                                        onChange={(event) => setEditSessionName(event.target.value)}
+                                                                        onKeyDown={(event) => {
+                                                                            if (event.key === 'Enter') commitSessionName(session.id);
+                                                                            if (event.key === 'Escape') setEditingSessionId(null);
+                                                                        }}
+                                                                        onBlur={() => commitSessionName(session.id)}
+                                                                        autoFocus
+                                                                        aria-label={session.name}
+                                                                    />
+                                                                ) : undefined}
+                                                                actions={editingSess ? (
+                                                                    <TreeAction label={t('common.save')} onClick={() => commitSessionName(session.id)} preventBlur>
+                                                                        <Check size={14} aria-hidden="true" />
+                                                                    </TreeAction>
+                                                                ) : (
+                                                                    <>
+                                                                        <TreeAction label={t('session.rename')} onClick={() => { setEditSessionName(session.name); setEditingSessionId(session.id); }}>
+                                                                            <Edit3 size={14} aria-hidden="true" />
+                                                                        </TreeAction>
+                                                                        <TreeAction label={t('common.delete')} tone="danger" onClick={() => setPendingDelete({ kind: 'session', id: session.id, name: session.name })}>
+                                                                            <Trash2 size={14} aria-hidden="true" />
+                                                                        </TreeAction>
+                                                                    </>
+                                                                )}
+                                                            />
+                                                        );
+                                                    })}
                                                 </TreeGroup>
                                             )}
                                         </React.Fragment>
@@ -502,8 +578,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         />
                         {!collapsed && pluginsExpanded && (
                             <div className={TREE}>
-                                <TreeRow depth={0} icon={<Cable size={15} />} label="MCP" title="MCP" active={isPluginsView('MCP')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'MCP' })} />
-                                <TreeRow depth={0} icon={<Workflow size={15} />} label="Skills" title="Skills" active={isPluginsView('Skills')} onSelect={() => onNavigate({ kind: 'plugins', tab: 'Skills' })} />
+                                <TreeRow depth={0} icon={<Cable size={15} />} label="MCP" title="MCP" active={isPluginsView('MCP')} onSelect={() => { onNavigate({ kind: 'plugins', tab: 'MCP' }); onCloseMobile?.(); }} />
+                                <TreeRow depth={0} icon={<Workflow size={15} />} label="Skills" title="Skills" active={isPluginsView('Skills')} onSelect={() => { onNavigate({ kind: 'plugins', tab: 'Skills' }); onCloseMobile?.(); }} />
                             </div>
                         )}
                     </div>
@@ -539,7 +615,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                                     label={t(`settings.${id}`)}
                                     title={t(`settings.${id}`)}
                                     active={isSettingsView(id)}
-                                    onSelect={() => onNavigate({ kind: 'settings', section: id })}
+                                    onSelect={() => { onNavigate({ kind: 'settings', section: id }); onCloseMobile?.(); }}
                                 />
                             ))}
                         </div>
@@ -563,9 +639,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[6px] supports-backdrop-filter:backdrop-blur-[6px] motion-reduce:animate-none"
                         className="z-[2000] flex h-full max-h-none w-[calc(100vw-32px)] max-w-none flex-col gap-0 overflow-hidden rounded-2xl bg-background p-0 text-[length:inherit] shadow-[0_34px_90px_-42px_rgba(28,25,23,0.7)] ring-0 motion-reduce:animate-none sm:max-w-none min-[421px]:h-[calc(100%-16px)] min-[721px]:h-[80vh] min-[721px]:max-h-[90vh] min-[721px]:w-[800px] min-[721px]:max-w-[calc(100vw-32px)] min-[721px]:rounded-3xl"
                     >
-                        <div className="flex items-center justify-between border-b border-border bg-paper px-5 py-4">
-                            <DialogTitle className="flex items-center gap-2 text-[0.9rem] font-medium text-foreground"><FileText size={16} aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></DialogTitle>
-                            <div className="flex gap-1">
+                        <div className="flex items-start justify-between gap-3 border-b border-border bg-paper px-5 py-4">
+                            <div className="min-w-0 flex-1">
+                                <DialogTitle className="flex items-center gap-2 text-[0.9rem] font-medium text-foreground"><FileText size={16} className="shrink-0" aria-hidden="true" /><span>{knowledgeLabel(selectedFile)}</span></DialogTitle>
+                                {knowledgeDescription && (
+                                    <DialogDescription className="mt-1 pl-6 text-xs text-muted-foreground">{knowledgeDescription}</DialogDescription>
+                                )}
+                            </div>
+                            <div className="flex shrink-0 gap-1">
                                 {isMarkdown && !isEditing && !selectedFile.readOnly && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-muted hover:text-foreground" onClick={() => setIsEditing(true)} title={t('editor.edit')} aria-label={t('editor.edit')}><Edit3 size={14} aria-hidden="true" /></button>}
                                 {isEditing && <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-success-soft hover:text-success" onClick={handleSave} disabled={saving} title={t('editor.save')} aria-label={t('editor.save')}><Save size={14} aria-hidden="true" /></button>}
                                 <button type="button" className="inline-flex size-7 items-center justify-center rounded-md border-0 bg-transparent text-body transition-colors hover:bg-muted hover:text-foreground" onClick={closeEditor} title={t('editor.close')} aria-label={t('editor.close')}><X size={14} aria-hidden="true" /></button>
@@ -573,7 +654,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         </div>
                         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                             {isMarkdown && !isEditing ? (
-                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><div className={`leading-[1.7] text-foreground ${MARKDOWN_DOCUMENT}`}><ReactMarkdown>{fileContent}</ReactMarkdown></div></div>
+                                <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><div className={`leading-[1.7] text-foreground ${MARKDOWN_DOCUMENT}`}><ReactMarkdown remarkPlugins={[remarkGfm]}>{parsedKnowledge.body}</ReactMarkdown></div></div>
                             ) : !isEditing ? (
                                 <div className="min-h-0 flex-1 overflow-auto px-6 py-5"><pre className="m-0 font-mono text-[0.85rem] leading-relaxed break-words whitespace-pre-wrap">{fileContent}</pre></div>
                             ) : (
@@ -587,6 +668,57 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, onNavigate, collapsed = f
                         </div>
                     </DialogContent>
                 )}
+            </Dialog>
+            <Dialog open={newKnowledgeDialogOpen} onOpenChange={setNewKnowledgeDialogOpen}>
+                <DialogContent overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[4px] motion-reduce:animate-none" className="z-[2000] sm:max-w-md">
+                    <form onSubmit={confirmNewKnowledgeFile} className="grid gap-4">
+                        <DialogHeader>
+                            <DialogTitle>{t('common.knowledgeNewTitle')}</DialogTitle>
+                            <DialogDescription>{t('common.knowledgePathHint')}</DialogDescription>
+                        </DialogHeader>
+                        <Input
+                            autoFocus
+                            value={newKnowledgePath}
+                            onChange={(event) => setNewKnowledgePath(event.target.value)}
+                            placeholder="doc/notes.md"
+                            spellCheck={false}
+                            aria-label={t('common.knowledgeNamePrompt')}
+                        />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setNewKnowledgeDialogOpen(false)}>{t('common.cancel')}</Button>
+                            <Button type="submit" disabled={!newKnowledgePath.trim() || newKnowledgePath.trim().endsWith('/')}>{t('common.create')}</Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+                <DialogContent overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[4px] motion-reduce:animate-none" className="z-[2000] sm:max-w-md">
+                    {pendingDelete && (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle>{t('common.confirmDeleteTitle')}</DialogTitle>
+                                <DialogDescription>
+                                    {(pendingDelete.kind === 'task' ? t('task.confirmDelete') : t('session.confirmDelete')).replace('{name}', pendingDelete.name)}
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setPendingDelete(null)}>{t('common.cancel')}</Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => {
+                                        if (pendingDelete.kind === 'task') deleteTask(pendingDelete.id);
+                                        else deleteSession(pendingDelete.id);
+                                        setPendingDelete(null);
+                                    }}
+                                >
+                                    {t('common.delete')}
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
             </Dialog>
         </>
     );

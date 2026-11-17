@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { PanelLeft } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ChatArea from './components/ChatArea';
-import ToolPanel, { type ToolData } from './components/ToolPanel';
+import ToolPanel, { type ToolData, type ToolPanelFocusTarget } from './components/ToolPanel';
 import SettingsPanel from './components/SettingsPanel';
 import PluginsPanel from './components/PluginsPanel';
 import { CHAT_VIEW, type WorkspaceView } from './components/workspace-view';
@@ -58,6 +59,8 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   const { t } = useLanguage();
   const [tools, setTools] = useState<ToolData[]>([]);
   const [isToolPanelOpen, setIsToolPanelOpen] = useState(false);
+  const [toolFocusTarget, setToolFocusTarget] = useState<ToolPanelFocusTarget | null>(null);
+  const toolFocusSeqRef = useRef(0);
   // The sidebar follows the tool panel (closed while it is open, open otherwise).
   // A manual toggle overrides that only until the tool panel next opens or closes.
   const [sidebarOverride, setSidebarOverride] = useState<boolean | null>(null);
@@ -91,6 +94,10 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
     setIsSidebarPeeking(false);
     setSidebarOverride(!isSidebarOpen);
   }, [isSidebarOpen]);
+
+  const closeMobileSidebar = useCallback(() => {
+    if (isNarrow) setSidebarOverride(false);
+  }, [isNarrow]);
 
   useEffect(() => () => {
     if (sidebarPeekTimerRef.current) clearTimeout(sidebarPeekTimerRef.current);
@@ -126,7 +133,11 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
     setChatPaneWidth(clamped);
   }, [getMaxChatPaneWidth]);
 
-  const openToolPanel = useCallback(() => {
+  const openToolPanel = useCallback((target?: Omit<ToolPanelFocusTarget, 'seq'>) => {
+    if (target) {
+      toolFocusSeqRef.current += 1;
+      setToolFocusTarget({ ...target, seq: toolFocusSeqRef.current });
+    }
     // Clicking a tool row while the panel is already open must not undo a manual sidebar toggle.
     if (isToolPanelOpen) return;
     recordChatPaneWidth(getAvailablePaneWidth() * DEFAULT_CHAT_RATIO);
@@ -137,6 +148,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
   const closeToolPanel = useCallback(() => {
     setSidebarOverride(null);
     setIsToolPanelOpen(false);
+    setToolFocusTarget(null);
   }, []);
 
   const toggleToolPanel = useCallback(() => {
@@ -237,12 +249,32 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
         <SetupBanner isChatView={activeView.kind === 'chat'} hidden={activeView.kind === 'settings'} />
 
         {/* The framed workspace: inset on a wide window, edge to edge on a phone. */}
-        <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-border bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:min-h-dvh max-[720px]:rounded-none max-[720px]:border-0">
+        <div className="relative m-3.5 flex min-h-0 flex-1 overflow-hidden rounded-[20px] border border-border bg-[var(--frame-surface)] p-0 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_24px_48px_-32px_rgba(28,25,23,0.18)] max-[1100px]:m-2 max-[720px]:m-0 max-[720px]:rounded-none max-[720px]:border-0">
+          {isNarrow && isSidebarOpen && (
+            <div
+              className="fixed inset-0 z-20 bg-black/20"
+              aria-hidden="true"
+              onClick={() => setSidebarOverride(false)}
+            />
+          )}
+          {isNarrow && !isSidebarOpen && (
+            <button
+              type="button"
+              className="absolute top-3 left-3 z-10 inline-flex size-8 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground transition-colors hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+              onClick={() => setSidebarOverride(true)}
+              title={t('sidebar.open')}
+              aria-label={t('sidebar.open')}
+            >
+              <PanelLeft size={18} />
+            </button>
+          )}
           <div
             className={cn(
               'relative z-20 flex min-w-0 flex-none self-stretch border-r border-border bg-[var(--frame-rail)] transition-[width] motion-reduce:transition-none',
               isSidebarOpen || isSidebarPeeking ? 'w-[var(--sidebar-width)]' : 'w-[var(--sidebar-rail-width)]',
-              isSidebarOpen && 'max-[720px]:w-[112px]',
+              isSidebarOpen
+                ? 'max-[720px]:absolute max-[720px]:inset-y-0 max-[720px]:left-0 max-[720px]:z-30 max-[720px]:w-[220px] max-[720px]:shadow-[18px_0_34px_-28px_rgba(28,25,23,0.64)]'
+                : 'max-[720px]:hidden',
             )}
             // Tracked while open too, so the hover state is never stale when the sidebar auto-collapses.
             onMouseEnter={() => scheduleSidebarPeek(true)}
@@ -255,6 +287,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
               pinned={isSidebarOpen}
               onExpand={() => setSidebarOverride(true)}
               onTogglePinned={toggleSidebarPinned}
+              onCloseMobile={closeMobileSidebar}
             />
           </div>
 
@@ -300,7 +333,7 @@ const AppShell: React.FC<AppShellProps> = ({ startupState, onRetryStartup, model
               />
             </div>
 
-            {isToolPanelOpen && <ToolPanel tools={tools} onClose={closeToolPanel} />}
+            {isToolPanelOpen && <ToolPanel tools={tools} focusTarget={toolFocusTarget} onClose={closeToolPanel} />}
           </div>
           {isResizingChat && <div className="fixed inset-0 z-[3000] cursor-ew-resize select-none" aria-hidden="true" />}
 

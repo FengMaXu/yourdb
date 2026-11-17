@@ -75,6 +75,8 @@ export const PreviewProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
 };
 
+export const useOptionalPreview = (): PreviewContextState | undefined => useContext(PreviewContext);
+
 export const usePreview = (): PreviewContextState => {
     const context = useContext(PreviewContext);
     if (!context) {

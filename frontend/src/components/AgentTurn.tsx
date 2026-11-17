@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { AGENT_BODY, AGENT_ICON_SVG, AGENT_ROW, MESSAGE_COLUMN, agentIcon } from './chat-styles';
 import { MARKDOWN_ANSWER, MARKDOWN_DOCUMENT } from './markdown-styles';
 import type { WidgetSpec } from '../api/client';
@@ -6,12 +6,15 @@ import { useLanguage } from '../context/LanguageContext';
 import { formatDuration, splitTurn, type TraceStep, type TurnAgentLike } from '../utils/agent-turns';
 import AgentOrbitIcon from './AgentOrbitIcon';
 import AgentMarkdown from './AgentMarkdown';
+import BasisDisclosureFooter from './common/BasisDisclosureFooter';
 import WidgetRenderer from './widgets/WidgetRenderer';
 import SubagentProgressLines from './SubagentProgressLines';
-import { ChevronRight } from 'lucide-react';
+import { Check, ChevronRight, Copy, RotateCcw } from 'lucide-react';
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceTitle } from '@/components/ui/trace';
 import { cn } from '@/lib/utils';
 import { subagentChildrenOf, type ToolCallState } from './tool-event-state';
+import { type ToolPanelFocusTarget } from './ToolPanel';
+import { extractBasisAudit, formatTurnBasisSummary, isBasisAuditVerified, type ToolData } from './tool-audit';
 
 export interface TurnAgentMessage extends TurnAgentLike {
     messageId: string;
@@ -22,6 +25,7 @@ export interface TurnAgentMessage extends TurnAgentLike {
 
 interface AgentTurnProps<A extends TurnAgentMessage> {
     agents: A[];
+    turnKey?: string;
     /** The run answering this turn is still going. */
     running: boolean;
     startedAt?: number;
@@ -30,7 +34,8 @@ interface AgentTurnProps<A extends TurnAgentMessage> {
     connectionNotice?: string;
     toolLabel: (tool: ToolCallState) => string;
     skillLabel: (skill: A['skillActivations'][number]) => string;
-    onOpenToolPanel?: () => void;
+    onOpenToolPanel?: (target?: Omit<ToolPanelFocusTarget, 'seq'>) => void;
+    onRetry?: () => void;
 }
 
 /** A step of the process: a small dot, a label, sometimes a chevron. */
@@ -56,17 +61,55 @@ function Dot({ live }: { live: boolean }) {
     );
 }
 
+/** Extract a trailing basis note (`口径：...` or `Basis: ...`) so it renders in a structured footer. */
+export function extractTrailingBasis(markdown: string): { body: string; basis?: string } {
+    const trimmed = markdown.trimEnd();
+    const match = /^(?:([\s\S]*?)\n\s*\n)?(?:\*\*)?(?:(?:数据)?口径(?:说明)?|Basis)(?:\*\*)?[：:]\s*([^\n]+)$/.exec(trimmed);
+    if (!match) {
+        return { body: markdown };
+    }
+    return {
+        body: (match[1] ?? '').trimEnd(),
+        basis: match[2].trim(),
+    };
+}
+
 /**
  * One answer from the agent: the process it went through (thoughts, tool calls,
  * remarks along the way), open while it runs and folded to one line when it is
  * done, followed by the result: its final text and every chart or table it made.
  */
-function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, currentSessionId, connectionNotice, toolLabel, skillLabel, onOpenToolPanel }: AgentTurnProps<A>) {
+function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, startedAt, currentSessionId, connectionNotice, toolLabel, skillLabel, onOpenToolPanel, onRetry }: AgentTurnProps<A>) {
     const { t, language } = useLanguage();
     const lang = language === 'en' ? 'en' : 'zh';
     const { steps, result, resultText } = splitTurn(agents);
     const widgets = agents.flatMap((agent) => Object.values(agent.widgetsById));
     const lastAgent = agents[agents.length - 1];
+    const [copiedAnswer, setCopiedAnswer] = useState(false);
+
+    const turnTools = useMemo<ToolData[]>(() => agents.flatMap((agent) => (
+        Object.values(agent.toolCallsById).map((tool) => ({
+            toolCallId: tool.toolCallId,
+            messageId: agent.messageId,
+            turnKey,
+            name: tool.name,
+            args: tool.arguments,
+            result: tool.result,
+            details: tool.details,
+            status: tool.status,
+            widgetId: tool.widgetId,
+            widget: tool.widgetId ? agent.widgetsById[tool.widgetId] : undefined,
+        }))
+    )), [agents, turnKey]);
+    const turnAudit = useMemo(() => extractBasisAudit(turnTools, lang === 'en'), [turnTools, lang]);
+    const turnVerified = isBasisAuditVerified(turnAudit);
+
+    const visibleSteps = steps.filter((step) => !(
+        step.kind === 'tool'
+        && step.tool.name === 'show_widget'
+        && step.tool.status === 'done'
+        && !step.tool.isError
+    ));
 
     // Open while running, folded once done; a click by the user wins from then on.
     const [userOpen, setUserOpen] = useState<boolean | null>(null);
@@ -92,8 +135,8 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
     const endedAt = running ? now : finishedAt ?? lastTimestamp;
     const duration = startedAt !== undefined && endedAt !== undefined && endedAt >= startedAt ? formatDuration(endedAt - startedAt, lang) : undefined;
 
-    const thoughts = steps.filter((step) => step.kind === 'thought').length;
-    const tools = steps.filter((step) => step.kind === 'tool').length;
+    const thoughts = visibleSteps.filter((step) => step.kind === 'thought').length;
+    const tools = visibleSteps.filter((step) => step.kind === 'tool').length;
     const failed = steps.some((step) => step.kind === 'tool' && step.tool.status === 'error');
     const summaryParts = [
         thoughts > 0 ? t('trace.thoughtCount').replace('{n}', String(thoughts)) : '',
@@ -102,11 +145,24 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
     const headline = running
         ? (duration ? `${t('trace.working')} · ${duration}` : t('trace.working'))
         : (duration ? t('trace.worked').replace('{duration}', duration) : t('trace.process'));
-    const hasProcess = steps.length > 0 || (running && !resultText);
+    const hasProcess = visibleSteps.length > 0 || (running && !resultText);
     const bodyId = `trace-${lastAgent?.id ?? 'pending'}`;
+    const { body: answerBody, basis: answerBasis } = resultText
+        ? extractTrailingBasis(resultText)
+        : { body: '', basis: undefined };
+    const synthesizedBasis = !answerBasis && !running && resultText
+        ? formatTurnBasisSummary(turnAudit, lang === 'en')
+        : undefined;
+    const footerBasisNode = answerBasis
+        ? <AgentMarkdown currentSessionId={currentSessionId}>{answerBasis}</AgentMarkdown>
+        : synthesizedBasis;
+    const footerDisclosure = turnAudit.publicationReceipt?.disclosureSummary;
+    const footerChecks = turnAudit.fanoutFinding
+        ? [{ code: 'JOIN_FANOUT', field: 'join', message: turnAudit.fanoutFinding }]
+        : undefined;
 
     const renderStep = (step: TraceStep<A>, index: number) => {
-        const live = running && index === steps.length - 1;
+        const live = running && index === visibleSteps.length - 1;
         if (step.kind === 'thought') {
             return (
                 <li key={step.key} className={STEP}>
@@ -139,7 +195,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                     <button
                         type="button"
                         className={cn(ROW, onOpenToolPanel && ROW_ACTION, step.tool.status === 'error' && 'text-destructive')}
-                        onClick={onOpenToolPanel}
+                        onClick={() => onOpenToolPanel?.({ turnKey, messageId: step.agent.messageId, toolCallId: step.tool.toolCallId, tab: 'trace' })}
                         disabled={!onOpenToolPanel}
                         aria-label={label}
                     >
@@ -177,8 +233,8 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                                 {summaryParts.length > 0 && <span className={cn('truncate', failed ? 'text-destructive' : 'text-faint')}>{summaryParts.join(' · ')}</span>}
                             </TraceCollapsibleTrigger>
                             <TraceCollapsibleContent id={bodyId} className="m-0 border-l-0 p-0 leading-normal text-inherit motion-reduce:transition-none">
-                                {steps.length > 0 ? (
-                                    <ol className="mt-1 mr-0 mb-1.5 ml-[3px] grid list-none gap-px border-l border-border py-0 pr-0 pl-2.5">{steps.map(renderStep)}</ol>
+                                {visibleSteps.length > 0 ? (
+                                    <ol className="mt-1 mr-0 mb-1.5 ml-[3px] grid list-none gap-px border-l border-border py-0 pr-0 pl-2.5">{visibleSteps.map(renderStep)}</ol>
                                 ) : (
                                     <div className={ROW}><Dot live /><span className={cn(LABEL, SHIMMER)}>{t('trace.thinking')}</span></div>
                                 )}
@@ -187,15 +243,25 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                     </Trace>
                 )}
 
-                {resultText && (
+                {answerBody && (
                     <div className={`${AGENT_BODY} animate-trace-in [animation-duration:320ms] motion-reduce:animate-none ${MARKDOWN_ANSWER}`}>
-                        <AgentMarkdown currentSessionId={currentSessionId}>{resultText}</AgentMarkdown>
+                        <AgentMarkdown currentSessionId={currentSessionId}>{answerBody}</AgentMarkdown>
                     </div>
                 )}
 
                 {widgets.map((widget) => (
                     <WidgetRenderer key={widget.tool_call_id || widget.widget_id} widget={widget} currentSessionId={currentSessionId} />
                 ))}
+
+                {(footerBasisNode || footerDisclosure || footerChecks) && (
+                    <BasisDisclosureFooter
+                        basis={footerBasisNode}
+                        checks={footerChecks}
+                        disclosure={footerDisclosure}
+                        onOpenAudit={onOpenToolPanel ? () => onOpenToolPanel({ turnKey, messageId: lastAgent?.messageId, tab: 'basis' }) : undefined}
+                        verified={turnVerified}
+                    />
+                )}
 
                 {lastAgent?.retryNotice && (
                     <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-body"><span>{lastAgent.retryNotice}</span></div>
@@ -205,6 +271,37 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, running, startedAt, cur
                 )}
                 {result === undefined && !running && !hasProcess && lastAgent?.statusNotice && (
                     <div className="mt-1 inline-flex items-center gap-2 text-[0.88rem] leading-[1.5] text-body"><span>{lastAgent.statusNotice}</span></div>
+                )}
+
+                {!running && (resultText || failed || lastAgent?.terminalReason === 'error' || Boolean(connectionNotice)) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        {resultText && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    void navigator.clipboard.writeText(resultText).then(() => {
+                                        setCopiedAnswer(true);
+                                        setTimeout(() => setCopiedAnswer(false), 2000);
+                                    });
+                                }}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                                aria-label={copiedAnswer ? t('chat.copiedAnswer') : t('chat.copyAnswer')}
+                            >
+                                {copiedAnswer ? <Check size={13} className="text-success" aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+                                <span>{copiedAnswer ? t('chat.copiedAnswer') : t('chat.copyAnswer')}</span>
+                            </button>
+                        )}
+                        {onRetry && (failed || lastAgent?.terminalReason === 'error' || Boolean(connectionNotice)) && (
+                            <button
+                                type="button"
+                                onClick={onRetry}
+                                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1 text-[0.75rem] font-medium text-foreground transition-colors hover:border-border-strong hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                            >
+                                <RotateCcw size={13} aria-hidden="true" />
+                                <span>{t('chat.retryTurn')}</span>
+                            </button>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

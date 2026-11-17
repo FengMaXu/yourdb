@@ -44,6 +44,7 @@ interface SessionContextType {
     deleteTask: (taskId: string) => void;
     deleteSession: (sessionId: string) => void;
     updateTaskName: (taskId: string, name: string) => void;
+    updateSessionName: (sessionId: string, name: string) => void;
     setCurrentTranscript: (sessionId: string, messages: SessionSnapshotMessage[]) => void;
     setAttachedFiles: (files: string[]) => void;
     toggleAttachedFile: (filePath: string) => void;
@@ -201,6 +202,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
      */
     const sessionsRef = useRef(sessions);
     sessionsRef.current = sessions;
+    const tasksRef = useRef(tasks);
+    tasksRef.current = tasks;
     const currentSessionIdRef = useRef(currentSessionId);
     currentSessionIdRef.current = currentSessionId;
     useEffect(() => {
@@ -344,11 +347,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     const switchTask = useCallback((taskId: string) => {
         if (!tasks.some((task) => task.id === taskId)) return;
+        const firstSession = sessions.find((session) => session.taskId === taskId);
+        if (firstSession) {
+            switchSession(firstSession.id);
+            return;
+        }
         setCurrentTaskId(taskId);
         setCurrentSessionId('');
         writeCurrentTaskId(taskId);
         writeCurrentSessionId('');
-    }, [tasks]);
+    }, [sessions, switchSession, tasks]);
 
     const deleteSession = useCallback((sessionId: string) => {
         const target = sessions.find((session) => session.id === sessionId);
@@ -402,6 +410,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         void renameTaskViaRuntime(taskId, nextName);
     }, [defaultTaskName]);
 
+    const updateSessionName = useCallback((sessionId: string, name: string) => {
+        const nextName = name.trim() || defaultSessionName;
+        sessionNamesRef.current[sessionId] = nextName;
+        setSessions((prev) => prev.map((session) => session.id === sessionId ? { ...session, name: nextName } : session));
+        void renameSessionViaRuntime(sessionId, nextName).catch((error) => {
+            console.warn('Failed to rename session:', error);
+        });
+    }, [defaultSessionName]);
+
     const setCurrentTranscript = useCallback((sessionId: string, messages: SessionSnapshotMessage[]) => {
         setTranscriptsBySession((prev) => ({ ...prev, [sessionId]: messages }));
         const sessionName = sessionNamesRef.current[sessionId];
@@ -419,8 +436,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             void renameSessionViaRuntime(sessionId, title).catch((error) => {
                 console.warn('Failed to rename session:', error);
             });
+            const currentSess = sessionsRef.current.find((session) => session.id === sessionId);
+            const parentTask = currentSess ? tasksRef.current.find((task) => task.id === currentSess.taskId) : undefined;
+            const siblingCount = currentSess ? sessionsRef.current.filter((session) => session.taskId === currentSess.taskId).length : 0;
+            if (parentTask && (DEFAULT_TASK_NAMES.has(parentTask.name) || parentTask.name === defaultTaskName) && siblingCount <= 1) {
+                updateTaskName(parentTask.id, title);
+            }
         }
-    }, []);
+    }, [defaultTaskName, updateTaskName]);
 
     const setAttachedFiles = useCallback((files: string[]) => {
         if (!currentSession) return;
@@ -459,6 +482,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             deleteTask,
             deleteSession,
             updateTaskName,
+            updateSessionName,
             setCurrentTranscript,
             setAttachedFiles,
             toggleAttachedFile,
