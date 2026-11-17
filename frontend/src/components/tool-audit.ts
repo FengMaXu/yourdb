@@ -32,6 +32,8 @@ export interface AuditSpecRow {
     status: AuditStatus;
     badge: string;
     citation?: string;
+    /** Business-language disclosure notes about this clause (from the publication receipt). */
+    notes?: string[];
 }
 
 export interface KnowledgeEvidence {
@@ -40,10 +42,20 @@ export interface KnowledgeEvidence {
     excerpt: string;
 }
 
+/** One structured disclosure item from a publication receipt (runtime `DisclosureItem`). */
+export interface DisclosureNote {
+    kind: string;
+    paths: string[];
+    detail?: string;
+    periods?: string[];
+}
+
 export interface PublicationReceiptSummary {
     receiptId: string;
     format: 'inline' | 'csv';
-    disclosureSummary?: string;
+    /** The receipt carries a disclosure at all. */
+    disclosed: boolean;
+    notes: DisclosureNote[];
     unverifiedPaths: string[];
     fanoutStatus?: string;
 }
@@ -56,6 +68,8 @@ export interface BasisAuditData {
     rowCountText?: string;
     publicationReceipt?: PublicationReceiptSummary;
     fanoutFinding?: string;
+    /** Disclosure notes that concern no clause shown in the Spec tree. */
+    generalNotes: string[];
 }
 
 export function asRecord(value: unknown): Record<string, any> | undefined {
@@ -619,9 +633,8 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
         ? {
             receiptId: publishDetails.receiptId,
             format: publishDetails.format === 'csv' || publishTool?.name === 'export_query' ? 'csv' : 'inline',
-            ...(typeof asRecord(publishDetails.disclosure)?.summary === 'string'
-                ? { disclosureSummary: asRecord(publishDetails.disclosure)!.summary as string }
-                : {}),
+            disclosed: Boolean(asRecord(publishDetails.disclosure)),
+            notes: parseDisclosureNotes(asRecord(publishDetails.disclosure)?.items),
             unverifiedPaths: Array.isArray(asRecord(publishDetails.disclosure)?.unverifiedFields)
                 ? (asRecord(publishDetails.disclosure)!.unverifiedFields as any[])
                     .map((item) => String(item?.path ?? ''))
@@ -635,7 +648,8 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
 
     const queryFanout = asRecord(asRecord(queryTool?.details)?.fanout);
     const fanoutStatus = publicationReceipt?.fanoutStatus ?? (typeof queryFanout?.status === 'string' ? queryFanout.status : undefined);
-    const fanoutFinding = fanoutStatus === 'finding'
+    // A receipt reports fanout among its own disclosure notes; this covers a query not yet published.
+    const fanoutFinding = !publicationReceipt && fanoutStatus === 'finding'
         ? (isEn ? 'Potential join multiplicity fanout detected on primary source key.' : '检测到表连接存在潜在指标倍增（Fanout），请核对连接基数约束。')
         : undefined;
 
@@ -706,6 +720,21 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
         }
     }
 
+    const generalNotes: string[] = [];
+    const rowsByPath = new Map(specItems.map((item) => [item.path, item]));
+    for (const note of publicationReceipt?.notes ?? []) {
+        const rows = note.paths.map((path) => rowsByPath.get(path)).filter((row): row is AuditSpecRow => Boolean(row));
+        if (rows.length < note.paths.length || note.paths.length === 0) {
+            // Some fields (or the answer as a whole) are not in the tree: say it once, naming the fields.
+            const missing = { ...note, paths: note.paths.filter((path) => !rowsByPath.has(path)) };
+            const text = disclosureNoteText(missing, isEn, true);
+            if (text) generalNotes.push(text);
+        }
+        const text = disclosureNoteText(note, isEn, false);
+        if (!text) continue;
+        for (const row of rows) row.notes = [...(row.notes ?? []), text];
+    }
+
     return {
         specItems,
         knowledgeEvidence,
@@ -714,7 +743,84 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
         rowCountText,
         publicationReceipt,
         fanoutFinding,
+        generalNotes,
     };
+}
+
+function parseDisclosureNotes(value: unknown): DisclosureNote[] {
+    if (!Array.isArray(value)) return [];
+    return value.flatMap((raw) => {
+        const item = asRecord(raw);
+        if (!item || typeof item.kind !== 'string') return [];
+        return [{
+            kind: item.kind,
+            paths: Array.isArray(item.paths) ? item.paths.filter((path: unknown): path is string => typeof path === 'string') : [],
+            ...(typeof item.detail === 'string' ? { detail: item.detail } : {}),
+            ...(Array.isArray(item.periods) ? { periods: item.periods.map(String) } : {}),
+        }];
+    });
+}
+
+function listPeriods(periods: readonly string[], isEn: boolean): string {
+    const shown = periods.slice(0, 3).join(isEn ? ', ' : '、');
+    return periods.length > 3 ? `${shown}${isEn ? ` and ${periods.length - 3} more` : ` 等 ${periods.length} 个期间`}` : shown;
+}
+
+/**
+ * The business-language sentence for one disclosure note. `withFields` names the
+ * clauses it concerns (used where the note is not shown beside them).
+ * Returns undefined for a note the Spec tree already shows as a badge.
+ */
+export function disclosureNoteText(note: DisclosureNote, isEn: boolean, withFields: boolean): string | undefined {
+    const fields = note.paths.map((path) => specPathLabel(path, isEn)).join(isEn ? ', ' : '、');
+    const on = (text: string) => (withFields && fields ? `${fields}${isEn ? ': ' : '：'}${text}` : text);
+    switch (note.kind) {
+        case 'assumed':
+            return withFields ? on(isEn ? 'assumed by the model, not confirmed by a document' : '模型假设，没有文档证实') : undefined;
+        case 'decided':
+            return on(isEn ? 'several readings were possible; the literal one was taken' : '存在多种理解，按字面选了一种');
+        case 'unadvised':
+            return on(isEn ? 'readings give different results; chosen without comparison' : '不同理解结果不同，未经比较就做了选择');
+        case 'undecided':
+            return on(isEn ? 'readings give different results; no way to tell which is right' : '不同理解结果不同，无法判断哪种正确');
+        case 'deviation':
+            return on(isEn
+                ? `differs from the report's shared definition${note.detail ? ` (${note.detail})` : ''}`
+                : `与报告的共享口径不同${note.detail ? `（${note.detail}）` : ''}`);
+        case 'parent_superseded':
+            return isEn
+                ? "The report's definition has changed; this chart still uses the earlier one."
+                : '报告口径已修改，这张图仍按修改前的口径计算。';
+        case 'join_fanout':
+            return on(isEn ? 'joined rows may be counted more than once' : '表连接后可能重复计数');
+        case 'join_fanout_unknown':
+            return on(isEn ? 'could not fully check whether joins double-count' : '未能完整检查表连接是否重复计数');
+        case 'realization_conflict':
+            return on(isEn ? 'the SQL may not follow this definition' : 'SQL 可能没有按这条口径执行');
+        case 'entity_identity':
+            return on(isEn ? 'source rows do not map one-to-one to the counted entity' : '来源表的行与统计对象不是一一对应');
+        case 'calendar_coverage':
+            return on(note.periods && note.periods.length > 0
+                ? (isEn ? `no data in ${listPeriods(note.periods, true)}` : `${listPeriods(note.periods, false)} 没有数据`)
+                : (isEn ? 'some periods have no data' : '部分期间没有数据'));
+        default:
+            return undefined;
+    }
+}
+
+/**
+ * One line for the answer footer: what a reader should know beyond the assumption count,
+ * which the basis summary already states. Undefined when there is nothing more.
+ */
+export function formatDisclosureHeadline(audit: BasisAuditData, isEn: boolean): string | undefined {
+    const lines = (audit.publicationReceipt?.notes ?? [])
+        .filter((note) => note.kind !== 'assumed')
+        .map((note) => disclosureNoteText(note, isEn, true))
+        .filter((text): text is string => Boolean(text));
+    if (audit.fanoutFinding) lines.push(audit.fanoutFinding);
+    if (lines.length === 0) return undefined;
+    const shown = lines.slice(0, 2).join(isEn ? '; ' : '；');
+    return lines.length > 2 ? `${shown}${isEn ? `; ${lines.length - 2} more` : `；另有 ${lines.length - 2} 项`}` : shown;
 }
 
 /**
@@ -728,7 +834,7 @@ export function isTurnAuditVerified(tools: ToolData[], isEn = false): boolean {
 
 /** The one verification rule: no disclosure, no unverified publication fields, no assumed spec items. */
 export function isBasisAuditVerified(audit: BasisAuditData): boolean {
-    if (audit.publicationReceipt?.disclosureSummary || (audit.publicationReceipt?.unverifiedPaths.length ?? 0) > 0) {
+    if (audit.publicationReceipt?.disclosed || (audit.publicationReceipt?.unverifiedPaths.length ?? 0) > 0) {
         return false;
     }
     if (audit.specItems.length === 0) return true;

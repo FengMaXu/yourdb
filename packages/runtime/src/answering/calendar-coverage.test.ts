@@ -79,6 +79,9 @@ describe("calendar coverage in Answering", () => {
     if (execution.artifact.kind !== "candidate") throw new Error("expected a candidate");
     const receipt = await answering.publish({ candidateId: execution.artifact.candidateId, format: "auto", requestId: "publish" }, business("publish"));
     expect(receipt.disclosure?.summary).toContain("时间范围内有期间没有数据");
+    const item = receipt.disclosure?.items.find((entry) => entry.kind === "calendar_coverage");
+    expect(item).toMatchObject({ kind: "calendar_coverage", paths: ["population.time"] });
+    expect(item?.periods?.length).toBe(8);
   });
 
   it("reads the coverage before sealing when the result query reaches the Revision first", async () => {

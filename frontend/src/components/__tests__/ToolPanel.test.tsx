@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import ToolPanel, { type ToolData } from '../ToolPanel';
 import { LanguageProvider } from '../../context/LanguageContext';
@@ -112,7 +112,13 @@ const realSessionTools: ToolData[] = [
             disclosure: {
                 required: true,
                 unverifiedFields: [{ path: 'population.time', kind: 'assumed' }],
-                summary: '以下字段为假定，未被合格证据证实：population.time。',
+                summary: '以下字段为假定，未被合格证据证实：population.time。 SQL 与已封存口径可能不一致……',
+                items: [
+                    { kind: 'assumed', paths: ['population.time'] },
+                    { kind: 'realization_conflict', paths: ['measure.formula'], detail: 'measure.formula declares x, but the SQL never reads it.' },
+                    { kind: 'calendar_coverage', paths: ['population.time'], detail: 'population.time spans 26 month periods', periods: ['2016-11'] },
+                    { kind: 'realization_conflict', paths: ['population.source'], detail: 'population.source declares y, but the SQL never reads it.' },
+                ],
             },
         },
         status: 'done',
@@ -136,8 +142,14 @@ describe('ToolPanel Basis & Audit Drawer', () => {
         expect(screen.getByText('模型假设')).toBeInTheDocument();
         expect(screen.getByText(/business-definitions：仅「已完成」订单计入销售统计/)).toBeInTheDocument();
 
-        // Disclosure banner surfaces PublicationReceipt.disclosure instead of raw protocol headers.
-        expect(screen.getByText('以下字段为假定，未被合格证据证实：population.time。')).toBeInTheDocument();
+        // Disclosure items sit on the clause they concern, in business language; the model-facing
+        // summary and check wording are not shown here.
+        expect(screen.queryByText(/以下字段为假定/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/never reads/)).not.toBeInTheDocument();
+        expect(screen.getByText('SQL 可能没有按这条口径执行')).toBeInTheDocument();
+        expect(screen.getByText('2016-11 没有数据')).toBeInTheDocument();
+        // A clause missing from the tree is named in the top card instead.
+        expect(within(screen.getByTestId('basis-disclosure-card')).getByText('数据来源：SQL 可能没有按这条口径执行')).toBeInTheDocument();
 
         // Never prints raw `[RESULT_CANDIDATE] ...` string in the SQL row count slot.
         expect(screen.queryByText(/\[RESULT_CANDIDATE\]/)).not.toBeInTheDocument();

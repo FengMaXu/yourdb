@@ -14,7 +14,7 @@ import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigg
 import { cn } from '@/lib/utils';
 import { subagentChildrenOf, type ToolCallState } from './tool-event-state';
 import { type ToolPanelFocusTarget } from './ToolPanel';
-import { extractBasisAudit, formatTurnBasisSummary, isBasisAuditVerified, type ToolData } from './tool-audit';
+import { extractBasisAudit, formatDisclosureHeadline, formatTurnBasisSummary, isBasisAuditVerified, type ToolData } from './tool-audit';
 
 export interface TurnAgentMessage extends TurnAgentLike {
     messageId: string;
@@ -156,10 +156,8 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
     const footerBasisNode = answerBasis
         ? <AgentMarkdown currentSessionId={currentSessionId}>{answerBasis}</AgentMarkdown>
         : synthesizedBasis;
-    const footerDisclosure = turnAudit.publicationReceipt?.disclosureSummary;
-    const footerChecks = turnAudit.fanoutFinding
-        ? [{ code: 'JOIN_FANOUT', field: 'join', message: turnAudit.fanoutFinding }]
-        : undefined;
+    // One line in the answer; the full, per-clause disclosure lives in the Basis panel.
+    const footerDisclosure = formatDisclosureHeadline(turnAudit, lang === 'en');
 
     const renderStep = (step: TraceStep<A>, index: number) => {
         const live = running && index === visibleSteps.length - 1;
@@ -253,10 +251,9 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
                     <WidgetRenderer key={widget.tool_call_id || widget.widget_id} widget={widget} currentSessionId={currentSessionId} />
                 ))}
 
-                {(footerBasisNode || footerDisclosure || footerChecks) && (
+                {(footerBasisNode || footerDisclosure) && (
                     <BasisDisclosureFooter
                         basis={footerBasisNode}
-                        checks={footerChecks}
                         disclosure={footerDisclosure}
                         onOpenAudit={onOpenToolPanel ? () => onOpenToolPanel({ turnKey, messageId: lastAgent?.messageId, tab: 'basis' }) : undefined}
                         verified={turnVerified}
