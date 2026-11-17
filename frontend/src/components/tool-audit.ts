@@ -104,11 +104,10 @@ function parseResultCandidateTable(resultText: string | undefined): { columns: s
     const rows = bodyLines
         .slice(1)
         .filter((line) => line.includes(' | ') || columns.length === 1)
+        // Keep cells verbatim: the audit snapshot must not turn '00123' into 123 or years into grouped numbers.
         .map((line) => line.split(' | ').map((cell) => {
             const trimmed = cell.trim();
-            if (trimmed === 'NULL') return null;
-            const numeric = Number(trimmed);
-            return trimmed !== '' && Number.isFinite(numeric) ? numeric : trimmed;
+            return trimmed === 'NULL' ? null : trimmed;
         }));
     return rows.length > 0 ? { columns, rows } : undefined;
 }
@@ -330,6 +329,8 @@ function splitTopLevelAnd(input: string): string[] {
     let depth = 0;
     let inSingleQuote = false;
     let start = 0;
+    // `x BETWEEN a AND b` owns the next top-level AND; it is not a conjunction.
+    let pendingBetween = false;
 
     for (let i = 0; i < input.length; i += 1) {
         const ch = input[i];
@@ -340,9 +341,15 @@ function splitTopLevelAnd(input: string): string[] {
         if (inSingleQuote) continue;
         if (ch === '(') depth += 1;
         else if (ch === ')' && depth > 0) depth -= 1;
+        else if (depth === 0 && /^\s+BETWEEN\s+/i.test(input.slice(i))) {
+            pendingBetween = true;
+        }
         else if (depth === 0 && /^\s+AND\s+/i.test(input.slice(i))) {
             const match = /^\s+AND\s+/i.exec(input.slice(i));
-            if (match) {
+            if (match && pendingBetween) {
+                pendingBetween = false;
+                i += match[0].length - 1;
+            } else if (match) {
                 const segment = input.slice(start, i).trim();
                 if (segment) tokens.push(segment);
                 i += match[0].length - 1;
@@ -358,7 +365,8 @@ function splitTopLevelAnd(input: string): string[] {
 function parseSqlAudit(sql: string) {
     const compact = sql.replace(/\s+/g, ' ').trim();
     const tables: string[] = [];
-    const tablePattern = /\b(?:FROM|JOIN)\s+([a-zA-Z_][\w.]*)/gi;
+    // A FROM whose operand closes a paren is a function argument (EXTRACT(YEAR FROM col)), not a table.
+    const tablePattern = /\b(?:FROM|JOIN)\s+([a-zA-Z_][\w.]*)\b(?!\s*\))/gi;
     let tableMatch = tablePattern.exec(compact);
     while (tableMatch) {
         if (!tables.includes(tableMatch[1])) {
@@ -666,8 +674,9 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
                 path: 'time',
                 label: isEn ? 'Time Window' : '时间范围',
                 value: sqlAudit.timeFilters.join(' AND '),
-                status: 'verified',
-                badge: isEn ? 'Verified · Request' : '已核实 · 题面',
+                // Read off model-written SQL only — nothing checked it against the request.
+                status: 'assumed',
+                badge: isEn ? 'Assumed · From SQL' : '模型假设 · 取自 SQL',
             });
         }
 
@@ -689,10 +698,10 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
                 path: 'grouping',
                 label: isEn ? 'Grouping' : '分组粒度',
                 value: sqlAudit.groupBy,
-                status: 'verified',
+                status: searchDoc ? 'verified' : 'assumed',
                 badge: searchDoc
                     ? (isEn ? 'Verified · Doc' : '已核实 · 文档')
-                    : (isEn ? 'Verified · Request' : '已核实 · 题面'),
+                    : (isEn ? 'Assumed · From SQL' : '模型假设 · 取自 SQL'),
             });
         }
     }
@@ -714,7 +723,11 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
  */
 export function isTurnAuditVerified(tools: ToolData[], isEn = false): boolean {
     if (tools.length === 0) return true;
-    const audit = extractBasisAudit(tools, isEn);
+    return isBasisAuditVerified(extractBasisAudit(tools, isEn));
+}
+
+/** The one verification rule: no disclosure, no unverified publication fields, no assumed spec items. */
+export function isBasisAuditVerified(audit: BasisAuditData): boolean {
     if (audit.publicationReceipt?.disclosureSummary || (audit.publicationReceipt?.unverifiedPaths.length ?? 0) > 0) {
         return false;
     }

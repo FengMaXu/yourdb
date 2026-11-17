@@ -14,7 +14,7 @@ import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigg
 import { cn } from '@/lib/utils';
 import { subagentChildrenOf, type ToolCallState } from './tool-event-state';
 import { type ToolPanelFocusTarget } from './ToolPanel';
-import { extractBasisAudit, formatTurnBasisSummary, type ToolData } from './tool-audit';
+import { extractBasisAudit, formatTurnBasisSummary, isBasisAuditVerified, type ToolData } from './tool-audit';
 
 export interface TurnAgentMessage extends TurnAgentLike {
     messageId: string;
@@ -102,9 +102,7 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
         }))
     )), [agents, turnKey]);
     const turnAudit = useMemo(() => extractBasisAudit(turnTools, lang === 'en'), [turnTools, lang]);
-    const turnVerified = !turnAudit.publicationReceipt?.disclosureSummary
-        && (turnAudit.publicationReceipt?.unverifiedPaths.length ?? 0) === 0
-        && (turnAudit.specItems.length === 0 || turnAudit.specItems.every((item) => item.status === 'verified'));
+    const turnVerified = isBasisAuditVerified(turnAudit);
 
     const visibleSteps = steps.filter((step) => !(
         step.kind === 'tool'

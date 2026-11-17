@@ -30,9 +30,10 @@ interface PreviewRect {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+// The real window size; 1024x768 is only a stand-in when nothing was measured (e.g. jsdom).
 const viewportSize = () => ({
-    width: Math.max(document.documentElement?.clientWidth || 0, window.innerWidth || 0, 1024),
-    height: Math.max(document.documentElement?.clientHeight || 0, window.innerHeight || 0, 768),
+    width: Math.max(document.documentElement?.clientWidth || 0, window.innerWidth || 0) || 1024,
+    height: Math.max(document.documentElement?.clientHeight || 0, window.innerHeight || 0) || 768,
 });
 
 const initialPreviewRect = (): PreviewRect => {

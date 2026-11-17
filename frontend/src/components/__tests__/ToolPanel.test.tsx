@@ -145,7 +145,7 @@ describe('ToolPanel Basis & Audit Drawer', () => {
 
         // Renders SQL CodeBlock & formatted Query Output Snapshot table.
         expect(screen.getByText(/SELECT c\.region AS 大区/)).toBeInTheDocument();
-        expect(screen.getByText('8,121,674.21')).toBeInTheDocument();
+        expect(screen.getByText('8121674.21')).toBeInTheDocument();
 
         // Developer trace tab stays accessible with full raw tool records.
         fireEvent.click(screen.getByRole('tab', { name: /调用链路/ }));

@@ -287,14 +287,14 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                 const cfg = providerConfigs[providerId];
                 const rawKey = cfg?.apiKey?.trim() || '';
                 const apiKey = rawKey && !rawKey.startsWith('[') ? rawKey : '';
-                if (!(cfg?.enabled && rawKey.startsWith('[') && !apiKey)) {
-                    profile = {
-                        provider: providerId === 'Anthropic' ? 'anthropic' : 'openai',
-                        base_url: cfg?.baseUrl || '',
-                        model: cfg?.selectedModel || '',
-                        ...(apiKey ? { api_key: apiKey } : {}),
-                    };
-                }
+                // Always test what the form shows; with a masked key the runtime reuses the stored key
+                // when the provider and base URL match the saved model.
+                profile = {
+                    provider: providerId === 'Anthropic' ? 'anthropic' : 'openai',
+                    base_url: cfg?.baseUrl || '',
+                    model: cfg?.selectedModel || '',
+                    ...(apiKey ? { api_key: apiKey } : {}),
+                };
             }
             const res = await testLlmViaRuntime(profile);
             setLlmTestResult({ success: res.success, message: res.message });

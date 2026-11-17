@@ -245,9 +245,6 @@ const getToolSummary = (tool: ToolData): string | undefined => {
 
 const formatTabularCell = (value: unknown): string => {
     if (value === null || value === undefined) return '';
-    if (typeof value === 'number') {
-        return Number.isFinite(value) ? new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 4 }).format(value) : String(value);
-    }
     if (Array.isArray(value) || typeof value === 'object') return JSON.stringify(value);
     return String(value);
 };
@@ -626,11 +623,14 @@ const ToolPanel: React.FC<ToolPanelProps> = ({ tools = [], focusTarget, onClose 
         return (lastSubstantive ?? last).toolCallId;
     })();
 
-    // Respond to explicit deep-link requests from chat turns or tool steps.
+    // A deep-linked tool step stays pinned (no auto-follow) until the user navigates themselves.
+    const [pinnedToolCallId, setPinnedToolCallId] = useState<string | null>(null);
+    const appliedFocusRef = useRef<ToolPanelFocusTarget | null>(null);
+
+    // Respond to explicit deep-link requests from chat turns or tool steps — once per request,
+    // so streaming tool updates never re-apply a stale target over the user's own tab/turn choice.
     useEffect(() => {
-        if (!focusTarget) return;
-        const targetTab = focusTarget.tab ?? (focusTarget.toolCallId ? 'trace' : 'basis');
-        setActiveTab(targetTab);
+        if (!focusTarget || appliedFocusRef.current === focusTarget) return;
 
         const matchedTurn = focusTarget.turnKey
             ? turns.find((item) => item.turnKey === focusTarget.turnKey)
@@ -639,26 +639,44 @@ const ToolPanel: React.FC<ToolPanelProps> = ({ tools = [], focusTarget, onClose 
                 : focusTarget.messageId
                     ? turns.find((item) => item.tools.some((tool) => tool.messageId === focusTarget.messageId))
                     : undefined;
+        const needsTurn = Boolean(focusTarget.turnKey || focusTarget.toolCallId || focusTarget.messageId);
+        // Target turn not streamed in yet: wait for a later tools update instead of consuming the request.
+        if (needsTurn && !matchedTurn) return;
+        appliedFocusRef.current = focusTarget;
+
+        setActiveTab(focusTarget.tab ?? (focusTarget.toolCallId ? 'trace' : 'basis'));
         if (matchedTurn) {
             setSelectedTurnKey(matchedTurn.turnKey);
         }
 
         if (focusTarget.toolCallId) {
             const targetId = focusTarget.toolCallId;
+            setPinnedToolCallId(targetId);
             setOpenOverrides((prev) => ({ ...prev, [targetId]: true }));
             requestAnimationFrame(() => {
                 document.getElementById(`tool-thread-item-${targetId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
             });
+        } else {
+            setPinnedToolCallId(null);
         }
     }, [focusTarget, turns]);
 
-    // In trace mode follow newest step when no specific tool is targeted; in basis mode keep the top Answer Spec summary in view.
+    const selectTab = useCallback((next: 'basis' | 'trace') => {
+        setPinnedToolCallId(null);
+        setActiveTab(next);
+    }, []);
+    const selectTurn = useCallback((turnKey: string) => {
+        setPinnedToolCallId(null);
+        setSelectedTurnKey(turnKey);
+    }, []);
+
+    // In trace mode follow newest step when no specific tool is pinned; in basis mode keep the top Answer Spec summary in view.
     useEffect(() => {
-        if (!contentRef.current || focusTarget?.toolCallId) {
+        if (!contentRef.current || pinnedToolCallId) {
             return;
         }
         contentRef.current.scrollTop = activeTab === 'trace' ? contentRef.current.scrollHeight : 0;
-    }, [activeTab, tools.length, activeTurnKey, focusTarget?.toolCallId]);
+    }, [activeTab, tools.length, activeTurnKey, pinnedToolCallId]);
 
     return (
         // Beside the chat on a wide window; over it, from the right, below 1100px; full width below 720px.
@@ -680,7 +698,7 @@ const ToolPanel: React.FC<ToolPanelProps> = ({ tools = [], focusTarget, onClose 
 
             {tools.length > 0 && (
                 <div className="border-b border-border bg-[var(--frame-surface)] px-[22px]">
-                    <Tabs value={activeTab} onValueChange={(next) => setActiveTab(next === 'trace' ? 'trace' : 'basis')} className="gap-0">
+                    <Tabs value={activeTab} onValueChange={(next) => selectTab(next === 'trace' ? 'trace' : 'basis')} className="gap-0">
                         <TabsList variant="line" className="h-auto w-full justify-start gap-6 rounded-none p-0">
                             <TabsTrigger
                                 value="basis"
@@ -710,8 +728,8 @@ const ToolPanel: React.FC<ToolPanelProps> = ({ tools = [], focusTarget, onClose 
                         tools={activeTurnTools}
                         turns={turns}
                         activeTurnKey={activeTurnKey}
-                        onSelectTurn={setSelectedTurnKey}
-                        onSwitchToTrace={() => setActiveTab('trace')}
+                        onSelectTurn={selectTurn}
+                        onSwitchToTrace={() => selectTab('trace')}
                     />
                 ) : (
                     <ol className="m-0 list-none p-0 font-[family-name:var(--font-code)]">

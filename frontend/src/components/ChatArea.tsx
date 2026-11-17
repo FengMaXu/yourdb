@@ -26,7 +26,7 @@ import { isModelNotConfiguredError } from './ModelSetupPrompt';
 import type { ToolData, ToolPanelFocusTarget } from './ToolPanel';
 import { asRecord, extractQueryRowCount, specPathLabel } from './tool-audit';
 import { useSession, type Session, type Task } from '../hooks/useSession';
-import { useLanguage } from '../context/LanguageContext';
+import { useLanguage, type Language } from '../context/LanguageContext';
 import AgentOrbitIcon from './AgentOrbitIcon';
 import { IdCard } from 'lucide-react';
 import { isAgentMessageEmpty } from '../utils/agent-message';
@@ -217,9 +217,9 @@ const dedupeSkillActivations = (skills: SkillActivation[]) => {
     });
 };
 
-const formatBusinessToolLabel = (tool: ToolCallState, t: (key: string) => string): string | null => {
+const formatBusinessToolLabel = (tool: ToolCallState, language: Language): string | null => {
     if (tool.status === 'error' || tool.isError) return null;
-    const isEn = t('chat.toolCompleted').toLowerCase().includes('tool');
+    const isEn = language === 'en';
     const args = asRecord(tool.arguments);
     const details = asRecord(tool.details);
     const done = tool.status === 'done';
@@ -350,7 +350,7 @@ const formatBusinessToolLabel = (tool: ToolCallState, t: (key: string) => string
     return null;
 };
 
-export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string) => {
+export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string, language: Language = 'zh') => {
     if (tool.progressText) {
         return tool.progressText;
     }
@@ -362,7 +362,7 @@ export const getToolHintLabel = (tool: ToolCallState, t: (key: string) => string
             return t('chat.skillLoaded').replace('{name}', details.nativeSkill);
         }
     }
-    const businessLabel = formatBusinessToolLabel(tool, t);
+    const businessLabel = formatBusinessToolLabel(tool, language);
     if (businessLabel) {
         return businessLabel;
     }
@@ -397,7 +397,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         runActivity,
     } = useSession();
 
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     // Until a model and a database are both set up, the empty page walks the user through them first.
     const { ready: setupDone, usingSample } = useReadiness();
 
@@ -707,13 +707,14 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         await uploadFiles(files);
     };
 
-    const handleSend = async (overrideContent?: string) => {
+    /** `retry` re-sends an earlier prompt with its own attachments and leaves the current draft alone. */
+    const handleSend = async (overrideContent?: string, retry?: { attachments: string[] }) => {
         const content = (overrideContent ?? inputValue).trim();
         if (!content) return;
 
         void currentSession.id;
         // Attachments go with a new prompt; a steer while running carries text only.
-        const attachments = isStreaming ? [] : [...attachedFiles];
+        const attachments = isStreaming ? [] : retry ? [...retry.attachments] : [...attachedFiles];
         const userMsg: UserMessage = {
             id: `user-${Date.now()}`,
             role: 'user',
@@ -723,7 +724,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         };
 
         setMessages((prev) => [...prev, userMsg]);
-        setInputValue('');
+        if (!retry) setInputValue('');
         setShouldAutoScroll(true);
 
         if (isStreaming) {
@@ -744,7 +745,7 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
         promoteStage(pendingAgentMessageIdRef.current, 'sent');
         flushBufferedMessage(pendingAgentMessageIdRef.current);
 
-        if (attachments.length > 0) clearAttachedFiles();
+        if (!retry && attachments.length > 0) clearAttachedFiles();
         followRun(currentSession.id, (onEvent, onError, onFinish, sessionId, stream) => sendChatViaRuntime(content, onEvent, onError, onFinish, sessionId, stream, attachments));
     };
 
@@ -1379,10 +1380,10 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                                 startedAt={item.startedAt}
                                 currentSessionId={currentSession.id}
                                 connectionNotice={index === chatItems.length - 1 ? turnNotice : ''}
-                                toolLabel={(tool) => getToolHintLabel(tool, t)}
+                                toolLabel={(tool) => getToolHintLabel(tool, t, language)}
                                 skillLabel={(skill) => getSkillHintLabel(skill as SkillActivation, t)}
                                 onOpenToolPanel={onOpenToolPanel}
-                                onRetry={retryPrompt && !isStreaming && !mainComposerLocked ? () => void handleSend(retryPrompt) : undefined}
+                                onRetry={retryPrompt && !isStreaming && !mainComposerLocked ? () => void handleSend(retryPrompt, { attachments: prevItem?.kind === 'user' ? prevItem.message.attachments ?? [] : [] }) : undefined}
                             />
                         );
                     })()
@@ -1520,10 +1521,13 @@ const ActiveChatArea: React.FC<ActiveChatAreaProps> = ({
                         onChange={(e) => setInputValue(e.target.value)}
                         onKeyDown={handleKeyDown}
                         onPaste={(event) => {
-                            if (event.clipboardData?.files?.length) {
-                                event.preventDefault();
-                                void uploadFiles(Array.from(event.clipboardData.files));
-                            }
+                            // Only a pure file paste becomes an upload. Spreadsheet copies carry text plus a
+                            // bitmap and must paste as text; while uploads are blocked, let the paste through.
+                            const clipboard = event.clipboardData;
+                            if (!clipboard?.files?.length || clipboard.getData('text/plain')) return;
+                            if (isUploading || isStreaming || Boolean(pendingClarification)) return;
+                            event.preventDefault();
+                            void uploadFiles(Array.from(clipboard.files));
                         }}
                         disabled={mainComposerLocked}
                         rows={1}
