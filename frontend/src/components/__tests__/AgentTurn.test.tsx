@@ -35,6 +35,25 @@ const renderTurn = (running: boolean) => (
 );
 
 describe('AgentTurn', () => {
+    it('offers retry only when a failed tool left the turn without an answer', () => {
+        const failedTool = { c1: { toolCallId: 'c1', name: 'query_database', arguments: {}, status: 'error' as const, isError: true } };
+        const turn = (withAnswer: boolean) => (
+            <LanguageProvider><PreviewProvider><AgentTurn
+                agents={[step('a1', { toolCallsById: failedTool }), ...(withAnswer ? [step('a2', { content: '换了个查询，结果如下。' })] : [])]}
+                running={false}
+                startedAt={0}
+                currentSessionId="s1"
+                toolLabel={(tool) => tool.name}
+                skillLabel={(skill) => skill.name}
+                onRetry={() => undefined}
+            /></PreviewProvider></LanguageProvider>
+        );
+        const { rerender } = render(turn(true));
+        expect(screen.queryByRole('button', { name: /重试/ })).not.toBeInTheDocument();
+        rerender(turn(false));
+        expect(screen.getByRole('button', { name: /重试/ })).toBeInTheDocument();
+    });
+
     it('shows the process while running and folds it once done, keeping the answer in view', () => {
         const { rerender } = render(renderTurn(true));
         const toggle = screen.getByRole('button', { expanded: true });

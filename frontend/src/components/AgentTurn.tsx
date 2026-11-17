@@ -79,6 +79,9 @@ export function extractTrailingBasis(markdown: string): { body: string; basis?: 
  * remarks along the way), open while it runs and folded to one line when it is
  * done, followed by the result: its final text and every chart or table it made.
  */
+/** Quiet text actions under an answer (copy, retry): no frame until hovered. */
+const TURN_ACTION = 'inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none';
+
 function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, startedAt, currentSessionId, connectionNotice, toolLabel, skillLabel, onOpenToolPanel, onRetry }: AgentTurnProps<A>) {
     const { t, language } = useLanguage();
     const lang = language === 'en' ? 'en' : 'zh';
@@ -281,18 +284,18 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
                                         setTimeout(() => setCopiedAnswer(false), 2000);
                                     });
                                 }}
-                                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                                className={TURN_ACTION}
                                 aria-label={copiedAnswer ? t('chat.copiedAnswer') : t('chat.copyAnswer')}
                             >
                                 {copiedAnswer ? <Check size={13} className="text-success" aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
                                 <span>{copiedAnswer ? t('chat.copiedAnswer') : t('chat.copyAnswer')}</span>
                             </button>
                         )}
-                        {onRetry && (failed || lastAgent?.terminalReason === 'error' || Boolean(connectionNotice)) && (
+                        {onRetry && (lastAgent?.terminalReason === 'error' || Boolean(connectionNotice) || (failed && !resultText)) && (
                             <button
                                 type="button"
                                 onClick={onRetry}
-                                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1 text-[0.75rem] font-medium text-foreground transition-colors hover:border-border-strong hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                                className={TURN_ACTION}
                             >
                                 <RotateCcw size={13} aria-hidden="true" />
                                 <span>{t('chat.retryTurn')}</span>
