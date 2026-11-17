@@ -1,6 +1,7 @@
 import type {
   AnswerRevisionRecord,
   BusinessContext,
+  DisclosureItem,
   FieldRecord,
   ParentSupersession,
   PublicationDisclosure,
@@ -50,6 +51,26 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
     .filter(([, field]) => field.state === "decided" && field.adviceUndecided)
     .map(([path]) => path);
   const deviations = revision.deviations ?? [];
+  const findings = candidate.findings ?? [];
+  const items: DisclosureItem[] = [
+    ...(decided.length > 0 ? [{ kind: "decided" as const, paths: decided }] : []),
+    ...(assumed.length > 0 ? [{ kind: "assumed" as const, paths: assumed }] : []),
+    ...(unadvised.length > 0 ? [{ kind: "unadvised" as const, paths: unadvised }] : []),
+    ...(undecided.length > 0 ? [{ kind: "undecided" as const, paths: undecided }] : []),
+    ...deviations.map((item) => ({ kind: "deviation" as const, paths: [item.path], detail: item.reason })),
+    ...(parentSuperseded ? [{ kind: "parent_superseded" as const, paths: [] }] : []),
+    ...(fanoutDisclosure && candidate.fanout
+      ? [candidate.fanout.status === "finding"
+        ? { kind: "join_fanout" as const, paths: ["measure.formula"], detail: fanoutDisclosure }
+        : { kind: "join_fanout_unknown" as const, paths: ["measure.formula"], detail: candidate.fanout.unsupportedReasons?.length ? candidate.fanout.unsupportedReasons.join(", ") : "coverage unavailable" }]
+      : []),
+    ...findings.filter((item) => item.kind === "realization_conflict" && !item.blocking)
+      .map((item) => ({ kind: "realization_conflict" as const, paths: [...(item.paths ?? [])], detail: item.message })),
+    ...findings.filter((item) => item.kind === "entity_identity")
+      .map((item) => ({ kind: "entity_identity" as const, paths: [...(item.paths ?? ["population.entity"])], detail: item.message })),
+    ...findings.filter((item) => item.kind === "calendar_coverage")
+      .map((item) => ({ kind: "calendar_coverage" as const, paths: [...(item.paths ?? ["population.time"])], detail: item.message, ...(item.periods ? { periods: item.periods } : {}) })),
+  ];
   if (unverified.length === 0 && unadvised.length === 0 && undecided.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar) return undefined;
   return {
     required: true,
@@ -66,6 +87,7 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
       ...(identity ? [identity] : []),
       ...(calendar ? [calendar] : []),
     ].join(" "),
+    items,
     ...(fanoutDisclosure && candidate.fanout ? { fanoutStatus: candidate.fanout.status } : {}),
     ...(deviations.length > 0 ? { deviations } : {}),
     ...(parentSuperseded ? { parentSuperseded } : {}),

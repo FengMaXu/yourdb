@@ -1,5 +1,5 @@
 import type { DatasetRef } from "@data-agent/contracts";
-import type { BusinessContext, PhysicalProfile } from "../answering/public.js";
+import type { BusinessContext, DisclosureItem, PhysicalProfile } from "../answering/public.js";
 import type { ArtifactDirectory } from "./artifact-directory.js";
 import type { DerivedDatasets, DerivedInput } from "./derived-datasets.js";
 
@@ -16,6 +16,8 @@ export interface ResolvedChartData {
   readonly physicalProfile?: PhysicalProfile;
   /** Disclosure summaries of the published results behind the rows; a derived dataset carries its inputs'. */
   readonly disclosures: readonly string[];
+  /** The same disclosures, structured, for readers that show them beside the clause they concern. */
+  readonly disclosureItems: readonly DisclosureItem[];
 }
 
 export interface ChartDataResolverOptions {
@@ -37,15 +39,22 @@ export class ChartDataResolver {
         source: { kind: "publication", receiptId: ref.receiptId, contentHash: published.receipt.contentHash, ...(ref.kind === "live" ? { live: true as const, publishedAt: published.receipt.createdAt } : {}) },
         ...(published.receipt.physicalProfile ? { physicalProfile: published.receipt.physicalProfile } : {}),
         disclosures: disclosure ? [disclosure] : [],
+        disclosureItems: published.receipt.disclosure?.items ?? [],
       };
     }
     if (!this.options.derived) throw new Error("DERIVED_DATASET_UNAVAILABLE: this host does not keep derived datasets");
     const record = await this.options.derived.resolve(ref.derivedId, context);
     // The inputs must still be readable here; their Disclosures travel with the derived rows.
     const disclosures: string[] = [];
+    const disclosureItems: DisclosureItem[] = [];
     for (const input of record.provenance.inputs) {
       const receipt = await this.options.publications.resolveReceipt(input.receiptId, context);
       if (receipt.disclosure?.summary) disclosures.push(receipt.disclosure.summary);
+      // Inputs of one derived dataset often share a finding; keep each item once.
+      for (const item of receipt.disclosure?.items ?? []) {
+        const key = JSON.stringify(item);
+        if (!disclosureItems.some((existing) => JSON.stringify(existing) === key)) disclosureItems.push(item);
+      }
     }
     return {
       columns: record.columns,
@@ -53,6 +62,7 @@ export class ChartDataResolver {
       source: { kind: "derived", derivedId: record.derivedId, name: record.name, contentHash: record.contentHash, inputs: record.provenance.inputs, scriptSha256: record.provenance.scriptSha256 },
       physicalProfile: record.physicalProfile,
       disclosures,
+      disclosureItems,
     };
   }
 }

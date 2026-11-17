@@ -43,6 +43,7 @@ export {
   type BusinessContext,
   type CheckCoverage,
   type ColumnProfile,
+  type DisclosureItem,
   type EvidenceVerification,
   type ExecuteQuery,
   type FanoutProbeObservation,

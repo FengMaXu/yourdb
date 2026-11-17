@@ -16,7 +16,6 @@ import {
     extractBasisAudit,
     extractQueryRowCount,
     extractTabularDetails,
-    formatTurnBasisSummary,
     isTurnAuditVerified,
     parseArgsRecord,
     type AuditSpecRow,
@@ -29,7 +28,6 @@ import {
 
 export {
     extractBasisAudit,
-    formatTurnBasisSummary,
     isTurnAuditVerified,
     type AuditSpecRow,
     type AuditStatus,
@@ -446,40 +444,7 @@ const BasisAuditView: React.FC<{
         <div className="flex flex-col gap-3">
             {turnSelector}
 
-            {(audit.publicationReceipt || audit.fanoutFinding) && (
-                <div
-                    className={cn(
-                        'flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-[12px]',
-                        audit.publicationReceipt?.disclosureSummary || audit.fanoutFinding
-                            ? 'border-warning-border bg-warning-soft/55 text-foreground'
-                            : 'border-success-border bg-success-soft/50 text-foreground',
-                    )}
-                >
-                    <div className="flex items-center justify-between gap-2">
-                        <span className="inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold">
-                            {audit.publicationReceipt?.disclosureSummary || audit.fanoutFinding ? (
-                                <AlertTriangle className="size-3.5 text-warning" aria-hidden="true" />
-                            ) : (
-                                <ShieldCheck className="size-3.5 text-success" aria-hidden="true" />
-                            )}
-                            {audit.publicationReceipt?.disclosureSummary || audit.fanoutFinding
-                                ? (isEn ? 'Publication Disclosure' : '口径假设与校验披露')
-                                : (isEn ? 'Publication Verified' : '发布校验通过')}
-                        </span>
-                        {audit.publicationReceipt && (
-                            <span className="font-mono text-[10.5px] text-muted-foreground">
-                                {audit.publicationReceipt.receiptId.slice(0, 14)}
-                            </span>
-                        )}
-                    </div>
-                    {audit.publicationReceipt?.disclosureSummary && (
-                        <div className="leading-[1.5] text-body">{audit.publicationReceipt.disclosureSummary}</div>
-                    )}
-                    {audit.fanoutFinding && (
-                        <div className="leading-[1.5] text-warning">{audit.fanoutFinding}</div>
-                    )}
-                </div>
-            )}
+            {(audit.publicationReceipt || audit.fanoutFinding) && <BasisDisclosureCard audit={audit} isEn={isEn} />}
 
             {audit.specItems.length > 0 && (
                 <section className="flex flex-col gap-2">
@@ -524,6 +489,12 @@ const BasisAuditView: React.FC<{
                                 <div className="font-mono text-[12px] leading-[1.55] break-words whitespace-pre-wrap text-foreground">
                                     {item.value}
                                 </div>
+                                {item.notes?.map((note, noteIndex) => (
+                                    <div key={noteIndex} className="flex items-start gap-1.5 text-[11.5px] leading-[1.45] text-warning">
+                                        <AlertTriangle className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+                                        <span className="min-w-0 break-words">{note}</span>
+                                    </div>
+                                ))}
                                 {item.citation && (
                                     <div className="flex items-start gap-1.5 rounded-md bg-paper px-2 py-1 text-[11px] leading-[1.45] text-body">
                                         <BookOpen className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -588,6 +559,47 @@ const BasisAuditView: React.FC<{
                         <TabularDetailsPreview columns={audit.tabularDetails.columns} rows={audit.tabularDetails.rows} />
                     </div>
                 </section>
+            )}
+        </div>
+    );
+};
+
+/** What to watch for in this turn: notes for clauses not in the tree, and how many are marked in it. */
+const BasisDisclosureCard: React.FC<{ audit: BasisAuditData; isEn: boolean }> = ({ audit, isEn }) => {
+    const flagged = Boolean(audit.publicationReceipt?.disclosed || audit.fanoutFinding);
+    const generalLines = [...audit.generalNotes, ...(audit.fanoutFinding ? [audit.fanoutFinding] : [])];
+    const notedRows = audit.specItems.filter((item) => (item.notes?.length ?? 0) > 0 || item.status === 'assumed').length;
+    return (
+        <div
+            data-testid="basis-disclosure-card"
+            className={cn(
+                'flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-[12px]',
+                flagged
+                    ? 'border-warning-border bg-warning-soft/55 text-foreground'
+                    : 'border-success-border bg-success-soft/50 text-foreground',
+            )}
+        >
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
+                {flagged ? (
+                    <AlertTriangle className="size-3.5 text-warning" aria-hidden="true" />
+                ) : (
+                    <ShieldCheck className="size-3.5 text-success" aria-hidden="true" />
+                )}
+                {flagged
+                    ? (isEn ? 'Points to check' : '需要留意')
+                    : (isEn ? 'All clauses verified' : '口径均已核实')}
+            </span>
+            {generalLines.length > 0 && (
+                <ul className="m-0 flex list-disc flex-col gap-0.5 pl-4 leading-[1.5] text-body">
+                    {generalLines.map((line, index) => <li key={index}>{line}</li>)}
+                </ul>
+            )}
+            {flagged && notedRows > 0 && (
+                <div className="leading-[1.5] text-muted-foreground">
+                    {isEn
+                        ? `${notedRows} clause${notedRows === 1 ? '' : 's'} below ${notedRows === 1 ? 'is' : 'are'} marked where they apply.`
+                        : `下方口径树中有 ${notedRows} 项已就地标注。`}
+                </div>
             )}
         </div>
     );

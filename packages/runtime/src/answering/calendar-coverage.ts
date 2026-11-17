@@ -179,7 +179,7 @@ export function calendarCoverageCoverage(report: CalendarCoverageReport | undefi
 
 export function calendarCoverageFindings(report: CalendarCoverageReport | undefined): readonly Finding[] {
   const message = report ? calendarCoverageMessage(report) : undefined;
-  return message ? [{ id: `finding_calendar_coverage_${randomUUID()}`, kind: "calendar_coverage", message, blocking: false, checkId: CALENDAR_COVERAGE_CHECK_ID }] : [];
+  return message ? [{ id: `finding_calendar_coverage_${randomUUID()}`, kind: "calendar_coverage", message, blocking: false, checkId: CALENDAR_COVERAGE_CHECK_ID, paths: ["population.time"], periods: [...(report?.missing ?? [])] }] : [];
 }
 
 export function calendarCoverageDisclosure(findings: readonly Finding[]): string {

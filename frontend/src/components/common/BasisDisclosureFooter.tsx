@@ -29,6 +29,8 @@ export interface BasisDisclosureFooterProps {
     onOpenAudit?: () => void;
     /** Verified status label, defaults to true when no disclosures/declaredFields are present. */
     verified?: boolean;
+    /** Clauses the model assumed; shown in the badge when known. */
+    assumedCount?: number;
 }
 
 /**
@@ -43,15 +45,20 @@ const BasisDisclosureFooter: React.FC<BasisDisclosureFooterProps> = ({
     declaredFields = [],
     onOpenAudit,
     verified = true,
+    assumedCount,
 }) => {
     const { language } = useLanguage();
     const isEn = language === 'en';
 
-    const hasAssumptions = Boolean(disclosure) || declaredFields.length > 0;
-    const isVerified = verified && !hasAssumptions;
-    const hasDetails = notices.length > 0 || checks.length > 0 || Boolean(disclosure) || declaredFields.length > 0;
+    const hasAssumptions = declaredFields.length > 0 || (assumedCount ?? 0) > 0;
+    // Missing data or a check finding is not an assumption; it still is not "verified".
+    const needsAttention = !hasAssumptions && (!verified || Boolean(disclosure));
+    const isVerified = verified && !hasAssumptions && !needsAttention;
+    // A single disclosure line with nothing else to fold reads inline, beside the badge.
+    const inlineDisclosure = !basis && notices.length === 0 && checks.length === 0 && declaredFields.length === 0 ? disclosure : undefined;
+    const hasDetails = notices.length > 0 || checks.length > 0 || (Boolean(disclosure) && !inlineDisclosure) || declaredFields.length > 0;
 
-    if (!basis && !hasDetails) {
+    if (!basis && !hasDetails && !inlineDisclosure && !onOpenAudit) {
         return null;
     }
 
@@ -65,9 +72,13 @@ const BasisDisclosureFooter: React.FC<BasisDisclosureFooterProps> = ({
                     <span className="shrink-0 font-mono text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">
                         -- BASIS
                     </span>
-                    {hasAssumptions || !verified ? (
+                    {hasAssumptions || needsAttention ? (
                         <span className="shrink-0 rounded border border-warning-border bg-warning-soft px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-warning">
-                            {isEn ? 'Assumed' : '含模型假设'}
+                            {assumedCount
+                                ? (isEn ? `${assumedCount} assumed` : `含 ${assumedCount} 项模型假设`)
+                                : hasAssumptions
+                                    ? (isEn ? 'Assumed' : '含模型假设')
+                                    : (isEn ? 'Check' : '需留意')}
                         </span>
                     ) : isVerified ? (
                         <span className="shrink-0 rounded border border-success-border bg-success-soft px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-success">
@@ -75,6 +86,11 @@ const BasisDisclosureFooter: React.FC<BasisDisclosureFooterProps> = ({
                         </span>
                     ) : null}
                 </div>
+                {inlineDisclosure && (
+                    <div className="order-3 min-w-0 basis-full text-[12.5px] leading-[1.6] break-words text-warning min-[721px]:order-2 min-[721px]:basis-auto min-[721px]:flex-1">
+                        {inlineDisclosure}
+                    </div>
+                )}
                 {basis && (
                     <div className="order-3 min-w-0 basis-full text-[12.5px] leading-[1.6] break-words text-body min-[721px]:order-2 min-[721px]:basis-auto min-[721px]:flex-1 [&_code]:rounded [&_code]:border [&_code]:border-border [&_code]:bg-white [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[11.5px] [&_code]:break-all [&_p]:m-0 [&_p]:inline">
                         {basis}

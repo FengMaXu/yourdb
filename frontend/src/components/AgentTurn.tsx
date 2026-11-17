@@ -14,7 +14,7 @@ import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigg
 import { cn } from '@/lib/utils';
 import { subagentChildrenOf, type ToolCallState } from './tool-event-state';
 import { type ToolPanelFocusTarget } from './ToolPanel';
-import { extractBasisAudit, formatTurnBasisSummary, isBasisAuditVerified, type ToolData } from './tool-audit';
+import { countAssumedPaths, extractBasisAudit, formatDisclosureHeadline, isBasisAuditVerified, type ToolData } from './tool-audit';
 
 export interface TurnAgentMessage extends TurnAgentLike {
     messageId: string;
@@ -61,18 +61,8 @@ function Dot({ live }: { live: boolean }) {
     );
 }
 
-/** Extract a trailing basis note (`口径：...` or `Basis: ...`) so it renders in a structured footer. */
-export function extractTrailingBasis(markdown: string): { body: string; basis?: string } {
-    const trimmed = markdown.trimEnd();
-    const match = /^(?:([\s\S]*?)\n\s*\n)?(?:\*\*)?(?:(?:数据)?口径(?:说明)?|Basis)(?:\*\*)?[：:]\s*([^\n]+)$/.exec(trimmed);
-    if (!match) {
-        return { body: markdown };
-    }
-    return {
-        body: (match[1] ?? '').trimEnd(),
-        basis: match[2].trim(),
-    };
-}
+/** Quiet text actions under an answer (copy, retry): no frame until hovered. */
+const TURN_ACTION = 'inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none';
 
 /**
  * One answer from the agent: the process it went through (thoughts, tool calls,
@@ -147,19 +137,17 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
         : (duration ? t('trace.worked').replace('{duration}', duration) : t('trace.process'));
     const hasProcess = visibleSteps.length > 0 || (running && !resultText);
     const bodyId = `trace-${lastAgent?.id ?? 'pending'}`;
-    const { body: answerBody, basis: answerBasis } = resultText
-        ? extractTrailingBasis(resultText)
-        : { body: '', basis: undefined };
-    const synthesizedBasis = !answerBasis && !running && resultText
-        ? formatTurnBasisSummary(turnAudit, lang === 'en')
-        : undefined;
-    const footerBasisNode = answerBasis
-        ? <AgentMarkdown currentSessionId={currentSessionId}>{answerBasis}</AgentMarkdown>
-        : synthesizedBasis;
-    const footerDisclosure = turnAudit.publicationReceipt?.disclosureSummary;
-    const footerChecks = turnAudit.fanoutFinding
-        ? [{ code: 'JOIN_FANOUT', field: 'join', message: turnAudit.fanoutFinding }]
-        : undefined;
+    const answerBody = resultText;
+    // Three places, three questions: the answer says what the result is (and what could
+    // mislead), the footer says whether to trust it, the Basis panel says how it was defined.
+    // So the footer never restates the definition — only trust state and check findings.
+    const hasAuditBasis = turnAudit.specItems.length > 0 || Boolean(turnAudit.publicationReceipt) || Boolean(turnAudit.sqlText);
+    const showFooter = !running && Boolean(resultText) && hasAuditBasis;
+    const footerDisclosure = formatDisclosureHeadline(turnAudit, lang === 'en');
+    // Counted like the chart counts it: from the receipt when there is one.
+    const assumedCount = turnAudit.publicationReceipt
+        ? countAssumedPaths(turnAudit.publicationReceipt.notes)
+        : turnAudit.specItems.filter((item) => item.status === 'assumed').length;
 
     const renderStep = (step: TraceStep<A>, index: number) => {
         const live = running && index === visibleSteps.length - 1;
@@ -253,11 +241,10 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
                     <WidgetRenderer key={widget.tool_call_id || widget.widget_id} widget={widget} currentSessionId={currentSessionId} />
                 ))}
 
-                {(footerBasisNode || footerDisclosure || footerChecks) && (
+                {showFooter && (
                     <BasisDisclosureFooter
-                        basis={footerBasisNode}
-                        checks={footerChecks}
                         disclosure={footerDisclosure}
+                        assumedCount={assumedCount}
                         onOpenAudit={onOpenToolPanel ? () => onOpenToolPanel({ turnKey, messageId: lastAgent?.messageId, tab: 'basis' }) : undefined}
                         verified={turnVerified}
                     />
@@ -284,18 +271,18 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
                                         setTimeout(() => setCopiedAnswer(false), 2000);
                                     });
                                 }}
-                                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                                className={TURN_ACTION}
                                 aria-label={copiedAnswer ? t('chat.copiedAnswer') : t('chat.copyAnswer')}
                             >
                                 {copiedAnswer ? <Check size={13} className="text-success" aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
                                 <span>{copiedAnswer ? t('chat.copiedAnswer') : t('chat.copyAnswer')}</span>
                             </button>
                         )}
-                        {onRetry && (failed || lastAgent?.terminalReason === 'error' || Boolean(connectionNotice)) && (
+                        {onRetry && (lastAgent?.terminalReason === 'error' || Boolean(connectionNotice) || (failed && !resultText)) && (
                             <button
                                 type="button"
                                 onClick={onRetry}
-                                className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-white px-2.5 py-1 text-[0.75rem] font-medium text-foreground transition-colors hover:border-border-strong hover:bg-paper focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                                className={TURN_ACTION}
                             >
                                 <RotateCcw size={13} aria-hidden="true" />
                                 <span>{t('chat.retryTurn')}</span>
