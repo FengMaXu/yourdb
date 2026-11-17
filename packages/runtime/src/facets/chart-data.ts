@@ -50,7 +50,11 @@ export class ChartDataResolver {
     for (const input of record.provenance.inputs) {
       const receipt = await this.options.publications.resolveReceipt(input.receiptId, context);
       if (receipt.disclosure?.summary) disclosures.push(receipt.disclosure.summary);
-      disclosureItems.push(...(receipt.disclosure?.items ?? []));
+      // Inputs of one derived dataset often share a finding; keep each item once.
+      for (const item of receipt.disclosure?.items ?? []) {
+        const key = JSON.stringify(item);
+        if (!disclosureItems.some((existing) => JSON.stringify(existing) === key)) disclosureItems.push(item);
+      }
     }
     return {
       columns: record.columns,

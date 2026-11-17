@@ -14,7 +14,7 @@ import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigg
 import { cn } from '@/lib/utils';
 import { subagentChildrenOf, type ToolCallState } from './tool-event-state';
 import { type ToolPanelFocusTarget } from './ToolPanel';
-import { extractBasisAudit, formatDisclosureHeadline, isBasisAuditVerified, type ToolData } from './tool-audit';
+import { countAssumedPaths, extractBasisAudit, formatDisclosureHeadline, isBasisAuditVerified, type ToolData } from './tool-audit';
 
 export interface TurnAgentMessage extends TurnAgentLike {
     messageId: string;
@@ -61,14 +61,14 @@ function Dot({ live }: { live: boolean }) {
     );
 }
 
+/** Quiet text actions under an answer (copy, retry): no frame until hovered. */
+const TURN_ACTION = 'inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none';
+
 /**
  * One answer from the agent: the process it went through (thoughts, tool calls,
  * remarks along the way), open while it runs and folded to one line when it is
  * done, followed by the result: its final text and every chart or table it made.
  */
-/** Quiet text actions under an answer (copy, retry): no frame until hovered. */
-const TURN_ACTION = 'inline-flex cursor-pointer items-center gap-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[0.75rem] font-medium text-muted-foreground transition-colors hover:border-border hover:bg-paper hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none';
-
 function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, startedAt, currentSessionId, connectionNotice, toolLabel, skillLabel, onOpenToolPanel, onRetry }: AgentTurnProps<A>) {
     const { t, language } = useLanguage();
     const lang = language === 'en' ? 'en' : 'zh';
@@ -144,7 +144,10 @@ function AgentTurn<A extends TurnAgentMessage>({ agents, turnKey, running, start
     const hasAuditBasis = turnAudit.specItems.length > 0 || Boolean(turnAudit.publicationReceipt) || Boolean(turnAudit.sqlText);
     const showFooter = !running && Boolean(resultText) && hasAuditBasis;
     const footerDisclosure = formatDisclosureHeadline(turnAudit, lang === 'en');
-    const assumedCount = turnAudit.specItems.filter((item) => item.status === 'assumed').length;
+    // Counted like the chart counts it: from the receipt when there is one.
+    const assumedCount = turnAudit.publicationReceipt
+        ? countAssumedPaths(turnAudit.publicationReceipt.notes)
+        : turnAudit.specItems.filter((item) => item.status === 'assumed').length;
 
     const renderStep = (step: TraceStep<A>, index: number) => {
         const live = running && index === visibleSteps.length - 1;

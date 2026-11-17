@@ -62,7 +62,7 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
     ...(fanoutDisclosure && candidate.fanout
       ? [candidate.fanout.status === "finding"
         ? { kind: "join_fanout" as const, paths: ["measure.formula"], detail: fanoutDisclosure }
-        : { kind: "join_fanout_unknown" as const, paths: ["measure.formula"], detail: candidate.fanout.unsupportedReasons?.join(", ") ?? "coverage unavailable" }]
+        : { kind: "join_fanout_unknown" as const, paths: ["measure.formula"], detail: candidate.fanout.unsupportedReasons?.length ? candidate.fanout.unsupportedReasons.join(", ") : "coverage unavailable" }]
       : []),
     ...findings.filter((item) => item.kind === "realization_conflict" && !item.blocking)
       .map((item) => ({ kind: "realization_conflict" as const, paths: [...(item.paths ?? [])], detail: item.message })),

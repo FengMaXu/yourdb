@@ -103,7 +103,9 @@ const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) 
     const isEn = language === 'en';
     const headline = formatNotesHeadline(items, isEn, declared.length > 0
         ? [isEn ? `field meanings declared by the model: ${declared.join(', ')}` : `字段含义由模型声明，未经业务定义核实：${declared.join('、')}`]
-        : []);
+        : [],
+    // A chart has no link to the Basis panel, so nothing is folded into "N more".
+    Number.POSITIVE_INFINITY);
     const assumedCount = countAssumedPaths(items);
     const flagged = Boolean(widget.disclosure) || items.length > 0 || declared.length > 0;
     return (

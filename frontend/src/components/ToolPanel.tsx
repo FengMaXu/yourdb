@@ -444,45 +444,7 @@ const BasisAuditView: React.FC<{
         <div className="flex flex-col gap-3">
             {turnSelector}
 
-            {(audit.publicationReceipt || audit.fanoutFinding) && (() => {
-                const flagged = Boolean(audit.publicationReceipt?.disclosed || audit.fanoutFinding);
-                const generalLines = [...audit.generalNotes, ...(audit.fanoutFinding ? [audit.fanoutFinding] : [])];
-                const notedRows = audit.specItems.filter((item) => (item.notes?.length ?? 0) > 0 || item.status === 'assumed').length;
-                return (
-                    <div
-                        data-testid="basis-disclosure-card"
-                        className={cn(
-                            'flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-[12px]',
-                            flagged
-                                ? 'border-warning-border bg-warning-soft/55 text-foreground'
-                                : 'border-success-border bg-success-soft/50 text-foreground',
-                        )}
-                    >
-                        <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
-                            {flagged ? (
-                                <AlertTriangle className="size-3.5 text-warning" aria-hidden="true" />
-                            ) : (
-                                <ShieldCheck className="size-3.5 text-success" aria-hidden="true" />
-                            )}
-                            {flagged
-                                ? (isEn ? 'Points to check' : '需要留意')
-                                : (isEn ? 'All clauses verified' : '口径均已核实')}
-                        </span>
-                        {generalLines.length > 0 && (
-                            <ul className="m-0 flex list-disc flex-col gap-0.5 pl-4 leading-[1.5] text-body">
-                                {generalLines.map((line, index) => <li key={index}>{line}</li>)}
-                            </ul>
-                        )}
-                        {flagged && notedRows > 0 && (
-                            <div className="leading-[1.5] text-muted-foreground">
-                                {isEn
-                                    ? `${notedRows} clause${notedRows === 1 ? '' : 's'} below ${notedRows === 1 ? 'is' : 'are'} marked where they apply.`
-                                    : `下方口径树中有 ${notedRows} 项已就地标注。`}
-                            </div>
-                        )}
-                    </div>
-                );
-            })()}
+            {(audit.publicationReceipt || audit.fanoutFinding) && <BasisDisclosureCard audit={audit} isEn={isEn} />}
 
             {audit.specItems.length > 0 && (
                 <section className="flex flex-col gap-2">
@@ -597,6 +559,47 @@ const BasisAuditView: React.FC<{
                         <TabularDetailsPreview columns={audit.tabularDetails.columns} rows={audit.tabularDetails.rows} />
                     </div>
                 </section>
+            )}
+        </div>
+    );
+};
+
+/** What to watch for in this turn: notes for clauses not in the tree, and how many are marked in it. */
+const BasisDisclosureCard: React.FC<{ audit: BasisAuditData; isEn: boolean }> = ({ audit, isEn }) => {
+    const flagged = Boolean(audit.publicationReceipt?.disclosed || audit.fanoutFinding);
+    const generalLines = [...audit.generalNotes, ...(audit.fanoutFinding ? [audit.fanoutFinding] : [])];
+    const notedRows = audit.specItems.filter((item) => (item.notes?.length ?? 0) > 0 || item.status === 'assumed').length;
+    return (
+        <div
+            data-testid="basis-disclosure-card"
+            className={cn(
+                'flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-[12px]',
+                flagged
+                    ? 'border-warning-border bg-warning-soft/55 text-foreground'
+                    : 'border-success-border bg-success-soft/50 text-foreground',
+            )}
+        >
+            <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold">
+                {flagged ? (
+                    <AlertTriangle className="size-3.5 text-warning" aria-hidden="true" />
+                ) : (
+                    <ShieldCheck className="size-3.5 text-success" aria-hidden="true" />
+                )}
+                {flagged
+                    ? (isEn ? 'Points to check' : '需要留意')
+                    : (isEn ? 'All clauses verified' : '口径均已核实')}
+            </span>
+            {generalLines.length > 0 && (
+                <ul className="m-0 flex list-disc flex-col gap-0.5 pl-4 leading-[1.5] text-body">
+                    {generalLines.map((line, index) => <li key={index}>{line}</li>)}
+                </ul>
+            )}
+            {flagged && notedRows > 0 && (
+                <div className="leading-[1.5] text-muted-foreground">
+                    {isEn
+                        ? `${notedRows} clause${notedRows === 1 ? '' : 's'} below ${notedRows === 1 ? 'is' : 'are'} marked where they apply.`
+                        : `下方口径树中有 ${notedRows} 项已就地标注。`}
+                </div>
             )}
         </div>
     );

@@ -647,9 +647,14 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
         : undefined;
 
     const queryFanout = asRecord(asRecord(queryTool?.details)?.fanout);
-    const fanoutStatus = publicationReceipt?.fanoutStatus ?? (typeof queryFanout?.status === 'string' ? queryFanout.status : undefined);
-    // A receipt reports fanout among its own disclosure notes; this covers a query not yet published.
-    const fanoutFinding = !publicationReceipt && fanoutStatus === 'finding'
+    const queryCandidateId = asRecord(asRecord(queryTool?.details)?.artifact)?.candidateId;
+    const publishedCandidateId = parseArgsRecord(publishTool?.args)?.candidateId;
+    // The receipt reports fanout among its own notes — but only for the candidate it published.
+    // Without ids to compare, a receipt is taken to cover the latest query.
+    const queryPublished = Boolean(publicationReceipt) && (
+        typeof queryCandidateId !== 'string' || typeof publishedCandidateId !== 'string' || queryCandidateId === publishedCandidateId
+    );
+    const fanoutFinding = !queryPublished && queryFanout?.status === 'finding'
         ? (isEn ? 'Potential join multiplicity fanout detected on primary source key.' : '检测到表连接存在潜在指标倍增（Fanout），请核对连接基数约束。')
         : undefined;
 
@@ -672,7 +677,7 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
         }
         if (popParts.length > 0) {
             specItems.push({
-                path: 'population',
+                path: 'population.source',
                 label: isEn ? 'Population' : '统计总体',
                 value: popParts.join('\n'),
                 status: searchDoc ? 'verified' : 'assumed',
@@ -685,7 +690,7 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
 
         if (sqlAudit.timeFilters.length > 0) {
             specItems.push({
-                path: 'time',
+                path: 'population.time',
                 label: isEn ? 'Time Window' : '时间范围',
                 value: sqlAudit.timeFilters.join(' AND '),
                 // Read off model-written SQL only — nothing checked it against the request.
@@ -696,7 +701,7 @@ export function extractBasisAudit(tools: ToolData[], isEn: boolean): BasisAuditD
 
         if (sqlAudit.measureExpressions.length > 0) {
             specItems.push({
-                path: 'measure',
+                path: 'measure.formula',
                 label: isEn ? 'Measure' : '度量公式',
                 value: sqlAudit.measureExpressions.join('\n'),
                 status: schemaDoc ? 'verified' : 'assumed',
@@ -796,7 +801,9 @@ export function disclosureNoteText(note: DisclosureNote, isEn: boolean, withFiel
         case 'join_fanout_unknown':
             return on(isEn ? 'could not fully check whether joins double-count' : '未能完整检查表连接是否重复计数');
         case 'realization_conflict':
-            return on(isEn ? 'the SQL may not follow this definition' : 'SQL 可能没有按这条口径执行');
+            return note.paths.length > 0
+                ? on(isEn ? 'the SQL may not follow this definition' : 'SQL 可能没有按这条口径执行')
+                : (isEn ? 'The SQL may not fully follow the agreed definition.' : 'SQL 可能没有完全按已定口径执行。');
         case 'entity_identity':
             return on(isEn ? 'source rows do not map one-to-one to the counted entity' : '来源表的行与统计对象不是一一对应');
         case 'calendar_coverage':
@@ -820,15 +827,17 @@ export function formatDisclosureHeadline(audit: BasisAuditData, isEn: boolean): 
  * The same one line from raw notes (a chart carries its source receipts' notes):
  * assumptions are left to the badge count; at most two items, then "N more".
  */
-export function formatNotesHeadline(notes: readonly DisclosureNote[], isEn: boolean, extra: readonly string[] = []): string | undefined {
-    const lines = notes
-        .filter((note) => note.kind !== 'assumed')
-        .map((note) => disclosureNoteText(note, isEn, true))
-        .filter((text): text is string => Boolean(text));
-    lines.push(...extra);
+export function formatNotesHeadline(notes: readonly DisclosureNote[], isEn: boolean, extra: readonly string[] = [], max = 2): string | undefined {
+    const lines = [...new Set([
+        ...notes
+            .filter((note) => note.kind !== 'assumed')
+            .map((note) => disclosureNoteText(note, isEn, true))
+            .filter((text): text is string => Boolean(text)),
+        ...extra,
+    ])];
     if (lines.length === 0) return undefined;
-    const shown = lines.slice(0, 2).join(isEn ? '; ' : '；');
-    return lines.length > 2 ? `${shown}${isEn ? `; ${lines.length - 2} more` : `；另有 ${lines.length - 2} 项`}` : shown;
+    const shown = lines.slice(0, max).join(isEn ? '; ' : '；');
+    return lines.length > max ? `${shown}${isEn ? `; ${lines.length - max} more` : `；另有 ${lines.length - max} 项`}` : shown;
 }
 
 /** How many clauses the notes say were assumed by the model. */

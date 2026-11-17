@@ -50,8 +50,10 @@ const BasisDisclosureFooter: React.FC<BasisDisclosureFooterProps> = ({
     const { language } = useLanguage();
     const isEn = language === 'en';
 
-    const hasAssumptions = Boolean(disclosure) || declaredFields.length > 0 || (assumedCount ?? 0) > 0;
-    const isVerified = verified && !hasAssumptions;
+    const hasAssumptions = declaredFields.length > 0 || (assumedCount ?? 0) > 0;
+    // Missing data or a check finding is not an assumption; it still is not "verified".
+    const needsAttention = !hasAssumptions && (!verified || Boolean(disclosure));
+    const isVerified = verified && !hasAssumptions && !needsAttention;
     // A single disclosure line with nothing else to fold reads inline, beside the badge.
     const inlineDisclosure = !basis && notices.length === 0 && checks.length === 0 && declaredFields.length === 0 ? disclosure : undefined;
     const hasDetails = notices.length > 0 || checks.length > 0 || (Boolean(disclosure) && !inlineDisclosure) || declaredFields.length > 0;
@@ -70,11 +72,13 @@ const BasisDisclosureFooter: React.FC<BasisDisclosureFooterProps> = ({
                     <span className="shrink-0 font-mono text-[11px] font-semibold tracking-[0.06em] text-muted-foreground">
                         -- BASIS
                     </span>
-                    {hasAssumptions || !verified ? (
+                    {hasAssumptions || needsAttention ? (
                         <span className="shrink-0 rounded border border-warning-border bg-warning-soft px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-warning">
                             {assumedCount
                                 ? (isEn ? `${assumedCount} assumed` : `含 ${assumedCount} 项模型假设`)
-                                : (isEn ? 'Assumed' : '含模型假设')}
+                                : hasAssumptions
+                                    ? (isEn ? 'Assumed' : '含模型假设')
+                                    : (isEn ? 'Check' : '需留意')}
                         </span>
                     ) : isVerified ? (
                         <span className="shrink-0 rounded border border-success-border bg-success-soft px-1.5 py-0.5 font-mono text-[10.5px] font-medium text-success">
