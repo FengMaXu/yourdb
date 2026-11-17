@@ -154,8 +154,7 @@ const Editor: React.FC<McpSettingsProps & { server: MCPServerConfig; index: numb
                     : <CustomForm server={server} index={index} onField={onField} onRemove={onRemove} t={t} />}
             </div>
 
-            {/* Flush with the page scroller's edge, past its bottom padding (32px, 16px on a narrow screen). */}
-            <footer className="sticky -bottom-4 z-[1] flex flex-wrap items-center gap-2.5 border-t border-border bg-paper/92 px-4 py-3.5 backdrop-blur-[8px] min-[721px]:-bottom-8 min-[761px]:flex-nowrap min-[761px]:px-7">
+            <footer className="mt-auto flex flex-wrap items-center gap-2.5 border-t border-border bg-paper px-4 py-3.5 min-[761px]:flex-nowrap min-[761px]:px-7">
                 <div className="min-w-0 flex-1 basis-full text-[0.82rem] min-[761px]:basis-auto" role={testResult ? (testResult.success ? 'status' : 'alert') : undefined} aria-live="polite">
                     {testResult && (
                         <span className={cn('inline-flex animate-rise-sm items-center gap-[5px] break-words [animation-duration:260ms]', testResult.success ? 'text-success' : 'text-destructive')}>

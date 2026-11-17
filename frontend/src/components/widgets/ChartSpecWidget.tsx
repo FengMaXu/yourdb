@@ -1,8 +1,13 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import * as echarts from 'echarts';
+import { Download, Maximize2 } from 'lucide-react';
 import { compileChart, type ChartDataset, type PresentationNotice, type SemanticsCheck } from '@data-agent/charts';
+import BasisDisclosureFooter from '../common/BasisDisclosureFooter';
+import { useLanguage } from '../../context/LanguageContext';
+import { useOptionalPreview } from '../../context/PreviewContext';
 
 export interface ChartSpecWidgetData {
+    readonly title?: string;
     readonly chartSpec: unknown;
     readonly dataset: ChartDataset;
     readonly notices?: readonly PresentationNotice[];
@@ -17,16 +22,14 @@ export interface ChartSpecWidgetData {
 /** ECharts measures its box when it mounts, so the size is set inline: it must hold wherever the widget renders, stylesheet or not. */
 const CANVAS_SIZE = { width: '100%', height: 360 } as const;
 
-/** Notes under a chart: provenance, disclosures and data checks (checks in amber). */
-const NOTE = 'text-[12px] leading-[1.6] text-muted-foreground';
-const CHECK = 'text-[12px] leading-[1.6] text-warning';
-
 /**
  * A chat chart built by the Runtime: a ChartSpec plus the published rows it was
  * resolved against. It compiles in the browser for the interactive target, so
  * formatters and viewports work without any option crossing the wire.
  */
 const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) => {
+    const { t } = useLanguage();
+    const preview = useOptionalPreview();
     const containerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<echarts.ECharts | null>(null);
     const compiled = useMemo(() => compileChart(widget.chartSpec, widget.dataset, { target: 'interactive' }), [widget.chartSpec, widget.dataset]);
@@ -57,22 +60,74 @@ const ChartSpecWidget: React.FC<{ widget: ChartSpecWidgetData }> = ({ widget }) 
         );
     }
 
+    const exportPngDataUrl = () => {
+        if (!chartRef.current) return null;
+        const backgroundColor = typeof document !== 'undefined'
+            ? getComputedStyle(document.documentElement).getPropertyValue('--background').trim() || undefined
+            : undefined;
+        return chartRef.current.getDataURL({
+            type: 'png',
+            pixelRatio: 2,
+            ...(backgroundColor ? { backgroundColor } : {}),
+        });
+    };
+
+    const handlePreviewImage = () => {
+        if (!preview) return;
+        const dataUrl = exportPngDataUrl();
+        if (!dataUrl) return;
+        preview.openPreview(dataUrl, widget.title || 'chart.png', 'png');
+    };
+
+    const handleDownloadImage = () => {
+        const dataUrl = exportPngDataUrl();
+        if (!dataUrl) return;
+        const link = document.createElement('a');
+        link.href = dataUrl;
+        link.download = `${(widget.title || 'chart').replace(/[\\/:*?"<>|]/g, '_')}.png`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+    };
+
     const notices = compiled.notices;
     const checks = widget.semanticChecks ?? [];
     return (
         <div>
+            <div className="mb-1 flex items-center justify-end gap-1.5">
+                {preview && (
+                    <button
+                        type="button"
+                        onClick={handlePreviewImage}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-paper px-2 py-1 text-[11.5px] font-medium text-body transition-colors hover:border-border-strong hover:bg-white hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                        aria-label={t('widgets.fullscreen')}
+                        title={t('widgets.fullscreen')}
+                    >
+                        <Maximize2 className="size-3" aria-hidden="true" />
+                        <span>{t('widgets.fullscreen')}</span>
+                    </button>
+                )}
+                <button
+                    type="button"
+                    onClick={handleDownloadImage}
+                    className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-paper px-2 py-1 text-[11.5px] font-medium text-body transition-colors hover:border-border-strong hover:bg-white hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                    aria-label={t('widgets.downloadImage')}
+                    title={t('widgets.downloadImage')}
+                >
+                    <Download className="size-3" aria-hidden="true" />
+                    <span>{t('widgets.downloadImage')}</span>
+                </button>
+            </div>
             <div ref={containerRef} data-testid="chart-spec-canvas" style={CANVAS_SIZE} />
             {(notices.length > 0 || checks.length > 0 || widget.derivedFrom || widget.disclosure || (widget.declaredFields?.length ?? 0) > 0) && (
-                <div className="mt-2 grid gap-0.5">
-                    {/* The compiler keeps one notice per code and field, so the code alone is not unique. */}
-                    {notices.map((notice) => <div key={`${notice.code}:${notice.field ?? ''}`} className={NOTE}>{notice.message}</div>)}
-                    {checks.map((check) => <div key={`check:${check.code}:${check.field}`} className={CHECK}>{check.message}</div>)}
-                    {widget.derivedFrom && <div className={NOTE}>{widget.derivedFrom}</div>}
-                    {widget.disclosure && <div className={NOTE}>{widget.disclosure}</div>}
-                    {(widget.declaredFields?.length ?? 0) > 0 && (
-                        <div className={NOTE}>字段语义来自模型声明，未经业务定义核实：{widget.declaredFields!.join('、')}</div>
-                    )}
-                </div>
+                <BasisDisclosureFooter
+                    basis={widget.derivedFrom}
+                    notices={notices}
+                    checks={checks}
+                    disclosure={widget.disclosure}
+                    declaredFields={widget.declaredFields}
+                    verified={!widget.disclosure && !(widget.declaredFields?.length)}
+                />
             )}
         </div>
     );

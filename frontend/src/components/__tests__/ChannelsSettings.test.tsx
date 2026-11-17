@@ -70,15 +70,18 @@ describe('ChannelsSettings', () => {
     it('deletes a bot only after confirmation', async () => {
         api.listChannelsViaRuntime.mockResolvedValueOnce([{ ...feishu, state: 'connected', settings: on }]);
         api.disconnectChannelViaRuntime.mockResolvedValueOnce([{ ...feishu, state: 'unconfigured' }]);
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
         render(<ChannelsSettings />);
         const button = await screen.findByRole('button', { name: '删除机器人' });
         fireEvent.click(button);
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: '取消' }));
         expect(api.disconnectChannelViaRuntime).not.toHaveBeenCalled();
-        await act(async () => { fireEvent.click(button); });
+
+        fireEvent.click(button);
+        const confirmDialog = await screen.findByRole('dialog');
+        await act(async () => { fireEvent.click(within(confirmDialog).getByRole('button', { name: '确认删除' })); });
         expect(api.disconnectChannelViaRuntime).toHaveBeenCalledWith('feishu');
         expect(await screen.findByText('还没有机器人。')).toBeInTheDocument();
-        confirm.mockRestore();
     });
 
     it('shows a one-time code to send privately to the bot', async () => {
@@ -102,19 +105,21 @@ describe('ChannelsSettings', () => {
             requests: [{ id: 'req-1', requester: carol, audience: 'group', text: '上月销售额', at: 2 }],
         });
         api.decideChannelAccessViaRuntime.mockResolvedValueOnce({ members: [{ actor: carol, role: 'guest', since: 3 }], requests: [] });
-        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         render(<ChannelsSettings />);
         expect(await screen.findByText('“上月销售额”')).toBeInTheDocument();
         expect(screen.getAllByText('账号成员')).toHaveLength(1);
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: '允许' })); });
+        fireEvent.click(screen.getByRole('button', { name: '允许' }));
+        const allowDialog = await screen.findByRole('dialog');
+        await act(async () => { fireEvent.click(within(allowDialog).getByRole('button', { name: '允许' })); });
         expect(api.decideChannelAccessViaRuntime).toHaveBeenCalledWith('req-1', 'allow');
         expect(await screen.findByText('访客')).toBeInTheDocument();
         expect(screen.getByText('没有待处理的申请。')).toBeInTheDocument();
 
         api.revokeChannelAccessViaRuntime.mockResolvedValueOnce({ members: [], requests: [] });
-        await act(async () => { fireEvent.click(screen.getByRole('button', { name: '撤销' })); });
+        fireEvent.click(screen.getByRole('button', { name: '撤销' }));
+        const revokeDialog = await screen.findByRole('dialog');
+        await act(async () => { fireEvent.click(within(revokeDialog).getByRole('button', { name: '撤销' })); });
         expect(api.revokeChannelAccessViaRuntime).toHaveBeenCalledWith(carol);
-        confirm.mockRestore();
     });
 
     it('says so when this host has no channels', async () => {

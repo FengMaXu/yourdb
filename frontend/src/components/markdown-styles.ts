@@ -27,6 +27,7 @@ const SHARED = [
 /** A Markdown document, such as a knowledge file or a note. */
 export const MARKDOWN_DOCUMENT = [
     SHARED,
+    '[&>:first-child]:mt-0 [&>:last-child]:mb-0',
     '[&_p]:mb-[1em] [&_:is(ol,ul)]:mb-[1em] [&_:is(ol,ul)]:pl-[1.5em] [&_li]:mb-[0.25em]',
     '[&_table]:w-full',
     '[&_a]:no-underline [&_a:hover]:underline',
