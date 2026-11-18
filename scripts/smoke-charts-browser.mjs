@@ -270,7 +270,9 @@ frame.srcdoc = ${JSON.stringify(liveHtml)};`);
   const widgetPage = await openPage(browser, pathToFileURL(path.join(work, "widget.html")).href);
   const widget = await widgetPage.evaluate(`(() => ({ canvases: document.querySelectorAll("[data-testid=chart-spec-canvas] canvas").length, text: document.body.innerText }))()`);
   check("chat widget draws with ECharts", widget.canvases > 0, JSON.stringify(widget));
-  check("chat widget shows notices, checks and provenance", ["未按 0 绘制", "CHECK 示例", "Disclosure 示例", "字段语义来自模型声明"].every((text) => widget.text.includes(text)), widget.text);
+  check("chat widget shows notices, checks and provenance", ["未按 0 绘制", "CHECK 示例", "字段含义由模型声明"].every((text) => widget.text.includes(text)), widget.text);
+  // The raw disclosure summary stays out of the chart: its per-clause detail lives in the Basis panel.
+  check("chat widget keeps the raw disclosure summary out", !widget.text.includes("Disclosure 示例"), widget.text);
   check("chat widget raises no script error", widgetPage.errors.length === 0, widgetPage.errors.join(" | "));
   await widgetPage.screenshot("widget");
   await widgetPage.close();
