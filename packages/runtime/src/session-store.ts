@@ -89,6 +89,11 @@ export class PiJsonlSessionStore {
     return wrapped;
   }
 
+  /** A closed Session cannot be reused: forget it, so the next open reads it from disk again. */
+  release(sessionId: string): void {
+    this.opened.delete(sessionId);
+  }
+
   async close(): Promise<void> {
     await this.repo.close(TODO_CONTEXT);
   }

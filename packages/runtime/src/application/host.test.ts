@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { PiJsonlSessionStore } from "../session-store.js";
@@ -69,6 +69,48 @@ describe("DataAgent Session Application production composition", () => {
       expect(observations).toEqual([]);
       expect(first.tools.map((tool) => tool.name)).not.toContain("subagent");
       await expect(application.session({ userId: "user-2", host: "web", sessionId: "session-1" })).rejects.toThrow("SESSION_ACCESS_DENIED");
+      await application.close();
+    } finally {
+      await sessionStore.close().catch(() => undefined);
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("reopens an idle Session Host after the saved database connection changes", async () => {
+    const root = await mkdtemp(join(process.cwd(), ".tmp-application-db-switch-"));
+    const sessionStore = new PiJsonlSessionStore(join(root, "sessions"));
+    const executor = (dialect: "mysql" | "sqlite") => ({ dialect, run: async () => ({ columns: [], rows: [], truncated: false }) });
+    const mysql = executor("mysql");
+    const sqlite = executor("sqlite");
+    let saved = mysql;
+    try {
+      await sessionStore.create({ sessionId: "session-1", userId: "user-1" });
+      const application = new DataAgentSessionApplication({
+        sessionStore,
+        workspace: new WorkspaceStore(join(root, "workspace")),
+        profile,
+        systemPrompt: "You are Data Agent.",
+        createMissingSessions: false,
+        authorizeSession: async () => true,
+        queryExecutor: async () => saved,
+      });
+      const context = { userId: "user-1", host: "web", sessionId: "session-1" } as const;
+      const first = await application.session(context);
+      expect(await application.session(context)).toBe(first);
+
+      // A running operation keeps its host, and the database it started with.
+      saved = sqlite;
+      const openOperations = vi.spyOn(first.controller, "getOpenOperations").mockResolvedValue([{ operationId: "op-1" }] as never);
+      expect(await application.session(context)).toBe(first);
+
+      openOperations.mockRestore();
+      const close = vi.spyOn(first, "close");
+      // The UI asks for several things at once when a conversation opens; they share one reopened host.
+      const [reopened, alongside] = await Promise.all([application.session(context), application.session(context)]);
+      expect(reopened).not.toBe(first);
+      expect(alongside).toBe(reopened);
+      expect(close).toHaveBeenCalledOnce();
+      expect(await application.session(context)).toBe(reopened);
       await application.close();
     } finally {
       await sessionStore.close().catch(() => undefined);

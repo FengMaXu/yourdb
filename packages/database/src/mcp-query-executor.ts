@@ -226,8 +226,9 @@ export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
         });
       }, execution?.signal, isRequestTimeout) as unknown as { isError?: boolean; content?: Array<{ type: string; text?: string }> };
       const text = result.content?.find((part) => part.type === "text")?.text;
+      // A tool that failed is a failure, with or without a message.
+      if (result.isError) throw new Error(`MCP_TOOL_ERROR: ${text ? text.slice(0, 300) : "the database server gave no cause"}`);
       if (!text) throw new Error("MCP_QUERY_EMPTY_RESPONSE");
-      if (result.isError) throw new Error(`MCP_TOOL_ERROR: ${text.slice(0, 300)}`);
       let payload: { error?: { code: string; message?: string }; columns?: string[]; rows?: unknown[]; truncated?: boolean };
       try { payload = JSON.parse(text) as typeof payload; }
       catch { throw new Error(`MCP_QUERY_BAD_RESPONSE: ${text.slice(0, 300)}`); }
@@ -251,8 +252,9 @@ export function createMcpQueryExecutor(options: McpQueryExecutorOptions) {
     async getSchema(): Promise<McpSchemaEvidence> {
       const result = await withConnection((c) => c.callTool({ name: "get_schema", arguments: {} })) as { isError?: boolean; content?: Array<{ type: string; text?: string }> };
       const text = result.content?.find((part) => part.type === "text")?.text;
+      // A tool that failed is a failure, with or without a message.
+      if (result.isError) throw new Error(`MCP_TOOL_ERROR: ${text ? text.slice(0, 300) : "the database server gave no cause"}`);
       if (!text) throw new Error("MCP_SCHEMA_EMPTY_RESPONSE");
-      if (result.isError) throw new Error(`MCP_TOOL_ERROR: ${text.slice(0, 300)}`);
       let payload: { schema?: Array<{ table?: unknown; columns?: Array<{ name?: unknown; type?: unknown }>; primaryKey?: unknown; uniqueKeys?: unknown; foreignKeys?: unknown }> };
       try { payload = JSON.parse(text) as typeof payload; }
       catch { throw new Error(`MCP_SCHEMA_BAD_RESPONSE: ${text.slice(0, 300)}`); }

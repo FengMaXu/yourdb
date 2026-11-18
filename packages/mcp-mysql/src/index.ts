@@ -64,6 +64,19 @@ function isStatementTimeout(error: unknown): boolean {
 
 const timeoutPayload = (timeoutMs: number | undefined) => ({ error: { code: "QUERY_TIMEOUT", message: `statement stopped by MySQL after ${timeoutMs ?? 0} ms (MAX_EXECUTION_TIME)` } });
 
+/**
+ * A readable cause for any failure. A refused connection reaches us as an
+ * AggregateError (one attempt per address) whose own message is empty, which
+ * would leave the Agent with a bare QUERY_FAILED and nothing to act on.
+ */
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  if (error.message) return error.message;
+  if (error instanceof AggregateError && error.errors.length > 0) return [...new Set(error.errors.map(describeError))].join("; ");
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code ? code : error.name;
+}
+
 function redact(sql: string): string {
   return sql.replace(/'[^']*'/g, "'<REDACTED>'").slice(0, 200);
 }
@@ -118,7 +131,7 @@ export async function createMysqlReferenceServer(options: MysqlReferenceServerOp
         return { content: [{ type: "text", text: JSON.stringify({ rows: result.rows, columns: result.columns, totalRows: result.totalRows, truncated: result.truncated, serverLimit: MAX_PREVIEW_LIMIT, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
       } catch (error) {
         if (isStatementTimeout(error)) return { content: [{ type: "text", text: JSON.stringify(timeoutPayload(timeoutMs)) }] };
-        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "QUERY_FAILED", message: redact(`${(error as Error).message} in ${redact(trimmed)}`).slice(0, 500) } }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "QUERY_FAILED", message: redact(`${describeError(error)} in ${redact(trimmed)}`).slice(0, 500) } }) }] };
       }
     },
   );
@@ -136,7 +149,7 @@ export async function createMysqlReferenceServer(options: MysqlReferenceServerOp
         const columns = (fields as Array<{ name: string }> | undefined)?.map((field) => field.name) ?? (values.length > 0 ? Object.keys(values[0]) : []);
         return { content: [{ type: "text", text: JSON.stringify({ columns, rows: values, truncated: false, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
       } catch (error) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "EXPLAIN_FAILED", message: redact(String((error as Error).message)).slice(0, 300) } }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "EXPLAIN_FAILED", message: redact(describeError(error)).slice(0, 300) } }) }] };
       }
     },
   );
@@ -284,7 +297,7 @@ export async function createMysqlReferenceServer(options: MysqlReferenceServerOp
         return { content: [{ type: "text", text: JSON.stringify({ rows: list, columns, truncated: false, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
       } catch (error) {
         if (isStatementTimeout(error)) return { content: [{ type: "text", text: JSON.stringify(timeoutPayload(timeoutMs)) }] };
-        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "QUERY_FAILED", message: redact(`${(error as Error).message} in ${redact(trimmed)}`).slice(0, 500) } }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "QUERY_FAILED", message: redact(`${describeError(error)} in ${redact(trimmed)}`).slice(0, 500) } }) }] };
       }
     },
   );
@@ -294,27 +307,35 @@ export async function createMysqlReferenceServer(options: MysqlReferenceServerOp
     "List tables and columns of the MySQL database",
     {},
     async () => {
-      const [tables] = await pool.query("SELECT table_name AS `table` FROM information_schema.tables WHERE table_schema = DATABASE()");
-      const schema = [];
-      for (const t of tables as any[]) {
-        const [columns] = await pool.query("SELECT column_name AS name, data_type AS dataType FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?", [t.table]);
-        const [constraints] = await pool.query("SELECT tc.constraint_name AS constraintName, tc.constraint_type AS constraintType, kcu.column_name AS columnName, kcu.referenced_table_name AS referencedTable, kcu.referenced_column_name AS referencedColumn, kcu.ordinal_position AS ordinalPosition FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_schema = kcu.constraint_schema AND tc.table_name = kcu.table_name AND tc.constraint_name = kcu.constraint_name WHERE tc.table_schema = DATABASE() AND tc.table_name = ? ORDER BY kcu.ordinal_position", [t.table]);
-        const rows = constraints as Array<{ constraintName?: string; constraintType?: string; columnName?: string; referencedTable?: string; referencedColumn?: string }>;
-        const primaryKey = rows.filter((row) => row.constraintType === "PRIMARY KEY" && row.columnName).map((row) => row.columnName);
-        const uniqueGroups = new Map<string, string[]>();
-        for (const row of rows) if (row.constraintType === "UNIQUE" && row.constraintName && row.columnName) uniqueGroups.set(row.constraintName, [...(uniqueGroups.get(row.constraintName) ?? []), row.columnName]);
-        const foreignGroups = new Map<string, { columns: string[]; references: { table: string; columns: string[] } }>();
-        for (const row of rows) if (row.constraintType === "FOREIGN KEY" && row.constraintName && row.columnName && row.referencedTable && row.referencedColumn) {
-          const existing = foreignGroups.get(row.constraintName) ?? { columns: [], references: { table: row.referencedTable, columns: [] } };
-          existing.columns.push(row.columnName);
-          existing.references.columns.push(row.referencedColumn);
-          foreignGroups.set(row.constraintName, existing);
-        }
-        schema.push({ table: t.table, columns, ...(primaryKey.length ? { primaryKey } : {}), ...(uniqueGroups.size ? { uniqueKeys: [...uniqueGroups.values()] } : {}), ...(foreignGroups.size ? { foreignKeys: [...foreignGroups.values()] } : {}) });
+      try {
+        return await readSchema();
+      } catch (error) {
+        // Thrown as is, an empty message reaches the client as an empty response.
+        throw new Error(`SCHEMA_FAILED: ${describeError(error)}`);
       }
-      return { content: [{ type: "text", text: JSON.stringify({ schema, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
     },
   );
+  async function readSchema() {
+    const [tables] = await pool.query("SELECT table_name AS `table` FROM information_schema.tables WHERE table_schema = DATABASE()");
+    const schema = [];
+    for (const t of tables as any[]) {
+      const [columns] = await pool.query("SELECT column_name AS name, data_type AS dataType FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ?", [t.table]);
+      const [constraints] = await pool.query("SELECT tc.constraint_name AS constraintName, tc.constraint_type AS constraintType, kcu.column_name AS columnName, kcu.referenced_table_name AS referencedTable, kcu.referenced_column_name AS referencedColumn, kcu.ordinal_position AS ordinalPosition FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_schema = kcu.constraint_schema AND tc.table_name = kcu.table_name AND tc.constraint_name = kcu.constraint_name WHERE tc.table_schema = DATABASE() AND tc.table_name = ? ORDER BY kcu.ordinal_position", [t.table]);
+      const rows = constraints as Array<{ constraintName?: string; constraintType?: string; columnName?: string; referencedTable?: string; referencedColumn?: string }>;
+      const primaryKey = rows.filter((row) => row.constraintType === "PRIMARY KEY" && row.columnName).map((row) => row.columnName);
+      const uniqueGroups = new Map<string, string[]>();
+      for (const row of rows) if (row.constraintType === "UNIQUE" && row.constraintName && row.columnName) uniqueGroups.set(row.constraintName, [...(uniqueGroups.get(row.constraintName) ?? []), row.columnName]);
+      const foreignGroups = new Map<string, { columns: string[]; references: { table: string; columns: string[] } }>();
+      for (const row of rows) if (row.constraintType === "FOREIGN KEY" && row.constraintName && row.columnName && row.referencedTable && row.referencedColumn) {
+        const existing = foreignGroups.get(row.constraintName) ?? { columns: [], references: { table: row.referencedTable, columns: [] } };
+        existing.columns.push(row.columnName);
+        existing.references.columns.push(row.referencedColumn);
+        foreignGroups.set(row.constraintName, existing);
+      }
+      schema.push({ table: t.table, columns, ...(primaryKey.length ? { primaryKey } : {}), ...(uniqueGroups.size ? { uniqueKeys: [...uniqueGroups.values()] } : {}), ...(foreignGroups.size ? { foreignKeys: [...foreignGroups.values()] } : {}) });
+    }
+    return { content: [{ type: "text" as const, text: JSON.stringify({ schema, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
+  }
 
   async function close() {
     await pool.end();
