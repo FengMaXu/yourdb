@@ -48,6 +48,20 @@ describe("Publication disclosure", () => {
     expect(disclosure?.summary).toContain("population.timeField");
     expect(disclosure?.summary).toContain("假定，未被合格证据证实：measure.formula");
     expect(disclosure?.summary).toContain("JOIN fanout");
+    expect(disclosure?.items).toEqual([
+      { kind: "decided", paths: ["population.timeField"] },
+      { kind: "assumed", paths: ["measure.formula"] },
+      { kind: "join_fanout", paths: ["measure.formula"], detail: expect.stringContaining("JOIN fanout") },
+    ]);
+  });
+
+  it("ties a realization conflict to its Spec field and keeps the check wording as detail", () => {
+    const disclosure = composeDisclosure(revision(), candidate({
+      findings: [{ id: "f1", kind: "realization_conflict", message: "population.source declares x, but the SQL never reads it.", blocking: false, paths: ["population.source" as never] }],
+    }));
+    expect(disclosure?.items).toEqual([
+      { kind: "realization_conflict", paths: ["population.source"], detail: "population.source declares x, but the SQL never reads it." },
+    ]);
   });
 
   it("does not disclose a decision that qualifying evidence settled", () => {

@@ -215,13 +215,34 @@ describe('ChatArea clarification', () => {
         Element.prototype.scrollIntoView = vi.fn();
     });
 
-    it('puts a chosen option in the answer box for editing instead of sending it', async () => {
+    it('prefers a selected option over bottom input, and falls back to bottom input when unselected', async () => {
         renderChat();
-        fireEvent.click(await screen.findByRole('radio', { name: '累计' }));
-        expect(answerClarificationViaRuntime).not.toHaveBeenCalled();
-        const input = screen.getByRole('textbox', { name: '输入你的回答...' });
-        expect((input as HTMLTextAreaElement).value).toBe('累计');
+        const input = await screen.findByRole('textbox', { name: '输入你的回答...' });
+        fireEvent.change(input, { target: { value: '自定义口径说明' } });
 
+        const option = await screen.findByRole('radio', { name: '累计' });
+        fireEvent.click(option);
+        expect(answerClarificationViaRuntime).not.toHaveBeenCalled();
+        expect(option).toHaveAttribute('aria-checked', 'true');
+        expect((input as HTMLTextAreaElement).value).toBe('自定义口径说明');
+
+        // Option takes precedence over bottom input while selected.
+        fireEvent.click(screen.getByRole('button', { name: '提交' }));
+        await waitFor(() => expect(answerClarificationViaRuntime).toHaveBeenCalledWith('c-1', '累计', 'session-1'));
+    });
+
+    it('uses the bottom input once an option is unselected, and locks the main composer while waiting', async () => {
+        renderChat();
+        const mainInput = await screen.findByPlaceholderText('请先在上方澄清卡片中选择或输入回答...');
+        expect(mainInput).toBeDisabled();
+
+        const option = await screen.findByRole('radio', { name: '累计' });
+        fireEvent.click(option);
+        expect(option).toHaveAttribute('aria-checked', 'true');
+        fireEvent.click(option);
+        expect(option).toHaveAttribute('aria-checked', 'false');
+
+        const input = screen.getByRole('textbox', { name: '输入你的回答...' });
         fireEvent.change(input, { target: { value: '累计，含退款' } });
         fireEvent.click(screen.getByRole('button', { name: '提交' }));
         await waitFor(() => expect(answerClarificationViaRuntime).toHaveBeenCalledWith('c-1', '累计，含退款', 'session-1'));

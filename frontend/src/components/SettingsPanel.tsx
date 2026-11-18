@@ -3,7 +3,7 @@ import { UI } from './workspace-ui';
 import { cn } from '@/lib/utils';
 import ChannelsSettings from './ChannelsSettings';
 import {
-    Settings as SettingsIcon,
+    Bot, Settings as SettingsIcon,
     User, Link, Eye, ExternalLink, Loader2, Terminal, Database
 } from 'lucide-react';
 import { Cloud, KeyRound, Usb } from 'lucide-react';
@@ -13,7 +13,7 @@ import {
     type PythonRuntimeConfig,
     type PythonRuntimeUpdate,
 } from '../api/client';
-import { getConfigViaRuntime, saveConfigViaRuntime, testDbViaRuntime, testPythonRuntimeViaRuntime } from '../api/runtime-client';
+import { getConfigViaRuntime, saveConfigViaRuntime, testDbViaRuntime, testLlmViaRuntime, testPythonRuntimeViaRuntime } from '../api/runtime-client';
 import { useLanguage } from '../context/LanguageContext';
 
 /** Server databases; SQLite is a file and has no host, port or user. */
@@ -134,6 +134,8 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
     // Config states
     const [config, setConfig] = useState<AIConfig | null>(null);
     const [isSavingLLM, setIsSavingLLM] = useState(false);
+    const [isTestingLLM, setIsTestingLLM] = useState(false);
+    const [llmTestResult, setLlmTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
     // DB states
     const [dbDriver, setDbDriver] = useState<DatabaseDriver>('mysql');
@@ -218,6 +220,92 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
 
 
+    const persistActiveProvider = async (providerId: string) => {
+        const configToSave = providerConfigs[providerId];
+        // If API key is the placeholder, send empty string to not overwrite with literal '[configured]'
+        // The backend ignores empty API keys during update
+        const apikeyToSend = (configToSave.apiKey && !configToSave.apiKey.startsWith('['))
+            ? configToSave.apiKey : '';
+
+        const provider = providerId === 'Anthropic' ? 'anthropic' : 'openai';
+        if (window.dataAgent && apikeyToSend) {
+            const stored = await window.dataAgent.saveSecrets({
+                openai_api_key: provider === 'openai' ? apikeyToSend : undefined,
+                anthropic_api_key: provider === 'anthropic' ? apikeyToSend : undefined,
+                default_model: configToSave.selectedModel,
+                openai_base_url: provider === 'openai' ? configToSave.baseUrl : undefined,
+            });
+            if (!stored.ok) throw new Error(t('settings.saveFailed'));
+        }
+
+        await saveConfigViaRuntime({
+            provider,
+            llm_enabled: true,
+            api_key: apikeyToSend,
+            base_url: configToSave.baseUrl,
+            model: configToSave.selectedModel,
+        });
+
+        setConfig(prev => prev ? {
+            ...prev,
+            provider,
+            llm_enabled: true,
+            base_url: configToSave.baseUrl,
+            model: configToSave.selectedModel,
+            api_key: apikeyToSend || prev.api_key,
+        } : null);
+    };
+
+    const saveProviderSettings = async (providerId: string) => {
+        setIsSavingLLM(true);
+        setSaveFeedback(null);
+        setLlmTestResult(null);
+        try {
+            await persistActiveProvider(providerId);
+            setProviderConfigs(prev => {
+                const next = { ...prev };
+                for (const id of Object.keys(next)) {
+                    next[id] = { ...next[id], enabled: id === providerId };
+                }
+                return next;
+            });
+            setLlmTestResult({ success: true, message: t('settings.saveSuccess') });
+        } catch (e: unknown) {
+            console.error('Failed to save provider settings:', e);
+            setLlmTestResult({ success: false, message: t('settings.saveFailed') });
+        } finally {
+            setIsSavingLLM(false);
+        }
+    };
+
+    const handleTestLLM = async (providerId?: string) => {
+        setIsTestingLLM(true);
+        setLlmTestResult(null);
+        try {
+            let profile: Record<string, unknown> = {};
+            if (providerId) {
+                const cfg = providerConfigs[providerId];
+                const rawKey = cfg?.apiKey?.trim() || '';
+                const apiKey = rawKey && !rawKey.startsWith('[') ? rawKey : '';
+                // Always test what the form shows; with a masked key the runtime reuses the stored key
+                // when the provider and base URL match the saved model.
+                profile = {
+                    provider: providerId === 'Anthropic' ? 'anthropic' : 'openai',
+                    base_url: cfg?.baseUrl || '',
+                    model: cfg?.selectedModel || '',
+                    ...(apiKey ? { api_key: apiKey } : {}),
+                };
+            }
+            const res = await testLlmViaRuntime(profile);
+            setLlmTestResult({ success: res.success, message: res.message });
+        } catch (e: unknown) {
+            console.error('LLM test failed:', e);
+            setLlmTestResult({ success: false, message: t('settings.dbTestFailed') });
+        } finally {
+            setIsTestingLLM(false);
+        }
+    };
+
     const toggleProvider = async (providerId: string) => {
         const configToSave = providerConfigs[providerId];
         const isTurningOn = !configToSave.enabled;
@@ -239,41 +327,9 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
         if (isTurningOn) {
             setIsSavingLLM(true);
             setSaveFeedback(null);
+            setLlmTestResult(null);
             try {
-                // If API key is the placeholder, send empty string to not overwrite with literal '[configured]'
-                // The backend ignores empty API keys during update
-                const apikeyToSend = (configToSave.apiKey && !configToSave.apiKey.startsWith('[')) 
-                    ? configToSave.apiKey : '';
-
-                const provider = providerId === 'Anthropic' ? 'anthropic' : 'openai';
-                if (window.dataAgent && apikeyToSend) {
-                    const stored = await window.dataAgent.saveSecrets({
-                        openai_api_key: provider === 'openai' ? apikeyToSend : undefined,
-                        anthropic_api_key: provider === 'anthropic' ? apikeyToSend : undefined,
-                        default_model: configToSave.selectedModel,
-                        openai_base_url: provider === 'openai' ? configToSave.baseUrl : undefined,
-                    });
-                    if (!stored.ok) throw new Error(t('settings.saveFailed'));
-                }
-
-                await saveConfigViaRuntime({
-                    provider,
-                    llm_enabled: true,
-                    api_key: apikeyToSend,
-                    base_url: configToSave.baseUrl,
-                    model: configToSave.selectedModel
-                });
-                
-                // Update top-level config to reflect changes
-                setConfig(prev => prev ? { 
-                    ...prev, 
-                    provider,
-                    llm_enabled: true,
-                    base_url: configToSave.baseUrl, 
-                    model: configToSave.selectedModel,
-                    api_key: apikeyToSend || prev.api_key
-                } : null);
-                
+                await persistActiveProvider(providerId);
                 setSaveFeedback(`✓ ${t('settings.saveSuccess')}`);
                 setTimeout(() => setSaveFeedback(null), 2000);
             } catch (e: unknown) {
@@ -292,6 +348,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
         setIsSavingLLM(true);
         setSaveFeedback(null);
+        setLlmTestResult(null);
         try {
             await saveConfigViaRuntime({ llm_enabled: false });
             setConfig(prev => prev ? { ...prev, llm_enabled: false } : null);
@@ -414,7 +471,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
     return (
         <section className="flex min-w-0 flex-auto flex-col" aria-labelledby="settings-page-title">
-            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:px-4 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
+            <header className="flex h-14 flex-none items-center border-b border-border px-8 max-[720px]:pr-4 max-[720px]:pl-12 [&_h1]:m-0 [&_h1]:text-[1rem] [&_h1]:font-semibold [&_h1]:text-foreground">
                 <h1 id="settings-page-title">{t(`settings.${section}`)}</h1>
             </header>
 
@@ -428,7 +485,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                 type="button"
                                 className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap mb-3.5 max-[720px]:mb-0', modelProvider === '模型设置' && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
                                 aria-current={modelProvider === '模型设置' ? 'page' : undefined}
-                                onClick={() => setModelProvider('模型设置')}
+                                onClick={() => { setModelProvider('模型设置'); setLlmTestResult(null); setSaveFeedback(null); }}
                             >
                                 <SettingsIcon size={16} />
                                 <span>{t('settings.modelSettings')}</span>
@@ -441,7 +498,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                     type="button"
                                     className={cn('relative flex w-full cursor-pointer items-center gap-2.5 rounded-md border-0 bg-transparent px-2.5 py-2 text-left text-[0.85rem] font-medium text-body transition-[background-color,color,box-shadow] hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand max-[720px]:inline-flex max-[720px]:w-auto max-[720px]:flex-none max-[720px]:whitespace-nowrap', modelProvider === p.id && 'bg-white font-semibold text-foreground shadow-[0_0_0_1px_var(--border),0_1px_2px_rgba(28,25,23,0.05),0_4px_12px_-8px_rgba(28,25,23,0.16)] hover:bg-white')}
                                     aria-current={modelProvider === p.id ? 'page' : undefined}
-                                    onClick={() => setModelProvider(p.id)}
+                                    onClick={() => { setModelProvider(p.id); setLlmTestResult(null); setSaveFeedback(null); }}
                                 >
                                     <span className="size-1.5 flex-none rounded-full bg-border-strong transition-colors data-[on=true]:bg-success data-[on=true]:shadow-[0_0_0_3px_rgba(4,120,87,0.12)]" data-on={providerConfigs[p.id]?.enabled ? 'true' : undefined} aria-hidden="true" />
                                     <span>{p.label}</span>
@@ -451,39 +508,77 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
 
                         {/* Model Content */}
                         <div className="min-w-0 flex-1 overflow-y-auto px-9 pt-7 pb-10 max-[720px]:p-4 [&>*]:max-w-[720px]">
-                            {modelProvider === '模型设置' ? (
+                            {modelProvider === '模型设置' ? (() => {
+                                const activeProviderId = providers.find((p) => providerConfigs[p.id]?.enabled)?.id ?? detectActiveProvider(config?.base_url, config?.provider);
+                                const activeProviderLabel = providers.find((p) => p.id === activeProviderId)?.label || activeProviderId;
+                                const modelActive = Boolean(config?.model && config?.llm_enabled !== false);
+                                return (
                                 <div key="overview" className={cn(UI.stack, UI.enter, 'max-w-[640px] gap-6')}>
                                     <p className={UI.lead}>{t('settings.defaultModelTitle')}</p>
 
-                                    <div className={UI.field}>
-                                        <label className={UI.label} htmlFor="settings-default-model">{t('settings.defaultModelSubtitle')}</label>
-                                        <input
-                                            id="settings-default-model"
-                                            className={cn(UI.input, UI.mono)}
-                                            value={config?.model || ''}
-                                            readOnly
-                                            placeholder={t('settings.notSet')}
-                                        />
-                                        <p className={UI.hint}>{t('settings.defaultModelHint')}</p>
+                                    <div className="rounded-xl border border-border bg-white p-5">
+                                        <div className={UI.cardHead}>
+                                            <div className="flex min-w-0 items-center gap-3">
+                                                <span className={UI.cardIcon} aria-hidden="true"><Bot size={18} /></span>
+                                                <div className="grid min-w-0 gap-0.5">
+                                                    <div className={UI.cardTitle}>
+                                                        <span>{t('settings.defaultModelSubtitle')}</span>
+                                                        <span className={UI.pill} data-tone={modelActive ? 'ok' : 'idle'}>
+                                                            {modelActive && activeProviderLabel ? activeProviderLabel : t('settings.notSet')}
+                                                        </span>
+                                                    </div>
+                                                    <div className={cn(UI.caption, 'truncate')}>-- {config?.base_url || t('settings.notSet')}</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-paper px-3.5 py-2.5">
+                                            <code id="settings-default-model" className="font-mono text-[0.875rem] font-semibold text-foreground">{config?.model || t('settings.notSet')}</code>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                {modelActive && (
+                                                    <button type="button" className={cn(UI.btn, UI.btnSm)} onClick={() => void handleTestLLM()} disabled={isTestingLLM}>
+                                                        {isTestingLLM ? <Loader2 size={14} className="animate-spin" /> : null}
+                                                        {isTestingLLM ? t('settings.testing') : t('setup.model.test')}
+                                                    </button>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    className={cn(UI.btn, UI.btnPrimary, UI.btnSm)}
+                                                    onClick={() => { setLlmTestResult(null); setModelProvider(activeProviderId || 'DeepSeek'); }}
+                                                >
+                                                    {t('setup.model.configure')}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {llmTestResult && (
+                                            <div className={cn(UI.alert, 'mt-3')} data-tone={llmTestResult.success ? 'ok' : 'error'} role={llmTestResult.success ? 'status' : 'alert'}>
+                                                <strong>{llmTestResult.success ? `✓ ${t('settings.dbTestSuccess')}` : `✗ ${t('settings.dbTestFailed')}`}</strong>
+                                                <div className={UI.alertDetail}>{llmTestResult.message}</div>
+                                            </div>
+                                        )}
+
+                                        <p className={cn(UI.hint, 'mt-3')}>{t('settings.defaultModelHint')}</p>
                                     </div>
 
                                     <div className={cn(UI.stack, 'gap-3.5 border-t border-border pt-6')}>
                                         <h4 className={UI.subhead}>{t('settings.historyLimitTitle')}</h4>
                                         <div className={UI.grid2}>
-                                            <div className={UI.field}>
-                                                <label className={UI.label} htmlFor="settings-max-turns">{t('settings.maxTurns')}</label>
-                                                <input id="settings-max-turns" className={UI.input} type="number" value="20" readOnly />
-                                                <p className={UI.hint}>{t('settings.maxTurnsSubtitle')}</p>
+                                            <div className="rounded-xl border border-border bg-paper px-4 py-3.5">
+                                                <div className={UI.label}>{t('settings.maxTurns')}</div>
+                                                <div id="settings-max-turns" className="mt-1 font-mono text-[1.15rem] font-bold text-foreground tabular-nums">20</div>
+                                                <p className={cn(UI.hint, 'mt-1')}>{t('settings.maxTurnsSubtitle')}</p>
                                             </div>
-                                            <div className={UI.field}>
-                                                <label className={UI.label} htmlFor="settings-max-tokens">{t('settings.maxTokens')}</label>
-                                                <input id="settings-max-tokens" className={UI.input} type="number" value="2000" readOnly />
-                                                <p className={UI.hint}>{t('settings.maxTokensSubtitle')}</p>
+                                            <div className="rounded-xl border border-border bg-paper px-4 py-3.5">
+                                                <div className={UI.label}>{t('settings.maxTokens')}</div>
+                                                <div id="settings-max-tokens" className="mt-1 font-mono text-[1.15rem] font-bold text-foreground tabular-nums">2,000</div>
+                                                <p className={cn(UI.hint, 'mt-1')}>{t('settings.maxTokensSubtitle')}</p>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
+                                );
+                            })() : (
                                 <div key={modelProvider} className={cn(UI.stack, UI.enter, 'max-w-[640px] gap-6')}>
                                     {/* Header */}
                                     <div className={cn(UI.cardHead, 'border-b border-border pb-5')}>
@@ -530,7 +625,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                                 data-adorn
                                                 className={UI.inputAdorn}
                                                 onClick={() => setShowPassword(prev => !prev)}
-                                                aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                                                aria-label={showPassword ? t('settings.hidePassword') : t('settings.showPassword')}
                                                 aria-pressed={showPassword}
                                             >
                                                 <Eye size={16} />
@@ -560,6 +655,7 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                         <label className={UI.label} htmlFor="settings-model-name">{t('settings.modelName')}</label>
                                         <input
                                             id="settings-model-name"
+                                            list={`provider-models-${modelProvider}`}
                                             className={cn(UI.input, UI.mono)}
                                             type="text"
                                             spellCheck={false}
@@ -567,6 +663,28 @@ const SettingsPanel: React.FC<SettingsPanelProps> = ({ section }) => {
                                             onChange={e => updateProviderConfig(modelProvider, { selectedModel: e.target.value })}
                                             placeholder="例如: deepseek-chat"
                                         />
+                                        <datalist id={`provider-models-${modelProvider}`}>
+                                            {(providerConfigs[modelProvider]?.models || []).map((model) => (
+                                                <option key={model} value={model} />
+                                            ))}
+                                        </datalist>
+                                    </div>
+
+                                    {llmTestResult && (
+                                        <div className={UI.alert} data-tone={llmTestResult.success ? 'ok' : 'error'} role={llmTestResult.success ? 'status' : 'alert'}>
+                                            <strong>{llmTestResult.success ? `✓ ${llmTestResult.message}` : `✗ ${llmTestResult.message}`}</strong>
+                                        </div>
+                                    )}
+
+                                    <div className={cn(UI.actions, 'max-[720px]:flex-wrap max-[720px]:[&>button]:w-[min(180px,100%)] max-[720px]:[&>button]:flex-[1_1_120px]')}>
+                                        <button type="button" className={UI.btn} onClick={() => void handleTestLLM(modelProvider)} disabled={isTestingLLM}>
+                                            {isTestingLLM ? <Loader2 size={15} className="animate-spin" /> : null}
+                                            {isTestingLLM ? t('settings.testing') : t('setup.model.test')}
+                                        </button>
+                                        <button type="button" className={cn(UI.btn, UI.btnPrimary)} onClick={() => void saveProviderSettings(modelProvider)} disabled={isSavingLLM}>
+                                            {isSavingLLM ? <Loader2 size={15} className="animate-spin" /> : null}
+                                            {t('settings.save')}
+                                        </button>
                                     </div>
 
                                 </div>

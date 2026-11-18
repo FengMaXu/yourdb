@@ -307,6 +307,10 @@ export interface Finding {
   readonly message: string;
   readonly blocking: boolean;
   readonly checkId?: string;
+  /** Spec fields the finding concerns, when a check knows them. */
+  readonly paths?: readonly SpecPath[];
+  /** calendar_coverage: the periods with no data. */
+  readonly periods?: readonly string[];
 }
 
 export interface QueryTaskRecord {
@@ -397,11 +401,30 @@ export interface UnverifiedField {
   readonly kind: "assumed" | "decided";
 }
 
+export type DisclosureItemKind =
+  | "assumed" | "decided" | "unadvised" | "undecided" | "deviation" | "parent_superseded"
+  | "join_fanout" | "join_fanout_unknown" | "realization_conflict" | "entity_identity" | "calendar_coverage";
+
+/**
+ * One disclosure, structured so a reader can show it beside the Spec field it concerns.
+ * `detail` is the check's own wording (model-facing); a UI writes its own text from kind and paths.
+ */
+export interface DisclosureItem {
+  readonly kind: DisclosureItemKind;
+  /** Spec fields concerned; empty when it concerns the answer as a whole. */
+  readonly paths: readonly string[];
+  readonly detail?: string;
+  /** calendar_coverage: the periods with no data. */
+  readonly periods?: readonly string[];
+}
+
 export interface PublicationDisclosure {
   readonly required: true;
   /** Fields whose value no qualifying evidence settles (ADR-0006). */
   readonly unverifiedFields: readonly UnverifiedField[];
+  /** One line for the model and text-only channels. */
   readonly summary: string;
+  readonly items: readonly DisclosureItem[];
   readonly fanoutStatus?: FanoutReport["status"];
   /** Shared fields this chart query changed from its Report Task. */
   readonly deviations?: readonly Deviation[];

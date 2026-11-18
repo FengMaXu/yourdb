@@ -30,12 +30,19 @@ interface PreviewRect {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max);
 
+// The real window size; 1024x768 is only a stand-in when nothing was measured (e.g. jsdom).
+const viewportSize = () => ({
+    width: Math.max(document.documentElement?.clientWidth || 0, window.innerWidth || 0) || 1024,
+    height: Math.max(document.documentElement?.clientHeight || 0, window.innerHeight || 0) || 768,
+});
+
 const initialPreviewRect = (): PreviewRect => {
-    const width = clamp(Math.round(window.innerWidth * 0.78), MIN_MODAL_WIDTH, window.innerWidth - 32);
-    const height = clamp(Math.round(window.innerHeight * 0.88), MIN_MODAL_HEIGHT, window.innerHeight - 32);
+    const vp = viewportSize();
+    const width = clamp(Math.round(vp.width * 0.78), MIN_MODAL_WIDTH, Math.max(MIN_MODAL_WIDTH, vp.width - 64));
+    const height = clamp(Math.round(vp.height * 0.84), MIN_MODAL_HEIGHT, Math.max(MIN_MODAL_HEIGHT, vp.height - 64));
     return {
-        left: Math.round((window.innerWidth - width) / 2),
-        top: Math.round((window.innerHeight - height) / 2),
+        left: Math.max(16, Math.round((vp.width - width) / 2)),
+        top: Math.max(16, Math.round((vp.height - height) / 2)),
         width,
         height,
     };
@@ -112,7 +119,8 @@ const GlobalPreviewModal: React.FC = () => {
     const iframeRef = useRef<HTMLIFrameElement>(null);
     const bodyRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<{ mode: 'move' | 'resize'; startX: number; startY: number; rect: PreviewRect } | null>(null);
-    const [rect, setRect] = useState<PreviewRect>(() => ({ left: 56, top: 42, width: 980, height: 720 }));
+    const userAdjustedRef = useRef(false);
+    const [rect, setRect] = useState<PreviewRect>(() => initialPreviewRect());
     const [bodySize, setBodySize] = useState({ width: 0, height: 0 });
     const [fileContent, setFileContent] = useState('');
     const [loading, setLoading] = useState(false);
@@ -132,6 +140,7 @@ const GlobalPreviewModal: React.FC = () => {
 
     useEffect(() => {
         if (!isOpen) return;
+        userAdjustedRef.current = false;
         setRect(initialPreviewRect());
     }, [isOpen, url]);
 
@@ -162,7 +171,7 @@ const GlobalPreviewModal: React.FC = () => {
             })
             .finally(() => setLoading(false));
         return () => controller.abort();
-    }, [isOpen, needsTextFetch, t, url]);
+    }, [isHtml, isOpen, needsTextFetch, t, url]);
 
     // A live dashboard the app generated can ask for a refresh; its nonce ties the page to this file.
     const dashboardTarget = useMemo(() => (isHtml && url && fileContent ? dashboardBridgeTarget(fileContent, url) : null), [fileContent, isHtml, url]);
@@ -207,16 +216,24 @@ const GlobalPreviewModal: React.FC = () => {
 
     useEffect(() => {
         if (!isOpen) return undefined;
-        const handleWindowResize = () => setRect((current) => {
-            const width = Math.min(current.width, Math.max(MIN_MODAL_WIDTH, window.innerWidth - 16));
-            const height = Math.min(current.height, Math.max(MIN_MODAL_HEIGHT, window.innerHeight - 16));
-            return {
-                width,
-                height,
-                left: clamp(current.left, 8, window.innerWidth - width - 8),
-                top: clamp(current.top, 8, window.innerHeight - height - 8),
-            };
-        });
+        const handleWindowResize = () => {
+            if (window.innerWidth < 320 || window.innerHeight < 320) return;
+            if (!userAdjustedRef.current) {
+                setRect(initialPreviewRect());
+                return;
+            }
+            const vp = viewportSize();
+            setRect((current) => {
+                const width = Math.min(current.width, Math.max(MIN_MODAL_WIDTH, vp.width - 32));
+                const height = Math.min(current.height, Math.max(MIN_MODAL_HEIGHT, vp.height - 32));
+                return {
+                    width,
+                    height,
+                    left: clamp(current.left, 16, Math.max(16, vp.width - width - 16)),
+                    top: clamp(current.top, 16, Math.max(16, vp.height - height - 16)),
+                };
+            });
+        };
         window.addEventListener('resize', handleWindowResize);
         return () => window.removeEventListener('resize', handleWindowResize);
     }, [isOpen]);
@@ -254,6 +271,7 @@ const GlobalPreviewModal: React.FC = () => {
     const startPointerInteraction = (mode: 'move' | 'resize', event: React.PointerEvent<HTMLElement>) => {
         if (event.button !== 0) return;
         event.preventDefault();
+        userAdjustedRef.current = true;
         dragRef.current = { mode, startX: event.clientX, startY: event.clientY, rect };
         setInteraction(mode);
         window.addEventListener('pointermove', handlePointerMove);
@@ -264,6 +282,7 @@ const GlobalPreviewModal: React.FC = () => {
     const handleResizeKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
         event.preventDefault();
+        userAdjustedRef.current = true;
         setRect((current) => {
             const maxWidth = Math.max(MIN_MODAL_WIDTH, window.innerWidth - current.left - 8);
             const maxHeight = Math.max(MIN_MODAL_HEIGHT, window.innerHeight - current.top - 8);
@@ -325,8 +344,13 @@ const GlobalPreviewModal: React.FC = () => {
 
     return (
         <div className="pointer-events-none fixed inset-0 z-[2200] p-0 min-[721px]:p-6" role="dialog" aria-modal="false" aria-label={title || t('preview.title')}>
+            <div
+                className="pointer-events-auto fixed inset-0 bg-[rgba(28,25,23,0.32)] backdrop-blur-[3px]"
+                aria-hidden="true"
+                onClick={closePreview}
+            />
             <section
-                className="pointer-events-auto fixed inset-0 flex h-screen w-screen animate-rise-sm [animation-duration:220ms] flex-col overflow-hidden rounded-none border border-white/72 bg-white shadow-[0_34px_90px_-42px_rgba(28,25,23,0.78)] motion-reduce:animate-none min-[721px]:inset-auto min-[721px]:h-auto min-[721px]:min-h-[420px] min-[721px]:w-auto min-[721px]:rounded-lg"
+                className="pointer-events-auto fixed inset-0 z-[1] flex h-screen w-screen animate-rise-sm [animation-duration:220ms] flex-col overflow-hidden rounded-none border border-border bg-white shadow-[0_34px_90px_-42px_rgba(28,25,23,0.78)] motion-reduce:animate-none min-[721px]:inset-auto min-[721px]:h-auto min-[721px]:min-h-[420px] min-[721px]:w-auto min-[721px]:rounded-2xl"
                 style={narrow ? undefined : { width: rect.width, height: rect.height, left: rect.left, top: rect.top }}
             >
                 <header
@@ -369,7 +393,7 @@ const GlobalPreviewModal: React.FC = () => {
                     />
                 )}
             </section>
-            {interaction && <div className={cn('pointer-events-auto fixed inset-0 select-none', interaction === 'move' ? 'cursor-grabbing' : 'cursor-nwse-resize')} aria-hidden="true" />}
+            {interaction && <div className={cn('pointer-events-auto fixed inset-0 z-10 select-none', interaction === 'move' ? 'cursor-grabbing' : 'cursor-nwse-resize')} aria-hidden="true" />}
         </div>
     );
 };

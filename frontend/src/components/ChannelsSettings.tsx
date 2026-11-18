@@ -3,6 +3,8 @@ import { UI } from './workspace-ui';
 import { cn } from '@/lib/utils';
 import { Loader2, Plus, QrCode, Trash2 } from 'lucide-react';
 import QRCode from 'qrcode';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import {
     configureChannelViaRuntime,
     createChannelBindCodeViaRuntime,
@@ -172,6 +174,14 @@ const when = (at: number) => new Date(at).toLocaleString('zh-CN', { month: '2-di
 
 /** Who may use this bot, and who is waiting. Deciding here is the same as tapping the card in the IM. */
 const AccessList: React.FC<{ channelId: string; access: ChannelAccessView | undefined; failed: boolean; apply: (action: () => Promise<ChannelAccessView>) => Promise<void> }> = ({ channelId, access, failed, apply }) => {
+    const [pendingAction, setPendingAction] = useState<{
+        title: string;
+        description: string;
+        confirmLabel: string;
+        destructive?: boolean;
+        onConfirm: () => void;
+    } | null>(null);
+
     if (failed && !access) return null;
     const requests = access?.requests.filter((request) => request.requester.channel === channelId) ?? [];
     const members = access?.members.filter((member) => member.actor.channel === channelId) ?? [];
@@ -193,7 +203,18 @@ const AccessList: React.FC<{ channelId: string; access: ChannelAccessView | unde
                                                 <div>{shortId(request.requester.externalUserId)} · {request.audience === 'group' ? '群聊' : '私聊'} · {when(request.at)}</div>
                                                 {request.text && <div className="mt-1 break-all text-muted-foreground">“{request.text}”</div>}
                                             </div>
-                                            <button type="button" className={cn(UI.btn, UI.btnPrimary, UI.btnSm)} onClick={() => { if (window.confirm('允许后，对方能查询本应用可以访问的全部数据。确定允许？')) void apply(() => decideChannelAccessViaRuntime(request.id, 'allow')); }}>允许</button>
+                                            <button
+                                                type="button"
+                                                className={cn(UI.btn, UI.btnPrimary, UI.btnSm)}
+                                                onClick={() => setPendingAction({
+                                                    title: '确认允许访问',
+                                                    description: '允许后，对方能查询本应用可以访问的全部数据。确定允许？',
+                                                    confirmLabel: '允许',
+                                                    onConfirm: () => { void apply(() => decideChannelAccessViaRuntime(request.id, 'allow')); },
+                                                })}
+                                            >
+                                                允许
+                                            </button>
                                             <button type="button" className={cn(UI.btn, UI.btnSm)} onClick={() => { void apply(() => decideChannelAccessViaRuntime(request.id, 'deny')); }}>拒绝</button>
                                         </div>
                                     ))}
@@ -212,7 +233,19 @@ const AccessList: React.FC<{ channelId: string; access: ChannelAccessView | unde
                                                 <td><span className={UI.pill}>{member.role === 'account' ? '账号成员' : '访客'}</span></td>
                                                 <td>{when(member.since)}</td>
                                                 <td className={UI.tableAction}>
-                                                    <button type="button" className={cn(UI.btn, UI.btnQuiet, UI.btnDanger, UI.btnSm)} onClick={() => { if (window.confirm('撤销后，对方再发消息需要重新申请。确定撤销？')) void apply(() => revokeChannelAccessViaRuntime(member.actor)); }}>撤销</button>
+                                                    <button
+                                                        type="button"
+                                                        className={cn(UI.btn, UI.btnQuiet, UI.btnDanger, UI.btnSm)}
+                                                        onClick={() => setPendingAction({
+                                                            title: '确认撤销权限',
+                                                            description: '撤销后，对方再发消息需要重新申请。确定撤销？',
+                                                            confirmLabel: '撤销',
+                                                            destructive: true,
+                                                            onConfirm: () => { void apply(() => revokeChannelAccessViaRuntime(member.actor)); },
+                                                        })}
+                                                    >
+                                                        撤销
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))}
@@ -224,6 +257,32 @@ const AccessList: React.FC<{ channelId: string; access: ChannelAccessView | unde
                     </>
                 )}
             </div>
+            <Dialog open={pendingAction !== null} onOpenChange={(open) => { if (!open) setPendingAction(null); }}>
+                <DialogContent overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[4px] motion-reduce:animate-none" className="z-[2000] sm:max-w-md">
+                    {pendingAction && (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle>{pendingAction.title}</DialogTitle>
+                                <DialogDescription>{pendingAction.description}</DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setPendingAction(null)}>取消</Button>
+                                <Button
+                                    type="button"
+                                    variant={pendingAction.destructive ? 'destructive' : 'default'}
+                                    onClick={() => {
+                                        const runConfirm = pendingAction.onConfirm;
+                                        setPendingAction(null);
+                                        runConfirm();
+                                    }}
+                                >
+                                    {pendingAction.confirmLabel}
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
         </Panel>
     );
 };
@@ -383,6 +442,7 @@ const ChannelsSettings: React.FC = () => {
     const [selected, setSelected] = useState<string>();
     const [access, setAccess] = useState<ChannelAccessView>();
     const [accessFailed, setAccessFailed] = useState(false);
+    const [pendingDeleteChannel, setPendingDeleteChannel] = useState<ChannelStatusView | null>(null);
 
     const refresh = useCallback(async () => {
         try {
@@ -483,15 +543,7 @@ const ChannelsSettings: React.FC = () => {
                             accessFailed={accessFailed}
                             applyAccess={applyAccess}
                             onRescan={() => { void run(current.id, () => provisionChannelViaRuntime(current.id)); }}
-                            onDelete={() => {
-                                if (!window.confirm(`删除${platformOf(current).name}机器人？已保存的凭据和授权名单会被清除。`)) return;
-                                setSelected(undefined);
-                                void run(current.id, async () => {
-                                    const next = await disconnectChannelViaRuntime(current.id);
-                                    await applyAccess(listChannelAccessViaRuntime);
-                                    return next;
-                                });
-                            }}
+                            onDelete={() => setPendingDeleteChannel(current)}
                             onConfigure={(settings) => { void run(current.id, () => configureChannelViaRuntime(current.id, settings)); }}
                         />
                     ) : (
@@ -506,6 +558,37 @@ const ChannelsSettings: React.FC = () => {
                     )}
                 </div>
             </div>
+            <Dialog open={pendingDeleteChannel !== null} onOpenChange={(open) => { if (!open) setPendingDeleteChannel(null); }}>
+                <DialogContent overlayClassName="z-[2000] bg-[rgba(31,22,12,0.42)] backdrop-blur-[4px] motion-reduce:animate-none" className="z-[2000] sm:max-w-md">
+                    {pendingDeleteChannel && (
+                        <>
+                            <DialogHeader>
+                                <DialogTitle>确认删除{platformOf(pendingDeleteChannel).name}机器人</DialogTitle>
+                                <DialogDescription>删除{platformOf(pendingDeleteChannel).name}机器人后，已保存的凭据和授权名单会被清除。确定删除？</DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setPendingDeleteChannel(null)}>取消</Button>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    onClick={() => {
+                                        const channelToDelete = pendingDeleteChannel;
+                                        setPendingDeleteChannel(null);
+                                        setSelected(undefined);
+                                        void run(channelToDelete.id, async () => {
+                                            const next = await disconnectChannelViaRuntime(channelToDelete.id);
+                                            await applyAccess(listChannelAccessViaRuntime);
+                                            return next;
+                                        });
+                                    }}
+                                >
+                                    确认删除
+                                </Button>
+                            </DialogFooter>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

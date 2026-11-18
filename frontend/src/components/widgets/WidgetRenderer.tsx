@@ -1,11 +1,12 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useMemo, useState } from 'react';
 import { FILE_ACTION_BUTTON, FILE_ACTIONS } from '../file-actions';
 import { formatFieldValue, type ChartDataset, type SemanticsCheck } from '@data-agent/charts';
 import type { FieldMeta } from '@data-agent/contracts';
 import { useLanguage } from '../../context/LanguageContext';
 import { usePreview } from '../../context/PreviewContext';
 import { resolveWorkspaceDownloadUrl, resolveWorkspacePreviewUrl } from '../../utils/resolveInternalUrl';
-import { Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from 'lucide-react';
+import type { DisclosureNote } from '../tool-audit';
+import { ArrowDown, ArrowUp, ArrowUpDown, Check, Copy, Download, Eye, File, FileCode, FileSpreadsheet, FileText, Image } from 'lucide-react';
 
 export type WidgetKind = 'kpi' | 'metric_cards' | 'table' | 'chart' | 'steps' | 'rich_text' | 'echarts' | 'file_link';
 
@@ -40,6 +41,7 @@ export interface WidgetSpec {
     chartSpec?: unknown;
     dataset?: ChartDataset;
     disclosure?: string;
+    disclosureItems?: DisclosureNote[];
     declaredFields?: string[];
     semanticChecks?: SemanticsCheck[];
     derivedFrom?: string;
@@ -261,11 +263,13 @@ const renderMetricCards = (widget: WidgetSpec, t: (key: string) => string) => {
     return (
         <div className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-2.5">
             {items.map((item, index) => (
-                <div key={index} className="rounded-xl border border-border bg-paper p-3">
-                    <div className="text-[12px] text-muted-foreground">{toDisplayText(item.label ?? item.name, `${t('widgets.metric')} ${index + 1}`)}</div>
-                    <div className="mt-1.5 text-[24px] font-bold text-foreground">{toDisplayText(item.value, '--')}</div>
+                <div key={index} className="rounded-xl border border-border bg-paper/75 px-4 py-3.5">
+                    <div className="text-[12px] font-medium text-muted-foreground">{toDisplayText(item.label ?? item.name, `${t('widgets.metric')} ${index + 1}`)}</div>
+                    <div className="mt-1.5 text-[22px] font-bold leading-tight tracking-[-0.02em] tabular-nums text-foreground">{toDisplayText(item.value, '--')}</div>
                     {(item.change ?? item.description) && (
-                        <div className="mt-1.5 text-[12px] text-body">{toDisplayText(item.change ?? item.description)}</div>
+                        <div className="mt-2 inline-flex items-center rounded-md border border-border/80 bg-white px-2 py-0.5 font-mono text-[11.5px] font-medium tabular-nums text-body">
+                            {toDisplayText(item.change ?? item.description)}
+                        </div>
                     )}
                 </div>
             ))}
@@ -273,37 +277,211 @@ const renderMetricCards = (widget: WidgetSpec, t: (key: string) => string) => {
     );
 };
 
-const renderTable = (widget: WidgetSpec, t: (key: string) => string) => {
-    const rows = Array.isArray(widget.data) ? widget.data : [];
-    const columns = normalizeColumns(widget, rows);
+const NUMERIC_CELL_PATTERN = /^[+-]?(?:0|[1-9]\d*)(?:,\d{3})*(?:\.\d+)?\s*%?$/;
+
+const isNumericColumn = (column: any, rows: any[], fields?: Record<string, FieldMeta>): boolean => {
+    const key = column?.key;
+    const declaredType = key ? fields?.[key]?.type : undefined;
+    if (declaredType) {
+        return declaredType === 'quantitative';
+    }
+    if (column?.type === 'number' || column?.type === 'quantitative' || column?.align === 'right') {
+        return true;
+    }
+    if (!key || rows.length === 0) {
+        return false;
+    }
+    let hasValue = false;
+    for (const row of rows) {
+        const value = row?.[key];
+        if (value === null || value === undefined || value === '') continue;
+        hasValue = true;
+        if (typeof value === 'number') {
+            if (!Number.isFinite(value)) return false;
+            continue;
+        }
+        if (typeof value === 'string' && NUMERIC_CELL_PATTERN.test(value.trim())) {
+            continue;
+        }
+        return false;
+    }
+    return hasValue;
+};
+
+const DEFAULT_TABLE_PREVIEW_ROWS = 10;
+
+const csvEscape = (text: string): string => (
+    /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+);
+
+const tsvEscape = (text: string): string => text.replace(/[\t\r\n]+/g, ' ');
+
+const TableWidget: React.FC<{ widget: WidgetSpec; t: (key: string) => string }> = ({ widget, t }) => {
+    const rows = useMemo(() => (Array.isArray(widget.data) ? widget.data : []), [widget.data]);
+    const columns = useMemo(() => normalizeColumns(widget, rows), [widget, rows]);
     // Tables replayed from earlier sessions keep the inference they were first shown with.
     const versioned = widget.contractVersion === CURRENT_WIDGET_CONTRACT;
-    const cell = (value: unknown, column: any) => (versioned ? formatVersionedCell(value, widget.fields?.[column.key], t) : formatTableCell(value, column, t));
+    const cell = useMemo(
+        () => (value: unknown, column: any) => (versioned ? formatVersionedCell(value, widget.fields?.[column.key], t) : formatTableCell(value, column, t)),
+        [t, versioned, widget.fields],
+    );
+    const numericFlags = useMemo(
+        () => columns.map((column: any) => isNumericColumn(column, rows, widget.fields)),
+        [columns, rows, widget.fields],
+    );
+
+    const [sortState, setSortState] = useState<{ colIndex: number; dir: 'asc' | 'desc' } | null>(null);
+    const [expanded, setExpanded] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const sortedRows = useMemo(() => {
+        if (!sortState) return rows;
+        const { colIndex, dir } = sortState;
+        const column = columns[colIndex];
+        if (!column) return rows;
+        const isNumeric = numericFlags[colIndex];
+        const factor = dir === 'asc' ? 1 : -1;
+
+        return [...rows].sort((a, b) => {
+            const rawA = a?.[column.key];
+            const rawB = b?.[column.key];
+            const emptyA = rawA === null || rawA === undefined || rawA === '';
+            const emptyB = rawB === null || rawB === undefined || rawB === '';
+            if (emptyA && emptyB) return 0;
+            if (emptyA) return 1;
+            if (emptyB) return -1;
+
+            if (isNumeric) {
+                const numA = parseFiniteNumber(typeof rawA === 'string' ? rawA.replace(/%$/, '') : rawA);
+                const numB = parseFiniteNumber(typeof rawB === 'string' ? rawB.replace(/%$/, '') : rawB);
+                if (numA !== null && numB !== null) {
+                    return (numA - numB) * factor;
+                }
+            }
+            return String(cell(rawA, column)).localeCompare(String(cell(rawB, column)), 'zh-CN', { numeric: true }) * factor;
+        });
+    }, [cell, columns, numericFlags, rows, sortState]);
+
+    const canCollapse = sortedRows.length > DEFAULT_TABLE_PREVIEW_ROWS;
+    const visibleRows = canCollapse && !expanded ? sortedRows.slice(0, DEFAULT_TABLE_PREVIEW_ROWS) : sortedRows;
+
+    const toggleSort = (colIndex: number) => {
+        setSortState((prev) => {
+            if (!prev || prev.colIndex !== colIndex) return { colIndex, dir: 'asc' };
+            if (prev.dir === 'asc') return { colIndex, dir: 'desc' };
+            return null;
+        });
+    };
+
+    const handleCopyTsv = () => {
+        const headers = columns.map((column: any, index: number) => tsvEscape(String(column.label ?? column.key ?? `${t('widgets.column')} ${index + 1}`)));
+        const lines = [
+            headers.join('\t'),
+            ...sortedRows.map((row) => columns.map((column: any) => tsvEscape(cell(row[column.key], column))).join('\t')),
+        ];
+        void navigator.clipboard.writeText(lines.join('\n')).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    const handleExportCsv = () => {
+        const headers = columns.map((column: any, index: number) => csvEscape(String(column.label ?? column.key ?? `${t('widgets.column')} ${index + 1}`)));
+        const lines = [
+            headers.join(','),
+            ...sortedRows.map((row) => columns.map((column: any) => csvEscape(cell(row[column.key], column))).join(',')),
+        ];
+        const blob = new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8;' });
+        const objectUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = `${(widget.title || 'table').replace(/[\\/:*?"<>|]/g, '_')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(objectUrl);
+    };
 
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-[13px]">
-                <thead>
-                    <tr>
-                        {columns.map((column: any, index: number) => (
-                            <th key={index} className="border-b border-border px-2.5 py-2 text-left font-semibold text-muted-foreground">
-                                {column.label ?? column.key ?? `${t('widgets.column')} ${index + 1}`}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row, rowIndex) => (
-                        <tr key={rowIndex}>
-                            {columns.map((column: any, colIndex: number) => (
-                                <td key={colIndex} className="border-b border-muted px-2.5 py-2 text-foreground">
-                                    {cell(row[column.key], column)}
-                                </td>
-                            ))}
+        <div className="flex flex-col gap-2">
+            {rows.length > 0 && columns.length > 0 && (
+                <div className="flex items-center justify-end gap-1.5">
+                    <button
+                        type="button"
+                        onClick={handleCopyTsv}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-paper px-2 py-1 text-[11.5px] font-medium text-body transition-colors hover:border-border-strong hover:bg-white hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                    >
+                        {copied ? <Check className="size-3 text-success" aria-hidden="true" /> : <Copy className="size-3" aria-hidden="true" />}
+                        <span>{copied ? t('widgets.copied') : t('widgets.copyTable')}</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleExportCsv}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-paper px-2 py-1 text-[11.5px] font-medium text-body transition-colors hover:border-border-strong hover:bg-white hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                    >
+                        <Download className="size-3" aria-hidden="true" />
+                        <span>{t('widgets.exportCsv')}</span>
+                    </button>
+                </div>
+            )}
+            <div className="max-h-[420px] overflow-auto rounded-lg border border-border">
+                <table className="w-full border-collapse text-[13px]">
+                    <thead className="sticky top-0 z-10 bg-paper">
+                        <tr>
+                            {columns.map((column: any, index: number) => {
+                                const headerText = column.label ?? column.key ?? `${t('widgets.column')} ${index + 1}`;
+                                const isSorted = sortState?.colIndex === index;
+                                const ariaSort = isSorted ? (sortState.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+                                return (
+                                    <th
+                                        key={index}
+                                        aria-sort={ariaSort}
+                                        className={`border-b border-border px-3.5 py-2.5 text-[12px] font-semibold whitespace-nowrap text-muted-foreground ${numericFlags[index] ? 'text-right tabular-nums' : 'text-left'}`}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => toggleSort(index)}
+                                            className={`inline-flex cursor-pointer items-center gap-1 border-0 bg-transparent p-0 font-inherit text-inherit transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand ${numericFlags[index] ? 'flex-row-reverse' : ''}`}
+                                        >
+                                            <span>{headerText}</span>
+                                            <span aria-hidden="true" className={isSorted ? 'text-brand' : 'text-faint opacity-70'}>
+                                                {isSorted ? (
+                                                    sortState.dir === 'asc' ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />
+                                                ) : (
+                                                    <ArrowUpDown className="size-3" />
+                                                )}
+                                            </span>
+                                        </button>
+                                    </th>
+                                );
+                            })}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
+                    </thead>
+                    <tbody>
+                        {visibleRows.map((row, rowIndex) => (
+                            <tr key={rowIndex} className="transition-colors hover:bg-paper/60">
+                                {columns.map((column: any, colIndex: number) => (
+                                    <td
+                                        key={colIndex}
+                                        className={`border-b border-border px-3.5 py-2.5 whitespace-nowrap text-foreground [tr:last-child_&]:border-b-0 ${numericFlags[colIndex] ? 'text-right font-mono text-[12.5px] tabular-nums' : 'text-left font-medium'}`}
+                                    >
+                                        {cell(row[column.key], column)}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+            {canCollapse && (
+                <button
+                    type="button"
+                    onClick={() => setExpanded((prev) => !prev)}
+                    className="self-center cursor-pointer rounded-md border border-border bg-paper px-3 py-1 text-[12px] font-medium text-body transition-colors hover:border-border-strong hover:bg-white hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand motion-reduce:transition-none"
+                >
+                    {expanded ? t('widgets.collapseRows') : t('widgets.expandRows').replace('{count}', String(sortedRows.length))}
+                </button>
+            )}
         </div>
     );
 };
@@ -418,7 +596,7 @@ const renderRichText = (widget: WidgetSpec, t: (key: string) => string) => {
     return (
         <div className="grid gap-2 text-[14px] leading-[1.6] text-foreground">
             {visibleBlocks.map((block, index) => <div key={index}>{renderRichTextBlock(block, t)}</div>)}
-            {truncated && <div className="text-[12px] text-muted-foreground">内容较长，完整报告请打开文件链接预览。</div>}
+            {truncated && <div className="text-[12px] text-muted-foreground">{t('widgets.richTextTruncated')}</div>}
         </div>
     );
 };
@@ -529,11 +707,11 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({ widget, currentSessionI
             case 'metric_cards':
                 return renderMetricCards(widget, t);
             case 'table':
-                return renderTable(widget, t);
+                return <TableWidget widget={widget} t={t} />;
             case 'chart':
                 // A transcript can hold charts without a resolved ChartSpec; those are drawn from their data rows.
                 return widget.contractVersion === CURRENT_WIDGET_CONTRACT && widget.chartSpec && widget.dataset
-                    ? <Suspense fallback={<div style={{ height: 360 }} />}><ChartSpecWidget widget={{ chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} /></Suspense>
+                    ? <Suspense fallback={<div style={{ height: 360 }} />}><ChartSpecWidget widget={{ title: widget.title, chartSpec: widget.chartSpec, dataset: widget.dataset, ...(widget.disclosure ? { disclosure: widget.disclosure } : {}), ...(widget.disclosureItems ? { disclosureItems: widget.disclosureItems } : {}), ...(widget.declaredFields ? { declaredFields: widget.declaredFields } : {}), ...(widget.semanticChecks ? { semanticChecks: widget.semanticChecks } : {}), ...(widget.derivedFrom ? { derivedFrom: widget.derivedFrom } : {}) }} /></Suspense>
                     : renderChart(widget, t);
             case 'steps':
                 return renderSteps(widget, t);

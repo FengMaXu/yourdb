@@ -23,7 +23,8 @@ describe('Versioned widgets', () => {
         render(<WidgetRenderer widget={{
             widget_id: 'w1', kind: 'chart', title: '行业销售额', contractVersion: 2, chartSpec,
             dataset: { columns: ['industry', 'sales'], rows: [['批发业', '5234.00'], ['零售业', null]] },
-            disclosure: '以下槽位为模型推断', declaredFields: ['sales'],
+            disclosure: '以下字段为假定，未被合格证据证实：population.time。', declaredFields: ['sales'],
+            disclosureItems: [{ kind: 'assumed', paths: ['population.time'] }, { kind: 'calendar_coverage', paths: ['population.time'], periods: ['2016-11'] }],
             semanticChecks: [{ code: 'RATIO_OUT_OF_RANGE', field: 'sales', message: '销售额 声明为比率，但数值范围为 [499.88, 5234.00]' }],
         }} />);
         // The chart widget loads lazily, with ECharts.
@@ -32,8 +33,11 @@ describe('Versioned widgets', () => {
         expect(option.xAxis.data).toEqual(['批发业', '零售业']);
         expect(option.series[0]!.data).toEqual([5234, null]);
         expect(screen.getByText(/按空白显示，未按 0 绘制/)).toBeInTheDocument();
-        expect(screen.getByText('以下槽位为模型推断')).toBeInTheDocument();
-        expect(screen.getByText(/字段语义来自模型声明/)).toBeInTheDocument();
+        // The receipt's model-facing summary stays out; its items read in business language.
+        expect(screen.queryByText(/以下字段为假定/)).not.toBeInTheDocument();
+        expect(screen.getByText('含 1 项模型假设')).toBeInTheDocument();
+        expect(screen.getByText(/时间范围：2016-11 没有数据/)).toBeInTheDocument();
+        expect(screen.getByText(/字段含义由模型声明，未经业务定义核实：sales/)).toBeInTheDocument();
         expect(screen.getByText(/声明为比率，但数值范围为/)).toBeInTheDocument();
     });
 

@@ -28,6 +28,8 @@ export interface ApplicationSessionStore {
   open(metadata: unknown): Promise<{ getEntries(): Promise<readonly unknown[]> }>;
   openByAppSessionId(sessionId: string): Promise<{ getEntries(): Promise<readonly unknown[]> }>;
   close?(): Promise<void>;
+  /** Forgets an opened Session after its host closed it, so the next open reads it again. */
+  release?(sessionId: string): void;
 }
 
 export interface DataAgentSessionApplicationOptions {
@@ -110,14 +112,51 @@ class SessionDirectory {
   private readonly hosts = new Map<HostKey, Promise<DataAgentSessionHost>>();
   private readonly listeners = new Set<(event: ApplicationAgentEvent) => void>();
   private readonly subscriptions = new Map<DataAgentSessionHost, () => void>();
+  /** Hosts being closed for a changed database; a resolve meanwhile waits, or it would reopen the closing Session. */
+  private readonly retiring = new Map<HostKey, Promise<void>>();
 
-  constructor(private readonly create: SessionHostFactory) {}
+  /**
+   * `retirement.isStale` says whether an open host was built for a connection
+   * that is no longer the saved one and has no operation running. Such a host
+   * is closed and reopened from its stored Session, as an app restart would;
+   * `retirement.closed` lets the store forget the Session the host closed.
+   */
+  constructor(
+    private readonly create: SessionHostFactory,
+    private readonly retirement?: {
+      readonly isStale: (host: DataAgentSessionHost) => Promise<boolean>;
+      readonly closed: (context: HostRequestContext) => void;
+    },
+  ) {}
 
   async resolve(context: HostRequestContext): Promise<DataAgentSessionHost> {
     if (!context.userId.trim() || !context.sessionId.trim()) throw new Error("SESSION_CONTEXT_REQUIRED");
     const key = keyFor(context);
+    const retiring = this.retiring.get(key);
+    if (retiring) {
+      await retiring;
+      return this.resolve(context);
+    }
     const existing = this.hosts.get(key);
-    if (existing) return existing;
+    if (existing) {
+      if (!this.retirement) return existing;
+      const host = await existing;
+      const stale = await this.retirement.isStale(host);
+      // Another resolve may have reopened it meanwhile; use whatever is current then.
+      if (this.hosts.get(key) !== existing) return this.resolve(context);
+      if (!stale) return host;
+      const { closed } = this.retirement;
+      const retired = (async () => {
+        this.subscriptions.get(host)?.();
+        this.subscriptions.delete(host);
+        await host.close().catch((error: unknown) => console.warn("[data-agent] closing a Session for a changed database failed:", error instanceof Error ? error.message : String(error)));
+        closed(context);
+      })().finally(() => this.retiring.delete(key));
+      this.retiring.set(key, retired);
+      this.hosts.delete(key);
+      await retired;
+      return this.resolve(context);
+    }
     const pending = this.create(context).then(async (host) => {
       this.attachEvents(host, context.userId);
       for (const operation of host.openOperations) {
@@ -177,11 +216,38 @@ export class DataAgentSessionApplication {
   private readonly directory: SessionDirectory;
   private readonly ownedSessionStore: ApplicationSessionStore | undefined;
   private readonly sessionOwners = new Map<string, string>();
+  /** The query executor each open host was built with. */
+  private readonly hostExecutors = new WeakMap<DataAgentSessionHost, SessionQueryExecutor>();
   private resources: ApplicationResources = {};
 
   constructor(private readonly options: DataAgentSessionApplicationOptions) {
     this.ownedSessionStore = options.sessionStore ?? (options.sessionRoot ? new PiJsonlSessionStore(options.sessionRoot) : undefined);
-    this.directory = new SessionDirectory((context) => this.createSessionHost(context));
+    this.directory = new SessionDirectory(
+      (context) => this.createSessionHost(context),
+      typeof options.queryExecutor === "function" ? {
+        isStale: (host) => this.builtForAnotherDatabase(host),
+        closed: (context) => this.sessionStore?.release?.(context.sessionId),
+      } : undefined,
+    );
+  }
+
+  /**
+   * A host keeps the query executor it was built with, and its SQL dialect with
+   * it. When the saved connection changed since (say from MySQL to the sample
+   * SQLite), an idle host must be rebuilt, or it keeps querying the old database.
+   */
+  private async builtForAnotherDatabase(host: DataAgentSessionHost): Promise<boolean> {
+    const built = this.hostExecutors.get(host);
+    if (!built || typeof this.options.queryExecutor !== "function") return false;
+    let current: SessionQueryExecutor;
+    try {
+      current = await this.options.queryExecutor();
+    } catch {
+      // No usable saved connection now: the host's own failure says more than a reopen would.
+      return false;
+    }
+    if (current === built) return false;
+    return (await host.controller.getOpenOperations()).length === 0;
   }
 
   get sessionStore(): ApplicationSessionStore | undefined { return this.options.sessionStore ?? this.ownedSessionStore; }
@@ -250,7 +316,9 @@ export class DataAgentSessionApplication {
       ...(this.options.delegationRoot ? { delegationRoot: (await import("node:path")).join(this.options.delegationRoot, context.sessionId) } : {}),
       ...(this.options.delegationKnowledgePaths ? { delegationKnowledgePaths: this.options.delegationKnowledgePaths } : {}),
     };
-    return createDataAgentSessionHost(runtimeOptions);
+    const host = await createDataAgentSessionHost(runtimeOptions);
+    if (queryExecutor) this.hostExecutors.set(host, queryExecutor);
+    return host;
   }
 
   private async session(context: HostRequestContext): Promise<DataAgentSessionHost> {

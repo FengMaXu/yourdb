@@ -273,7 +273,7 @@ export function evaluateSpecRealization(fields: SpecFields, sql: string): Realiz
     ...groupingVerdicts(fields, text),
   ];
   const findings = verdicts.flatMap((verdict): Finding[] => verdict.outcome === "contradicted"
-    ? [{ id: `finding_realization_conflict_${randomUUID()}`, kind: "realization_conflict", message: verdict.message, blocking: verdict.certainty === "certain", checkId: SPEC_REALIZATION_CHECK_ID }]
+    ? [{ id: `finding_realization_conflict_${randomUUID()}`, kind: "realization_conflict", message: verdict.message, blocking: verdict.certainty === "certain", checkId: SPEC_REALIZATION_CHECK_ID, paths: [verdict.path] }]
     : []);
   const undetermined = verdicts.flatMap((verdict) => verdict.outcome === "not_determinable" ? [`${verdict.path}: ${verdict.reason}`] : []);
   const coverage: CheckCoverage = verdicts.length === 0

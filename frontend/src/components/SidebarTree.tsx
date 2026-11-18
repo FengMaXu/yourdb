@@ -155,8 +155,8 @@ export const TreeRow: React.FC<TreeRowProps> = ({
             {actions && (
                 <span
                     className={cn(
-                        'absolute top-1/2 right-1 flex -translate-y-1/2 bg-[linear-gradient(90deg,transparent,var(--row-bg)_14px)] pl-3.5 transition-opacity motion-reduce:transition-none',
-                        editor ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100',
+                        'pointer-events-none absolute top-1/2 right-1 flex -translate-y-1/2 bg-[linear-gradient(90deg,transparent,var(--row-bg)_14px)] pl-3.5 transition-opacity motion-reduce:transition-none',
+                        editor ? 'opacity-100 [&>*]:pointer-events-auto' : 'opacity-0 group-focus-within/row:opacity-100 group-focus-within/row:[&>*]:pointer-events-auto group-hover/row:opacity-100 group-hover/row:[&>*]:pointer-events-auto',
                     )}
                 >
                     {actions}

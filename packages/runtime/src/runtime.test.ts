@@ -152,4 +152,17 @@ describe("protocol application host", () => {
     const missing = await runtime.dispatch({ protocolVersion: 1, requestId: "c", command: { type: "llm.test", profile: {} } }, context);
     expect(missing.response).toEqual({ type: "test.result", success: false, message: "LLM_NOT_CONFIGURED: add a model API key" });
   });
+
+  it("tests unsaved edits with the stored key only when the endpoint matches", async () => {
+    const runtime = new DataAgentRuntime({});
+    const tested: Array<Record<string, unknown>> = [];
+    runtime.llmTester = { test: async (profile) => { tested.push(profile); return { success: true, message: "ok" }; } };
+    runtime.savedModelProfile = async () => ({ provider: "openai", model: "deepseek-chat", api_key: "stored", base_url: "https://api.deepseek.com" });
+    await runtime.dispatch({ protocolVersion: 1, requestId: "a", command: { type: "llm.test", profile: { provider: "openai", model: "deepseek-chatt", base_url: "https://api.deepseek.com" } } }, context);
+    await runtime.dispatch({ protocolVersion: 1, requestId: "b", command: { type: "llm.test", profile: { provider: "openai", model: "gpt", base_url: "https://other.example" } } }, context);
+    expect(tested).toEqual([
+      { provider: "openai", model: "deepseek-chatt", base_url: "https://api.deepseek.com", api_key: "stored" },
+      { provider: "openai", model: "gpt", base_url: "https://other.example" },
+    ]);
+  });
 });
