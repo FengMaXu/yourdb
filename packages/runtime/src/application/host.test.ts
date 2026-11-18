@@ -105,8 +105,10 @@ describe("DataAgent Session Application production composition", () => {
 
       openOperations.mockRestore();
       const close = vi.spyOn(first, "close");
-      const reopened = await application.session(context);
+      // The UI asks for several things at once when a conversation opens; they share one reopened host.
+      const [reopened, alongside] = await Promise.all([application.session(context), application.session(context)]);
       expect(reopened).not.toBe(first);
+      expect(alongside).toBe(reopened);
       expect(close).toHaveBeenCalledOnce();
       expect(await application.session(context)).toBe(reopened);
       await application.close();

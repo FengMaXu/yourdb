@@ -112,6 +112,8 @@ class SessionDirectory {
   private readonly hosts = new Map<HostKey, Promise<DataAgentSessionHost>>();
   private readonly listeners = new Set<(event: ApplicationAgentEvent) => void>();
   private readonly subscriptions = new Map<DataAgentSessionHost, () => void>();
+  /** Hosts being closed for a changed database; a resolve meanwhile waits, or it would reopen the closing Session. */
+  private readonly retiring = new Map<HostKey, Promise<void>>();
 
   /**
    * `retirement.isStale` says whether an open host was built for a connection
@@ -130,6 +132,11 @@ class SessionDirectory {
   async resolve(context: HostRequestContext): Promise<DataAgentSessionHost> {
     if (!context.userId.trim() || !context.sessionId.trim()) throw new Error("SESSION_CONTEXT_REQUIRED");
     const key = keyFor(context);
+    const retiring = this.retiring.get(key);
+    if (retiring) {
+      await retiring;
+      return this.resolve(context);
+    }
     const existing = this.hosts.get(key);
     if (existing) {
       if (!this.retirement) return existing;
@@ -138,11 +145,16 @@ class SessionDirectory {
       // Another resolve may have reopened it meanwhile; use whatever is current then.
       if (this.hosts.get(key) !== existing) return this.resolve(context);
       if (!stale) return host;
+      const { closed } = this.retirement;
+      const retired = (async () => {
+        this.subscriptions.get(host)?.();
+        this.subscriptions.delete(host);
+        await host.close().catch((error: unknown) => console.warn("[data-agent] closing a Session for a changed database failed:", error instanceof Error ? error.message : String(error)));
+        closed(context);
+      })().finally(() => this.retiring.delete(key));
+      this.retiring.set(key, retired);
       this.hosts.delete(key);
-      this.subscriptions.get(host)?.();
-      this.subscriptions.delete(host);
-      await host.close().catch((error: unknown) => console.warn("[data-agent] closing a Session for a changed database failed:", error instanceof Error ? error.message : String(error)));
-      this.retirement.closed(context);
+      await retired;
       return this.resolve(context);
     }
     const pending = this.create(context).then(async (host) => {
