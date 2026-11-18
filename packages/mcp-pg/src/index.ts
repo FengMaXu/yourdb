@@ -13,6 +13,19 @@ export interface PgReferenceServerOptions {
   maxPreviewRows?: number;
 }
 
+/**
+ * A readable cause for any failure. A refused connection reaches us as an
+ * AggregateError (one attempt per address) whose own message is empty, which
+ * would leave the Agent with a bare QUERY_FAILED and nothing to act on.
+ */
+export function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return String(error);
+  if (error.message) return error.message;
+  if (error instanceof AggregateError && error.errors.length > 0) return [...new Set(error.errors.map(describeError))].join("; ");
+  const code = (error as { code?: unknown }).code;
+  return typeof code === "string" && code ? code : error.name;
+}
+
 function redact(sql: string): string {
   return sql.replace(/'[^']*'/g, "'<REDACTED>'").slice(0, 200);
 }
@@ -119,7 +132,7 @@ export async function createPgReferenceServer(options: PgReferenceServerOptions)
   };
   const failure = (error: unknown, trimmed: string, timeoutMs: number | undefined, signal: AbortSignal | undefined) => {
     if (isQueryCanceled(error)) return signal?.aborted ? { error: { code: "QUERY_CANCELLED" } } : timeoutPayload(timeoutMs);
-    return { error: { code: "QUERY_FAILED", message: redact(`${(error as Error).message} in ${redact(trimmed)}`).slice(0, 500) } };
+    return { error: { code: "QUERY_FAILED", message: redact(`${describeError(error)} in ${redact(trimmed)}`).slice(0, 500) } };
   };
 
   const server = new McpServer({ name: "data-agent-pg-reference", version: "1.0.0" });
@@ -172,7 +185,7 @@ export async function createPgReferenceServer(options: PgReferenceServerOptions)
         const columns = result.fields.map((field) => field.name);
         return { content: [{ type: "text", text: JSON.stringify({ columns, rows: result.rows, truncated: false, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
       } catch (error) {
-        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "EXPLAIN_FAILED", message: redact(String((error as Error).message)).slice(0, 300) } }) }] };
+        return { content: [{ type: "text", text: JSON.stringify({ error: { code: "EXPLAIN_FAILED", message: redact(describeError(error)).slice(0, 300) } }) }] };
       }
     },
   );
@@ -206,27 +219,35 @@ export async function createPgReferenceServer(options: PgReferenceServerOptions)
     "List tables and columns of the PostgreSQL database",
     {},
     async () => {
-      const tables = await pool.query("SELECT table_name AS \"table\" FROM information_schema.tables WHERE table_schema='public'");
-      const schema = [];
-      for (const t of tables.rows as any[]) {
-        const columns = await pool.query("SELECT column_name AS name, data_type AS \"dataType\" FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position", [t.table]);
-        const constraints = await pool.query("SELECT tc.constraint_name AS \"constraintName\", tc.constraint_type AS \"constraintType\", kcu.column_name AS \"columnName\", ccu.table_name AS \"referencedTable\", ccu.column_name AS \"referencedColumn\", kcu.ordinal_position AS \"ordinalPosition\" FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_schema=kcu.constraint_schema AND tc.table_schema=kcu.table_schema AND tc.table_name=kcu.table_name AND tc.constraint_name=kcu.constraint_name LEFT JOIN information_schema.constraint_column_usage ccu ON tc.constraint_schema=ccu.constraint_schema AND tc.constraint_name=ccu.constraint_name WHERE tc.constraint_schema='public' AND tc.table_name=$1 ORDER BY kcu.constraint_name, kcu.ordinal_position", [t.table]);
-        const rows = constraints.rows as Array<{ constraintName?: string; constraintType?: string; columnName?: string; referencedTable?: string; referencedColumn?: string }>;
-        const primaryKey = rows.filter((row) => row.constraintType === "PRIMARY KEY" && row.columnName).map((row) => row.columnName!);
-        const uniqueGroups = new Map<string, string[]>();
-        for (const row of rows) if (row.constraintType === "UNIQUE" && row.constraintName && row.columnName) uniqueGroups.set(row.constraintName, [...(uniqueGroups.get(row.constraintName) ?? []), row.columnName]);
-        const foreignGroups = new Map<string, { columns: string[]; references: { table: string; columns: string[] } }>();
-        for (const row of rows) if (row.constraintType === "FOREIGN KEY" && row.constraintName && row.columnName && row.referencedTable && row.referencedColumn) {
-          const existing = foreignGroups.get(row.constraintName) ?? { columns: [], references: { table: row.referencedTable, columns: [] } };
-          existing.columns.push(row.columnName);
-          existing.references.columns.push(row.referencedColumn);
-          foreignGroups.set(row.constraintName, existing);
-        }
-        schema.push({ table: t.table, columns: columns.rows, ...(primaryKey.length ? { primaryKey } : {}), ...(uniqueGroups.size ? { uniqueKeys: [...uniqueGroups.values()] } : {}), ...(foreignGroups.size ? { foreignKeys: [...foreignGroups.values()] } : {}) });
+      try {
+        return await readSchema();
+      } catch (error) {
+        // Thrown as is, an empty message reaches the client as an empty response.
+        throw new Error(`SCHEMA_FAILED: ${describeError(error)}`);
       }
-      return { content: [{ type: "text", text: JSON.stringify({ schema, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
     },
   );
+  async function readSchema() {
+    const tables = await pool.query("SELECT table_name AS \"table\" FROM information_schema.tables WHERE table_schema='public'");
+    const schema = [];
+    for (const t of tables.rows as any[]) {
+      const columns = await pool.query("SELECT column_name AS name, data_type AS \"dataType\" FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position", [t.table]);
+      const constraints = await pool.query("SELECT tc.constraint_name AS \"constraintName\", tc.constraint_type AS \"constraintType\", kcu.column_name AS \"columnName\", ccu.table_name AS \"referencedTable\", ccu.column_name AS \"referencedColumn\", kcu.ordinal_position AS \"ordinalPosition\" FROM information_schema.table_constraints tc JOIN information_schema.key_column_usage kcu ON tc.constraint_schema=kcu.constraint_schema AND tc.table_schema=kcu.table_schema AND tc.table_name=kcu.table_name AND tc.constraint_name=kcu.constraint_name LEFT JOIN information_schema.constraint_column_usage ccu ON tc.constraint_schema=ccu.constraint_schema AND tc.constraint_name=ccu.constraint_name WHERE tc.constraint_schema='public' AND tc.table_name=$1 ORDER BY kcu.constraint_name, kcu.ordinal_position", [t.table]);
+      const rows = constraints.rows as Array<{ constraintName?: string; constraintType?: string; columnName?: string; referencedTable?: string; referencedColumn?: string }>;
+      const primaryKey = rows.filter((row) => row.constraintType === "PRIMARY KEY" && row.columnName).map((row) => row.columnName!);
+      const uniqueGroups = new Map<string, string[]>();
+      for (const row of rows) if (row.constraintType === "UNIQUE" && row.constraintName && row.columnName) uniqueGroups.set(row.constraintName, [...(uniqueGroups.get(row.constraintName) ?? []), row.columnName]);
+      const foreignGroups = new Map<string, { columns: string[]; references: { table: string; columns: string[] } }>();
+      for (const row of rows) if (row.constraintType === "FOREIGN KEY" && row.constraintName && row.columnName && row.referencedTable && row.referencedColumn) {
+        const existing = foreignGroups.get(row.constraintName) ?? { columns: [], references: { table: row.referencedTable, columns: [] } };
+        existing.columns.push(row.columnName);
+        existing.references.columns.push(row.referencedColumn);
+        foreignGroups.set(row.constraintName, existing);
+      }
+      schema.push({ table: t.table, columns: columns.rows, ...(primaryKey.length ? { primaryKey } : {}), ...(uniqueGroups.size ? { uniqueKeys: [...uniqueGroups.values()] } : {}), ...(foreignGroups.size ? { foreignKeys: [...foreignGroups.values()] } : {}) });
+    }
+    return { content: [{ type: "text" as const, text: JSON.stringify({ schema, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
+  }
 
   async function close() { await pool.end(); }
   return { server, close, contractVersion: DATABASE_MCP_CONTRACT_VERSION };
