@@ -30,6 +30,7 @@ import { evaluateSpecRealization, type RealizationReport } from "./realization-c
 import { entityIdentityCoverage, entityIdentityFindings } from "./entity-identity.js";
 import { calendarCoverageCoverage, calendarCoverageFindings } from "./calendar-coverage.js";
 import { recordDataChecks } from "./data-checks-execution.js";
+import { dataFalsificationCoverage, dataFalsificationFindings, evaluateDataFalsification } from "./data-falsification.js";
 import { asRecord, now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
 
@@ -437,9 +438,11 @@ export async function executeResult(
   }
 
   const fanout = await evaluateFanout(deps, taskId, revisionId, queryHash, input.sql.trim(), context);
+  // Plan T4.3: bounded SQL-vs-data probes; disclosed, never blocking.
+  const falsification = deps.semanticQualificationMode === "required" ? await evaluateDataFalsification(deps.sqlExecutor, input.sql, privateResult, context, deps.dataFalsification) : undefined;
   // Entity identity and calendar coverage were read when the Revision committed; the sealed fields decide whether its findings still apply.
-  const combinedCoverage: readonly CheckCoverage[] = [...checkReport.coverage, realization.coverage, fanoutCoverage(fanout), entityIdentityCoverage(sealed.entityIdentity), calendarCoverageCoverage(sealed.calendarCoverage)];
-  const combinedFindings = [...checkReport.findings, ...realization.findings, ...fanoutFindings(fanout), ...entityIdentityFindings(sealed.entityIdentity), ...calendarCoverageFindings(sealed.calendarCoverage)];
+  const combinedCoverage: readonly CheckCoverage[] = [...checkReport.coverage, realization.coverage, fanoutCoverage(fanout), entityIdentityCoverage(sealed.entityIdentity), calendarCoverageCoverage(sealed.calendarCoverage), ...(falsification ? [dataFalsificationCoverage(falsification)] : [])];
+  const combinedFindings = [...checkReport.findings, ...realization.findings, ...fanoutFindings(fanout), ...entityIdentityFindings(sealed.entityIdentity), ...calendarCoverageFindings(sealed.calendarCoverage), ...(falsification ? dataFalsificationFindings(falsification) : [])];
 
   const baseCandidate: ResultCandidateRecord = {
     candidateId: makeInternalId("candidate") as unknown as ResultCandidateRecord["candidateId"],

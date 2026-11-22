@@ -1,0 +1,2649 @@
+{
+  "generatedAt": "2026-11-22T06:58:56.433Z",
+  "ruleVersions": {
+    "resultDomain": "result-domain-v1",
+    "dataFalsification": "data-falsification-v1"
+  },
+  "sources": {
+    "dev": "fewshot135-case-evidence.jsonl",
+    "holdout": "system0904-gpt55-paired040-default-001",
+    "databases": "Spider2 spider2-lite/resource/databases/spider2-localdb"
+  },
+  "dev": {
+    "cases": [
+      {
+        "id": "local002",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "literal_not_matched"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local004",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local007",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local009",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local010",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local015",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local017",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local018",
+        "correct": true,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "finding",
+          "rule": "percentage_as_fraction",
+          "message": "measure.formula is percentage (100·a/b), but every nonzero pp_change_2021_vs_2011 lies between 0 and 1, as a fraction would. Multiply by 100, or rewrite measure.formula as ratio if a fraction is meant"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local019",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local020",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local021",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local022",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local023",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "finding",
+          "rule": "ratio_as_percentage",
+          "message": "measure.formula is ratio (a/b), but every nonzero batting_average lies between 1 and 100 with fractions, as a percentage would. Drop the factor of 100, or rewrite measure.formula as percentage if a percentage is meant"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local024",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local025",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local026",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local028",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local029",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local030",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local031",
+        "correct": true,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local032",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local034",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local035",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local037",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "finding",
+          "rules": [
+            "left_join_degenerated"
+          ],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [
+            "The WHERE predicate \"oc.cat is not null\" filters oc.cat, the right side of a LEFT JOIN; rows oc does not match have NULL there and are removed, so the LEFT JOIN acts as an INNER JOIN. Move the condition into the ON clause if unmatched rows should stay, or write INNER JOIN if they should not"
+          ],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local038",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local039",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local040",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local041",
+        "correct": true,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local049",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "finding",
+          "rule": "ratio_as_percentage",
+          "message": "measure.formula is ratio (a/b), but every nonzero avg_new_unicorns_per_year lies between 1 and 100 with fractions, as a percentage would. Drop the factor of 100, or rewrite measure.formula as percentage if a percentage is meant"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local050",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local054",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local055",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local056",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local058",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local059",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local060",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local061",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local062",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "date_upper_bound_truncated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local063",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local064",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local065",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local066",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local067",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local068",
+        "correct": true,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local070",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "unknown",
+          "rules": [],
+          "applied": [
+            "date_upper_bound_truncated"
+          ],
+          "findings": [],
+          "limitations": [
+            "the table of insert_date is not known"
+          ]
+        }
+      },
+      {
+        "id": "local071",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local072",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local073",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local074",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local077",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local078",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local081",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local085",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local096",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local097",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local098",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local099",
+        "correct": true,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local100",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local114",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local128",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local130",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local131",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local132",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local133",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local141",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local152",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local157",
+        "correct": true,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local163",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local167",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local168",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local169",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "unknown",
+          "rules": [],
+          "applied": [
+            "date_upper_bound_truncated"
+          ],
+          "findings": [],
+          "limitations": [
+            "the table of term_start is not known"
+          ]
+        }
+      },
+      {
+        "id": "local170",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local171",
+        "correct": false,
+        "measureOp": "count_distinct",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local193",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local194",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "finding",
+          "rule": "ratio_as_percentage",
+          "message": "measure.formula is ratio (a/b), but every nonzero avg_revenue_per_actor lies between 1 and 100 with fractions, as a percentage would. Drop the factor of 100, or rewrite measure.formula as percentage if a percentage is meant"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local195",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local196",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local197",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local198",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local199",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local201",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local202",
+        "correct": true,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local209",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local210",
+        "correct": true,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local212",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "finding",
+          "rule": "ratio_as_percentage",
+          "message": "measure.formula is ratio (a/b), but every nonzero avg_daily_deliveries lies between 1 and 100 with fractions, as a percentage would. Drop the factor of 100, or rewrite measure.formula as percentage if a percentage is meant"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local218",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local219",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local220",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local221",
+        "correct": true,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local228",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local229",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local230",
+        "correct": false,
+        "measureOp": "count_distinct",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local244",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local253",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local258",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local259",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local262",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local263",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local264",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local269",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local270",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local272",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local273",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local275",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "unknown",
+          "rules": [],
+          "applied": [
+            "date_upper_bound_truncated"
+          ],
+          "findings": [],
+          "limitations": [
+            "the table of mth is not known"
+          ]
+        }
+      },
+      {
+        "id": "local277",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local279",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "date_upper_bound_truncated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local283",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local284",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local285",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local286",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local297",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local298",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local299",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local300",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local301",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local302",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local309",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local310",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local311",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local329",
+        "correct": true,
+        "measureOp": "count_distinct",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local330",
+        "correct": false,
+        "measureOp": "count_distinct",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local335",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local336",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local344",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local354",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local355",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local356",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local358",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local360",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      }
+    ],
+    "wrong": 82,
+    "correct": 47,
+    "coverage": {
+      "resultDomain": {
+        "finding": 5,
+        "clear": 35,
+        "not_applicable": 89,
+        "unknown": 0
+      },
+      "dataFalsification": {
+        "finding": 1,
+        "clear": 20,
+        "not_applicable": 105,
+        "unknown": 3
+      }
+    },
+    "rules": [
+      {
+        "rule": "result_domain.percentage_as_fraction",
+        "wrongHits": 0,
+        "recallOnWrong": 0,
+        "correctHits": 1,
+        "falsePositiveRateOnCorrect": 0.02127659574468085,
+        "wrongCases": [],
+        "correctCases": [
+          "local018"
+        ]
+      },
+      {
+        "rule": "result_domain.ratio_as_percentage",
+        "wrongHits": 3,
+        "recallOnWrong": 0.036585365853658534,
+        "correctHits": 1,
+        "falsePositiveRateOnCorrect": 0.02127659574468085,
+        "wrongCases": [
+          {
+            "id": "local049",
+            "errorLayer": "口径错"
+          },
+          {
+            "id": "local194",
+            "errorLayer": "标准答案有问题"
+          },
+          {
+            "id": "local212",
+            "errorLayer": "口径错"
+          }
+        ],
+        "correctCases": [
+          "local023"
+        ]
+      },
+      {
+        "rule": "data_falsification.left_join_degenerated",
+        "wrongHits": 1,
+        "recallOnWrong": 0.012195121951219513,
+        "correctHits": 0,
+        "falsePositiveRateOnCorrect": 0,
+        "wrongCases": [
+          {
+            "id": "local037",
+            "errorLayer": "标准答案有问题"
+          }
+        ],
+        "correctCases": []
+      }
+    ]
+  },
+  "holdout": {
+    "cases": [
+      {
+        "id": "local003",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local004",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local007",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "finding",
+          "rule": "ratio_as_percentage",
+          "message": "measure.formula is ratio (a/b), but every nonzero average_career_span_years lies between 1 and 100 with fractions, as a percentage would. Drop the factor of 100, or rewrite measure.formula as percentage if a percentage is meant"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local009",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local010",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local015",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local019",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local024",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local025",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local029",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local031",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local032",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local034",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local035",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local037",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local038",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local041",
+        "correct": true,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local050",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local059",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local060",
+        "correct": false,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local061",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local072",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local098",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local128",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local130",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "unknown"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local133",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local141",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local195",
+        "correct": false,
+        "measureOp": "percentage",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local198",
+        "correct": true,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local209",
+        "correct": true,
+        "measureOp": "ratio",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local220",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local230",
+        "correct": false,
+        "measureOp": "count_distinct",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local244",
+        "correct": false,
+        "measureOp": null,
+        "resultDomain": {
+          "outcome": "not_applicable"
+        },
+        "dataFalsification": {
+          "outcome": "clear",
+          "rules": [],
+          "applied": [
+            "left_join_degenerated"
+          ],
+          "findings": [],
+          "limitations": []
+        }
+      },
+      {
+        "id": "local264",
+        "correct": false,
+        "measureOp": "count",
+        "resultDomain": {
+          "outcome": "clear"
+        },
+        "dataFalsification": {
+          "outcome": "not_applicable",
+          "rules": [],
+          "applied": [],
+          "findings": [],
+          "limitations": []
+        }
+      }
+    ],
+    "wrong": 23,
+    "correct": 11,
+    "coverage": {
+      "resultDomain": {
+        "finding": 1,
+        "clear": 11,
+        "not_applicable": 21,
+        "unknown": 1
+      },
+      "dataFalsification": {
+        "finding": 0,
+        "clear": 9,
+        "not_applicable": 25,
+        "unknown": 0
+      }
+    },
+    "rules": [
+      {
+        "rule": "result_domain.ratio_as_percentage",
+        "wrongHits": 0,
+        "recallOnWrong": 0,
+        "correctHits": 1,
+        "falsePositiveRateOnCorrect": 0.09090909090909091,
+        "wrongCases": [],
+        "correctCases": [
+          "local007"
+        ]
+      }
+    ]
+  }
+}

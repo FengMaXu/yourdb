@@ -75,3 +75,4 @@ export {
   isEvidenceKind,
   isScopedReadOnlySql,
 } from "./model.js";
+export { witnessText, type ProbeSample, type WitnessRow } from "./probe-diff.js";

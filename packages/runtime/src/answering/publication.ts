@@ -92,6 +92,8 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
   const realization = realizationDisclosure(candidate.findings);
   const identity = entityIdentityDisclosure(candidate.findings);
   const calendar = calendarCoverageDisclosure(candidate.findings);
+  const domain = (candidate.findings ?? []).filter((item) => item.kind === "result_domain");
+  const falsified = (candidate.findings ?? []).filter((item) => item.kind === "data_falsification");
   const unadvised = (Object.entries(revision.fields) as [string, FieldRecord][])
     .filter(([, field]) => field.state === "decided" && field.adviceUnavailable)
     .map(([path]) => path);
@@ -118,8 +120,10 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
       .map((item) => ({ kind: "entity_identity" as const, paths: [...(item.paths ?? ["population.entity"])], detail: item.message })),
     ...findings.filter((item) => item.kind === "calendar_coverage")
       .map((item) => ({ kind: "calendar_coverage" as const, paths: [...(item.paths ?? ["population.time"])], detail: item.message, ...(item.periods ? { periods: item.periods } : {}) })),
+    ...domain.map((item) => ({ kind: "result_domain" as const, paths: [...(item.paths ?? ["measure.formula"])], detail: item.message })),
+    ...falsified.map((item) => ({ kind: "data_falsification" as const, paths: [...(item.paths ?? [])], detail: item.message })),
   ];
-  if (unverified.length === 0 && unadvised.length === 0 && undecided.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar) return undefined;
+  if (unverified.length === 0 && unadvised.length === 0 && undecided.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar && domain.length === 0 && falsified.length === 0) return undefined;
   return {
     required: true,
     unverifiedFields: unverified,
@@ -134,6 +138,8 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
       ...(realization ? [realization] : []),
       ...(identity ? [identity] : []),
       ...(calendar ? [calendar] : []),
+      ...(domain.length > 0 ? [`结果数值与度量口径的取值范围可能不符（规则检查，未经人工确认）：${domain.map((item) => item.message).join("；")}。`] : []),
+      ...(falsified.length > 0 ? [`SQL 与数据核对发现可能的偏差（规则检查，未经人工确认）：${falsified.map((item) => item.message).join("；")}。`] : []),
     ].join(" "),
     items,
     ...(fanoutDisclosure && candidate.fanout ? { fanoutStatus: candidate.fanout.status } : {}),

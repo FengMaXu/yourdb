@@ -15,7 +15,8 @@ import { obstacle, obstacleDetails, reserveAttempt, settleAttempt, taskBudget, t
 import { boundedResult } from "./sql-execution.js";
 import { asRecord, now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
-import { PROBE_ROW_LIMIT, probeContext } from "./probes.js";
+import { PROBE_ROW_LIMIT, probeContext, summarizeProbes } from "./probes.js";
+import { sampleProbeOutput } from "./probe-diff.js";
 import type { SpecPath } from "./fields.js";
 import { resultFingerprint } from "./result-fingerprint.js";
 import { ensureAdvice } from "./advice-execution.js";
@@ -136,6 +137,7 @@ export async function executeExploration(
         evidenceId,
         context: probeContext(tx.getRevision(revisionId)?.fields ?? {}, probe.path),
         rowCount: raw.rows.length,
+        ...(raw.truncated ? {} : { sample: sampleProbeOutput(raw.columns, raw.rows) }),
         outcome: raw.truncated
           ? { state: "unavailable", reason: `output exceeds ${PROBE_ROW_LIMIT} rows` }
           : { state: "available", fingerprint: resultFingerprint(raw.columns, raw.rows) },
@@ -147,9 +149,14 @@ export async function executeExploration(
       tx.putTask({ ...current, budget: { ...budget, observedRows: budget.observedRows + observedRows }, ...(fieldProbes ? { fieldProbes } : {}), updatedAt: now() });
       settleAttempt(tx, attempt, { state: "succeeded", outcome: "succeeded", sqlExecuted: true });
       tx.appendEvidence(taskId, observation);
-      return undefined;
+      // Witnesses against the field's other probed alternatives, now that this output is recorded.
+      const field = probeRecord ? tx.getRevision(revisionId)?.fields[probeRecord.path] : undefined;
+      const witnesses = probeRecord && field && (field.state === "open" || field.state === "decided")
+        ? summarizeProbes(probeRecord.path, field.alternatives, fieldProbes ?? [], field.waivers ?? [], probeRecord.context).witnesses
+        : [];
+      return { witnesses } as const;
     }, context);
-    if (postExecution) {
+    if ("message" in postExecution) {
       throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", postExecution.message, obstacleDetails(undefined, postExecution));
     }
     await context.memo?.set("answering.exploration-execution", { state: "settled", taskId: input.taskId, queryHash, evidenceId });
@@ -160,6 +167,7 @@ export async function executeExploration(
       ...(raw.truncated
         ? { state: "unavailable" as const, reason: `output exceeds ${PROBE_ROW_LIMIT} rows` }
         : { state: "available" as const, output: resultFingerprint(raw.columns, raw.rows).slice(0, 12) }),
+      ...(postExecution.witnesses.length > 0 ? { witnesses: postExecution.witnesses } : {}),
     } : undefined;
     // The probe that completes an open field's outputs brings the advice with it, before the model decides (ADR-0005).
     const advice = probe ? (await ensureAdvice(deps, taskId, context, [probe.path])).find((item) => item.path === probe.path) : undefined;

@@ -1,3 +1,4 @@
+import { diffProbeSamples, WITNESS_MAX, type WitnessRow } from "./probe-diff.js";
 import { contentHash, type FieldAlternative, type FieldProbeRecord, type FieldRecord, type ProbeOutputs, type ProbeView, type ProbeWaiver, type SpecFields } from "./model.js";
 import { valueKey, type SpecPath } from "./fields.js";
 
@@ -17,6 +18,8 @@ export interface ProbeSummary {
   readonly stale: readonly string[];
   /** Fingerprint per alternative, only for available probes. */
   readonly fingerprints: ReadonlyMap<string, string>;
+  /** Rows telling differing outputs apart, from the probes' samples. */
+  readonly witnesses: readonly WitnessRow[];
 }
 
 /**
@@ -71,7 +74,25 @@ export function summarizeProbes(path: SpecPath, alternatives: readonly FieldAlte
   const complete = fingerprints.size === alternatives.length;
   const distinct = new Set(fingerprints.values()).size;
   const outputs: ProbeOutputs = !complete ? distinct > 1 ? "distinct" : "incomplete" : distinct === 1 ? "identical" : "distinct";
-  return { probes: views, outputs, covered: missing.length === 0, missing, stale, fingerprints };
+  return { probes: views, outputs, covered: missing.length === 0, missing, stale, fingerprints, witnesses: witnessesOf(alternatives, latest, fingerprints) };
+}
+
+/** Witness rows for pairs of alternatives whose current outputs differ, in alternative order, capped per field. */
+function witnessesOf(alternatives: readonly FieldAlternative[], latest: ReadonlyMap<string, FieldProbeRecord>, fingerprints: ReadonlyMap<string, string>): readonly WitnessRow[] {
+  const sampled = alternatives.flatMap((alternative) => {
+    const sample = latest.get(alternative.id)?.sample;
+    return sample && fingerprints.has(alternative.id) ? [{ alternativeId: alternative.id as string, sample }] : [];
+  });
+  const out: WitnessRow[] = [];
+  for (let left = 0; left < sampled.length && out.length < WITNESS_MAX; left++) {
+    for (let right = left + 1; right < sampled.length && out.length < WITNESS_MAX; right++) {
+      const a = sampled[left]!;
+      const b = sampled[right]!;
+      if (fingerprints.get(a.alternativeId) === fingerprints.get(b.alternativeId)) continue;
+      out.push(...diffProbeSamples(a, b, WITNESS_MAX - out.length));
+    }
+  }
+  return out;
 }
 
 /**

@@ -6,6 +6,7 @@ import { candidateCheckFailure, evaluateCandidateCheckReport } from "./candidate
 import { evaluateFanout, fanoutCoverage, fanoutFindings } from "./fanout-execution.js";
 import { buildReceipt, composeDisclosure, INLINE_ROW_LIMIT, ROW_INDEPENDENT_CHECK_IDS } from "./publication.js";
 import { boundedResult } from "./sql-execution.js";
+import { dataFalsificationCoverage, dataFalsificationFindings, evaluateDataFalsification } from "./data-falsification.js";
 import { now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
 
@@ -55,6 +56,8 @@ export async function refreshPublication(deps: AnsweringDeps, input: RefreshPubl
     const failure = candidateCheckFailure(checkReport.findings);
     if (failure) throw new AnsweringError("CANDIDATE_CHECK_FAILED", `The refreshed result failed an online CandidateCheck: ${failure.message}`);
     const fanout = await evaluateFanout(deps, candidate.taskId, candidate.revisionId, candidate.queryHash, candidate.sql, context);
+    // Data falsification reads the new rows, so it runs again as on the original result.
+    const falsification = deps.semanticQualificationMode === "required" ? await evaluateDataFalsification(deps.sqlExecutor, candidate.sql, privateResult, context, deps.dataFalsification) : undefined;
     // Spec realization, entity identity and calendar coverage read the sealed fields, the SQL and the
     // Revision's data checks, none of which a refresh changes: carry the original's verdicts unchanged.
     const carried = (candidate.findings ?? []).filter((item) => item.checkId !== undefined && ROW_INDEPENDENT_CHECK_IDS.has(item.checkId) && !item.blocking);
@@ -69,8 +72,8 @@ export async function refreshPublication(deps: AnsweringDeps, input: RefreshPubl
       contentHash: privateResult.contentHash,
       sql: candidate.sql,
       queryHash: candidate.queryHash,
-      findings: [...checkReport.findings, ...carried, ...fanoutFindings(fanout)],
-      coverage: [...checkReport.coverage, ...carriedCoverage, fanoutCoverage(fanout)],
+      findings: [...checkReport.findings, ...carried, ...fanoutFindings(fanout), ...(falsification ? dataFalsificationFindings(falsification) : [])],
+      coverage: [...checkReport.coverage, ...carriedCoverage, fanoutCoverage(fanout), ...(falsification ? [dataFalsificationCoverage(falsification)] : [])],
       fanout,
       createdByInvocationId: context.invocationId,
       createdAt: now(),

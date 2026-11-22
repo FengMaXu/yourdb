@@ -8,7 +8,7 @@ import type {
   AgentToolResult,
   Context,
 } from "@earendil-works/pi-agent-core";
-import { AnsweringError, FIELD_FORMS, FIELD_PATHS } from "../answering/public.js";
+import { AnsweringError, FIELD_FORMS, FIELD_PATHS, witnessText, type WitnessRow } from "../answering/public.js";
 import { renderEntityIdentity } from "../answering/entity-identity.js";
 import { renderCalendarCoverage } from "../answering/calendar-coverage.js";
 import type {
@@ -181,6 +181,12 @@ function adviceText(path: string, advice: AdviceView): string {
   return `[ADVICE] path=${path} lean=${advice.lean.alternativeId} probability=${advice.lean.probability}\nThe advice is not evidence.${askFirst} Deciding against the lean requires adviceOverride with a reason and evidence that settles the field.`;
 }
 
+/** Witness rows as indented lines; a real differing row helps pick an alternative or ask the user with an example. */
+function witnessLines(witnesses: readonly WitnessRow[] | undefined, indent = ""): string {
+  if (!witnesses || witnesses.length === 0) return "";
+  return witnesses.map((witness) => `\n${indent}[WITNESS] ${witnessText(witness, (id) => id)}`).join("");
+}
+
 function queryText(view: Awaited<ReturnType<Answering["execute"]>>): string {
   const artifact = view.artifact.kind === "exploration"
     ? `[EXPLORATION_EVIDENCE] evidenceId=${view.artifact.evidenceId}\nCite this evidenceId in a field's evidenceIds; do not resubmit the observation body.`
@@ -188,7 +194,7 @@ function queryText(view: Awaited<ReturnType<Answering["execute"]>>): string {
   const preview = `${view.preview.columns.join(" | ")}\n${view.preview.rows.map((row) => row.map((cell) => cell === null || cell === undefined ? "NULL" : String(cell)).join(" | ")).join("\n")}${view.preview.truncated ? "\n(truncated preview)" : ""}`;
   const fanout = fanoutText(view);
   const probe = view.probe
-    ? `[PROBE] path=${view.probe.path} alternativeId=${view.probe.alternativeId} rows=${view.probe.rowCount} ${view.probe.state === "available" ? `output=${view.probe.output}` : `output unavailable: ${view.probe.reason}`}\nAlternatives of the same field with equal output ids produce the same answer.`
+    ? `[PROBE] path=${view.probe.path} alternativeId=${view.probe.alternativeId} rows=${view.probe.rowCount} ${view.probe.state === "available" ? `output=${view.probe.output}` : `output unavailable: ${view.probe.reason}`}\nAlternatives of the same field with equal output ids produce the same answer.${witnessLines(view.probe.witnesses)}`
     : "";
   const advice = view.probe?.advice ? adviceText(view.probe.path, view.probe.advice) : "";
   return `${artifact}${probe ? `\n${probe}` : ""}${advice ? `\n${advice}` : ""}${fanout ? `\n${fanout}` : ""}\n${preview}`;
@@ -250,7 +256,7 @@ export function fieldStateTable(view: AnswerRevisionView): string {
   }
   const open = new Set<string>(view.open);
   for (const field of view.fields) {
-    if (open.has(field.path)) lines.push(`- 待定 ${field.path}: ${alternativesText(field)}${field.outputs ? `; outputs=${field.outputs}` : ""}${field.advice ? `; ${adviceLabel(field.advice)}` : ""}`);
+    if (open.has(field.path)) lines.push(`- 待定 ${field.path}: ${alternativesText(field)}${field.outputs ? `; outputs=${field.outputs}` : ""}${field.advice ? `; ${adviceLabel(field.advice)}` : ""}${witnessLines(field.witnesses, "  ")}`);
     if (field.status === "equivalent") lines.push(`- 等价 ${field.path}: 各候选输出相同，无需决定`);
   }
   if (view.unverified.length > 0) lines.push(`- 未证实（发布时披露）: ${view.unverified.join(", ")}`);

@@ -38,11 +38,12 @@
     "measure:spec": "npm run build:runtime && node evaluations/spider2/spec-quality.mjs",
     "measure:phase5-ab": "node evaluations/spider2/phase5-ab.mjs",
     "validate:spec-labels": "node evaluations/spider2/spec-quality.mjs",
-    "test:eval:spider2": "node --test evaluations/spider2/lib.test.mjs evaluations/spider2/spec-quality.test.mjs evaluations/spider2/phase5-ab.test.mjs evaluations/spider2/phase6-evaluate.test.mjs evaluations/spider2/baseline-report.test.mjs evaluations/spider2/record.test.mjs evaluations/spider2/experiment.test.mjs evaluations/spider2/episode.test.mjs evaluations/spider2/evaluation.test.mjs evaluations/spider2/application-record.integration.test.mjs",
+    "test:eval:spider2": "node --test evaluations/spider2/lib.test.mjs evaluations/spider2/spec-quality.test.mjs evaluations/spider2/phase5-ab.test.mjs evaluations/spider2/phase6-evaluate.test.mjs evaluations/spider2/baseline-report.test.mjs evaluations/spider2/record.test.mjs evaluations/spider2/experiment.test.mjs evaluations/spider2/episode.test.mjs evaluations/spider2/evaluation.test.mjs evaluations/spider2/application-record.integration.test.mjs evaluations/spider2/falsification-calibration.test.mjs",
     "pretest": "npm run build",
     "test": "npm run test --workspaces --if-present",
     "pretypecheck": "npm run build",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "measure:falsification": "npm run build:runtime && node evaluations/spider2/falsification-calibration.mjs"
   },
   "devDependencies": {
     "pixelmatch": "^7.2.0",

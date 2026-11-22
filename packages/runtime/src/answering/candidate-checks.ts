@@ -2,14 +2,15 @@ import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import type { OutputValue } from "./fields.js";
 import type { PrivateResultObject } from "./result-store.js";
+import { evaluateResultDomain, RESULT_DOMAIN_CHECK_ID, RESULT_DOMAIN_RULE_VERSION } from "./result-domain.js";
 
 type CheckUnknownReason = "digest_unavailable" | "schema_unavailable" | "insufficient_evidence";
 
 type CheckOutcome =
   | { readonly kind: "confirmed"; readonly finding: Finding }
   | { readonly kind: "clear" }
-  | { readonly kind: "not_applicable" }
-  | { readonly kind: "unknown"; readonly reason: CheckUnknownReason };
+  | { readonly kind: "not_applicable"; readonly reason?: string }
+  | { readonly kind: "unknown"; readonly reason: CheckUnknownReason | string };
 
 export interface CandidateCheckInput {
   readonly fields: SpecFields;
@@ -19,6 +20,7 @@ export interface CandidateCheckInput {
 
 export interface CandidateCheck {
   readonly id: string;
+  readonly ruleVersion?: string;
   evaluate(input: CandidateCheckInput): CheckOutcome;
 }
 
@@ -77,7 +79,18 @@ const identityCheck: CandidateCheck = {
   },
 };
 
-const DEFAULT_CANDIDATE_CHECKS: readonly CandidateCheck[] = [completenessCheck, shapeCheck, identityCheck];
+/** Plan T4.2: values the declared measure cannot take; disclosed, never blocking (ADR-0003). */
+const domainCheck: CandidateCheck = {
+  id: RESULT_DOMAIN_CHECK_ID,
+  ruleVersion: RESULT_DOMAIN_RULE_VERSION,
+  evaluate(input) {
+    const outcome = evaluateResultDomain(input.fields, input.result);
+    if (outcome.kind === "finding") return { kind: "confirmed", finding: { ...finding("result_domain", outcome.message, false, RESULT_DOMAIN_CHECK_ID), paths: ["measure.formula"] } };
+    return outcome;
+  },
+};
+
+const DEFAULT_CANDIDATE_CHECKS: readonly CandidateCheck[] = [completenessCheck, shapeCheck, identityCheck, domainCheck];
 
 /**
  * Keep all check outcomes, not only blocking findings. `unknown` and
@@ -89,19 +102,20 @@ export function evaluateCandidateCheckReport(input: CandidateCheckInput, checks:
   const coverage: CheckCoverage[] = [];
   for (const check of checks) {
     const outcome = check.evaluate(input);
+    const version = check.ruleVersion ? { ruleVersion: check.ruleVersion } : {};
     switch (outcome.kind) {
       case "confirmed":
         findings.push(outcome.finding);
-        coverage.push({ checkId: check.id, outcome: "finding", reason: outcome.finding.message });
+        coverage.push({ checkId: check.id, ...version, outcome: "finding", reason: outcome.finding.message });
         break;
       case "clear":
-        coverage.push({ checkId: check.id, outcome: "clear" });
+        coverage.push({ checkId: check.id, ...version, outcome: "clear" });
         break;
       case "not_applicable":
-        coverage.push({ checkId: check.id, outcome: "not_applicable" });
+        coverage.push({ checkId: check.id, ...version, outcome: "not_applicable", ...(outcome.reason ? { reason: outcome.reason } : {}) });
         break;
       case "unknown":
-        coverage.push({ checkId: check.id, outcome: "unknown", reason: outcome.reason });
+        coverage.push({ checkId: check.id, ...version, outcome: "unknown", reason: outcome.reason });
         break;
     }
   }
