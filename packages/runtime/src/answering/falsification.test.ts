@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { diffProbeSamples, sampleProbeOutput, witnessText, PROBE_SAMPLE_MAX_ROWS, WITNESS_CELL_CHARS } from "./probe-diff.js";
 import { evaluateResultDomain } from "./result-domain.js";
+import { probeEvidence } from "./advice-execution.js";
+import { summarizeProbes } from "./probes.js";
 import { evaluateDataFalsification, dataFalsificationCoverage } from "./data-falsification.js";
 import { evaluateCandidateCheckReport } from "./candidate-checks.js";
 import { InMemoryAnswering } from "./service.js";
@@ -61,6 +63,21 @@ describe("T4.1 probe witness rows", () => {
     const witnesses = diffProbeSamples({ alternativeId: "a", sample }, other);
     expect(witnesses.length).toBeLessThanOrEqual(3);
     expect(witnesses.every((item) => item.kind !== "only_in" || item.partial)).toBe(true);
+  });
+
+  it("rebuilds the same probe evidence without witness rows for replay", () => {
+    const alternatives = [{ id: "a", value: "按下单时间" }, { id: "b", value: "按送达时间" }] as never;
+    const probes = [
+      { path: "population.timeField", alternativeId: "a", revisionId: "r", evidenceId: "e1", rowCount: 2, sample: sampleProbeOutput(["month", "n"], [["2018-01", 120], ["2018-02", 145]]), outcome: { state: "available", fingerprint: "f1" }, probedAt: "t" },
+      { path: "population.timeField", alternativeId: "b", revisionId: "r", evidenceId: "e2", rowCount: 2, sample: sampleProbeOutput(["month", "n"], [["2018-01", 98], ["2018-02", 145]]), outcome: { state: "available", fingerprint: "f2" }, probedAt: "t" },
+    ] as never;
+    const summary = summarizeProbes("population.timeField", alternatives, probes, [], undefined);
+    const field = { state: "open", alternatives } as never;
+    const withRows = probeEvidence(field, summary).content;
+    const withoutRows = probeEvidence(field, summary, { witnesses: false }).content;
+    expect(withRows).toContain("difference: same key, different values");
+    expect(withoutRows).not.toContain("difference:");
+    expect(withRows.startsWith(withoutRows)).toBe(true);
   });
 
   it("gives the comparison advisor the witness rows, not only row counts", async () => {

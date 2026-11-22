@@ -23,7 +23,12 @@ interface Pending {
 }
 
 /** Probe outputs the Runtime holds, stated so the advisor can see which alternatives actually differ. */
-function probeEvidence(field: OpenField, summary: ProbeSummary): HypothesisChoiceEvidence {
+/**
+ * Exported for offline replay (evaluations/spider2/jev-witness-replay.mjs):
+ * `witnesses: false` rebuilds the same evidence without the witness rows, so
+ * the two conditions differ only in them (plan T4.1).
+ */
+export function probeEvidence(field: OpenField, summary: ProbeSummary, options: { readonly witnesses?: boolean } = {}): HypothesisChoiceEvidence {
   const labels = new Map(field.alternatives.map((alternative, index) => [alternative.id as string, `alternative ${index + 1}`]));
   const label = (id: string) => labels.get(id) ?? id;
   const lines = summary.probes.map((probe) => probe.state === "available"
@@ -34,7 +39,7 @@ function probeEvidence(field: OpenField, summary: ProbeSummary): HypothesisChoic
   for (const [id, fingerprint] of summary.fingerprints) groups.set(fingerprint, [...(groups.get(fingerprint) ?? []), label(id)]);
   const same = [...groups.values()].filter((group) => group.length > 1).map((group) => `${group.join(" and ")} produce identical output`);
   // Concrete rows where the outputs differ, so the comparison can weigh what each reading returns, not only how much.
-  const witnesses = summary.witnesses.map((witness) => `difference: ${witnessText(witness, label)}`);
+  const witnesses = options.witnesses === false ? [] : summary.witnesses.map((witness) => `difference: ${witnessText(witness, label)}`);
   return { id: "probe_outputs", kind: "observation", authority: "observation", authorityRank: 5, sourceRef: "field_probes", content: [...lines, ...same, ...witnesses].join("\n") };
 }
 
