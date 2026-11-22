@@ -46,7 +46,7 @@ function answering(run: (sql: string, limit: number, options: { kind: "explorati
   });
 }
 
-const simpleSpec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const simpleSpec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 
 describe("Answering vertical slice", () => {
   it("keeps the delegated SQL preflight conservative without treating it as a security boundary", () => {
@@ -70,7 +70,7 @@ describe("Answering vertical slice", () => {
   it("blocks a final query while a field is still open", async () => {
     let calls = 0;
     const service = answering(async () => { calls += 1; return { columns: ["value"], rows: [[1]], truncated: false }; });
-    const first = await service.set({ requestMessageId: "message-1", requestId: "begin-2", fields: { ...simpleSpec, "measure.countGrain": { open: ["one row per order", "one row per order item"], reason: "orders repeat" } } }, context("begin-2"));
+    const first = await service.set({ requestMessageId: "message-1", requestId: "begin-2", fields: { ...simpleSpec, "measure.countGrain": { open: [{ grain: "entity", keyColumns: ["order_id"] }, { grain: "row", note: "one row per order item" }], reason: "orders repeat" } } }, context("begin-2"));
     await expect(service.execute({ kind: "result", taskId: first.taskId, revisionId: first.revisionId, sql: "select 1" }, context("result-blocked"))).rejects.toMatchObject({ code: "UNRESOLVED_ASSUMPTIONS", details: { open: ["measure.countGrain"] } });
     expect(calls).toBe(0);
   });

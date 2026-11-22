@@ -287,7 +287,7 @@ export type QueryArtifact =
 
 export interface Finding {
   readonly id: string;
-  readonly kind: "shape_conflict" | "result_incomplete" | "integrity_conflict" | "join_fanout" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification";
+  readonly kind: "shape_conflict" | "result_incomplete" | "integrity_conflict" | "join_fanout" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification" | "physical_candidates";
   readonly message: string;
   readonly blocking: boolean;
   readonly checkId?: string;
@@ -386,7 +386,7 @@ export interface UnverifiedField {
 
 export type DisclosureItemKind =
   | "assumed" | "decided" | "unadvised" | "undecided" | "deviation" | "parent_superseded"
-  | "join_fanout" | "join_fanout_unknown" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification";
+  | "join_fanout" | "join_fanout_unknown" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification" | "physical_candidates";
 
 /**
  * One disclosure, structured so a reader can show it beside the Spec field it concerns.

@@ -31,6 +31,7 @@ import { entityIdentityCoverage, entityIdentityFindings } from "./entity-identit
 import { calendarCoverageCoverage, calendarCoverageFindings } from "./calendar-coverage.js";
 import { recordDataChecks } from "./data-checks-execution.js";
 import { dataFalsificationCoverage, dataFalsificationFindings, evaluateDataFalsification } from "./data-falsification.js";
+import { evaluatePhysicalCandidates, physicalCandidatesCoverage, physicalCandidatesFindings } from "./schema-profile.js";
 import { asRecord, now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
 
@@ -154,7 +155,7 @@ async function sealAndReserve(deps: AnsweringDeps, input: ResultInput, taskId: T
     }
     const readyRevision: AnswerRevisionRecord = { ...revision, state: result.revision };
     tx.putRevision(readyRevision);
-    const realization = evaluateSpecRealization(readyRevision.fields, input.sql);
+    const realization = evaluateSpecRealization(readyRevision.fields, input.sql, deps.sqlExecutor.dialect);
     const unrealized = realization.findings.filter((item) => item.blocking);
     if (unrealized.length > 0) {
       // The SQL cannot implement the sealed fields, so it is not run: fix the SQL, or rewrite the field with a reason.
@@ -440,9 +441,11 @@ export async function executeResult(
   const fanout = await evaluateFanout(deps, taskId, revisionId, queryHash, input.sql.trim(), context);
   // Plan T4.3: bounded SQL-vs-data probes; disclosed, never blocking.
   const falsification = deps.semanticQualificationMode === "required" ? await evaluateDataFalsification(deps.sqlExecutor, input.sql, privateResult, context, deps.dataFalsification) : undefined;
+  // Plan T5.3: several same-kind columns behind an assumed field; read from the schema only.
+  const candidates = deps.semanticQualificationMode === "required" ? await evaluatePhysicalCandidates(sealed.fields, deps.schemaProfile, context) : undefined;
   // Entity identity and calendar coverage were read when the Revision committed; the sealed fields decide whether its findings still apply.
-  const combinedCoverage: readonly CheckCoverage[] = [...checkReport.coverage, realization.coverage, fanoutCoverage(fanout), entityIdentityCoverage(sealed.entityIdentity), calendarCoverageCoverage(sealed.calendarCoverage), ...(falsification ? [dataFalsificationCoverage(falsification)] : [])];
-  const combinedFindings = [...checkReport.findings, ...realization.findings, ...fanoutFindings(fanout), ...entityIdentityFindings(sealed.entityIdentity), ...calendarCoverageFindings(sealed.calendarCoverage), ...(falsification ? dataFalsificationFindings(falsification) : [])];
+  const combinedCoverage: readonly CheckCoverage[] = [...checkReport.coverage, realization.coverage, fanoutCoverage(fanout), entityIdentityCoverage(sealed.entityIdentity), calendarCoverageCoverage(sealed.calendarCoverage), ...(falsification ? [dataFalsificationCoverage(falsification)] : []), ...(candidates ? [physicalCandidatesCoverage(candidates)] : [])];
+  const combinedFindings = [...checkReport.findings, ...realization.findings, ...fanoutFindings(fanout), ...entityIdentityFindings(sealed.entityIdentity), ...calendarCoverageFindings(sealed.calendarCoverage), ...(falsification ? dataFalsificationFindings(falsification) : []), ...(candidates ? physicalCandidatesFindings(candidates) : [])];
 
   const baseCandidate: ResultCandidateRecord = {
     candidateId: makeInternalId("candidate") as unknown as ResultCandidateRecord["candidateId"],

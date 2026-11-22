@@ -71,9 +71,10 @@ type StoreState = {
 
 /**
  * Version of the persisted records. Version 2 holds Answer Spec fields
- * (ADR-0007); a snapshot of any other version is not read.
+ * (ADR-0007); version 3 makes measure.countGrain and population.eligibility
+ * structured (plan T5.4). A snapshot of any other version is not read.
  */
-export const ANSWERING_SNAPSHOT_VERSION = 2;
+export const ANSWERING_SNAPSHOT_VERSION = 3;
 
 export interface AnsweringStoreSnapshot {
   readonly version: typeof ANSWERING_SNAPSHOT_VERSION;
@@ -209,6 +210,7 @@ export class InMemoryAnsweringStore implements AnsweringStore {
 
   constructor(snapshot?: AnsweringStoreSnapshot, owned = false) {
     this.state = emptyState();
+    if (snapshot && snapshot.version !== ANSWERING_SNAPSHOT_VERSION) throw new Error(`ANSWERING_SNAPSHOT_VERSION_UNSUPPORTED: ${String(snapshot.version)}`);
     const copy = owned ? <T>(value: T): T => value : clone;
     if (snapshot) {
       for (const task of snapshot.tasks) this.state.tasks.set(task.taskId, copy(task));

@@ -159,16 +159,31 @@ export interface GroupingKeyValue {
 }
 
 /** A Report Task measure definition: the formula and the measure sub-fields a chart query inherits with it. */
+/** What one counted unit is: a stored row, an entity (by its key columns), or an event. */
+export interface CountGrainValue {
+  readonly grain: "row" | "entity" | "event";
+  /** The columns that identify one counted unit; for entity, the entity key. */
+  readonly keyColumns?: readonly string[];
+  readonly note?: string;
+}
+
+/** Whether members with no activity, and rows with a NULL key, belong to the population. */
+export interface EligibilityValue {
+  readonly zeroActivity: "include" | "exclude" | "n/a";
+  readonly nullKey: "include" | "exclude" | "n/a";
+  readonly note?: string;
+}
+
 export interface MeasureDefinitionValue {
   readonly formula: MeasureExpression;
-  readonly countGrain?: string;
+  readonly countGrain?: CountGrainValue;
   readonly denominator?: string;
   readonly window?: string;
 }
 
 export interface FieldValues {
   readonly "population.entity": EntityValue;
-  readonly "population.eligibility": string;
+  readonly "population.eligibility": EligibilityValue;
   readonly "population.conditions": readonly (string | ConditionValue)[];
   readonly "population.source": SourceValue;
   readonly "population.time": TimeValue;
@@ -176,7 +191,7 @@ export interface FieldValues {
   readonly "population.missing": string;
   readonly "population.joinMultiplicity": string;
   readonly "measure.formula": MeasureExpression;
-  readonly "measure.countGrain": string;
+  readonly "measure.countGrain": CountGrainValue;
   readonly "measure.denominator": string;
   readonly "measure.window": string;
   readonly grouping: readonly (string | GroupingKeyValue)[];
@@ -323,6 +338,28 @@ function orderByText(value: unknown): string | undefined {
   return `${column} ${direction}`;
 }
 
+export const COUNT_GRAIN_FORM = '{"grain": "row" | "entity" | "event", "keyColumns"?: ["<column>", ...], "note"?: "<sentence>"}';
+export const ELIGIBILITY_FORM = '{"zeroActivity": "include" | "exclude" | "n/a", "nullKey": "include" | "exclude" | "n/a", "note"?: "<sentence>"}';
+
+/** measure.countGrain is structured (plan T5.4); a free-text sentence is refused with the exact form. */
+function parseCountGrain(value: unknown, label = "measure.countGrain"): CountGrainValue {
+  const body = asRecord(value) ?? fail(`${label} is structured: write ${COUNT_GRAIN_FORM}${typeof value === "string" ? `, e.g. {"grain": "entity", "keyColumns": ["customer_id"], "note": ${JSON.stringify(value)}}` : ""}`);
+  onlyKeys(body, ["grain", "keyColumns", "note"], `${label} value`);
+  if (body.grain !== "row" && body.grain !== "entity" && body.grain !== "event") fail(`${label}.grain must be "row", "entity" or "event"; write ${COUNT_GRAIN_FORM}`);
+  const keyColumns = body.keyColumns === undefined ? undefined : textList(body.keyColumns, `${label}.keyColumns`);
+  const note = body.note === undefined ? undefined : trimmedText(body.note) ?? fail(`${label}.note must be a sentence`);
+  return { grain: body.grain, ...(keyColumns ? { keyColumns } : {}), ...(note ? { note } : {}) };
+}
+
+/** population.eligibility is structured (plan T5.4); a free-text sentence is refused with the exact form. */
+function parseEligibility(value: unknown): EligibilityValue {
+  const body = asRecord(value) ?? fail(`population.eligibility is structured: write ${ELIGIBILITY_FORM}${typeof value === "string" ? `, e.g. {"zeroActivity": "exclude", "nullKey": "n/a", "note": ${JSON.stringify(value)}}` : ""}`);
+  onlyKeys(body, ["zeroActivity", "nullKey", "note"], "population.eligibility value");
+  const choice = (key: "zeroActivity" | "nullKey") => body[key] === "include" || body[key] === "exclude" || body[key] === "n/a" ? body[key] : fail(`population.eligibility.${key} must be "include", "exclude" or "n/a"; write ${ELIGIBILITY_FORM}`);
+  const note = body.note === undefined ? undefined : trimmedText(body.note) ?? fail("population.eligibility.note must be a sentence");
+  return { zeroActivity: choice("zeroActivity"), nullKey: choice("nullKey"), ...(note ? { note } : {}) };
+}
+
 function parseTies(value: unknown): TiesValue {
   if (value === "strict" || value === "include_ties") return value;
   return fail(`selection.ties value must be "strict" (exactly n rows) or "include_ties" (keep every row tied at the cut)`);
@@ -420,8 +457,8 @@ function parseFormula(value: unknown, label: string): MeasureExpression {
 function parseMeasureDefinition(value: unknown, path: string): MeasureDefinitionValue {
   const body = asRecord(value) ?? fail(`${path} value must be {formula, countGrain?, denominator?, window?}`);
   onlyKeys(body, ["formula", "countGrain", "denominator", "window"], `${path} value`);
-  const optional = (key: "countGrain" | "denominator" | "window") => body[key] === undefined ? {} : { [key]: trimmedText(body[key]) ?? fail(`${path}.${key} must be a sentence`) };
-  return { formula: parseFormula(body.formula, `${path}.formula`), ...optional("countGrain"), ...optional("denominator"), ...optional("window") };
+  const optional = (key: "denominator" | "window") => body[key] === undefined ? {} : { [key]: trimmedText(body[key]) ?? fail(`${path}.${key} must be a sentence`) };
+  return { formula: parseFormula(body.formula, `${path}.formula`), ...(body.countGrain === undefined ? {} : { countGrain: parseCountGrain(body.countGrain, `${path}.countGrain`) }), ...optional("denominator"), ...optional("window") };
 }
 
 /** Parses an untrusted field value into its canonical form, naming the part to fix. */
@@ -429,6 +466,8 @@ export function parseFieldValue(path: SpecPath, value: unknown): FieldValue {
   if (MEASURE_DEFINITION.test(path)) return parseMeasureDefinition(value, path);
   switch (path as FieldPath) {
     case "population.entity": return parseEntity(value);
+    case "population.eligibility": return parseEligibility(value);
+    case "measure.countGrain": return parseCountGrain(value);
     case "population.conditions": return qualifiedList(value, "population.conditions value", ["condition", "expression"], "stage", (condition, stage): ConditionValue => ({ condition, ...(stage ? { stage } : {}) }));
     case "population.source": return parseSource(value);
     case "population.time": return parseTime(value);

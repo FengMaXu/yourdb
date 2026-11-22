@@ -1,9 +1,9 @@
-import { clone, contentHash, type AnswerRevisionView, type BusinessContext, type RevisionId, type TaskId } from "./model.js";
+import { clone, type AnswerRevisionView, type BusinessContext, type RevisionId, type TaskId } from "./model.js";
 import { assertTaskAccess } from "./answering-store.js";
 import type { AnsweringDeps } from "./deps.js";
 import {
   ENTITY_IDENTITY_MAX_ROWS,
-  ENTITY_IDENTITY_TIMEOUT_MS,
+  
   evaluateEntityIdentity,
   identityQueries,
   identityTargets,
@@ -27,51 +27,21 @@ function sameTarget(observation: TableIdentityObservation, target: IdentityTarge
   return observation.table === target.table && JSON.stringify(observation.keyColumns ?? []) === JSON.stringify(target.keyColumns ?? []);
 }
 
-async function count(deps: AnsweringDeps, sql: string, context: BusinessContext): Promise<number> {
-  // Bounded on its own, so a slow count of a large table cannot hold the set call; the caller's abort still wins.
-  const timeout = AbortSignal.timeout(deps.entityIdentity?.timeoutMs ?? ENTITY_IDENTITY_TIMEOUT_MS);
-  const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
-  const result = await deps.sqlExecutor.run(sql, 1, {
-    kind: "exploration",
-    idempotencyKey: `entity-identity:${contentHash({ sql })}`,
-    signal,
-    ...(context.deadlineAt ? { deadlineAt: context.deadlineAt } : {}),
-    ...(context.queryScope ? { scope: context.queryScope } : {}),
-  });
-  const value = Number(result.rows[0]?.[0]);
-  if (!Number.isFinite(value)) throw new Error("count was not a number");
-  return value;
-}
-
 async function observe(deps: AnsweringDeps, target: IdentityTarget, context: BusinessContext): Promise<TableIdentityObservation> {
   const queries = identityQueries(target, deps.sqlExecutor.dialect);
   const maxRows = deps.entityIdentity?.maxRows ?? ENTITY_IDENTITY_MAX_ROWS;
   const base = { table: target.table, ...(target.keyColumns ? { keyColumns: target.keyColumns } : {}) };
-  let rows: number;
-  try {
-    rows = await count(deps, queries.rows, context);
-  } catch (error) {
-    if (context.signal?.aborted) throw error;
-    return { ...base, limitation: "the table could not be counted" };
-  }
+  // Read through the session's Schema Profile: a count another task already read is not read again.
+  const rows = await deps.schemaProfile.count(queries.rows, context, "entity-identity");
+  if (rows === undefined) return { ...base, limitation: "the table could not be counted" };
   if (rows > maxRows) return { ...base, rows, limitation: `more than ${maxRows} rows; distinct counts skipped` };
   let distinctRows: number | undefined;
   let distinctKeys: number | undefined;
   const limitations: string[] = [];
-  try {
-    distinctRows = await count(deps, queries.distinctRows, context);
-  } catch (error) {
-    if (context.signal?.aborted) throw error;
-    limitations.push("distinct rows could not be counted");
-  }
-  if (queries.distinctKeys) {
-    try {
-      distinctKeys = await count(deps, queries.distinctKeys, context);
-    } catch (error) {
-      if (context.signal?.aborted) throw error;
-      // A key the table does not have is normal for a multi-table source.
-    }
-  }
+  distinctRows = await deps.schemaProfile.count(queries.distinctRows, context, "entity-identity");
+  if (distinctRows === undefined) limitations.push("distinct rows could not be counted");
+  // A key the table does not have is normal for a multi-table source; it is left out.
+  if (queries.distinctKeys) distinctKeys = await deps.schemaProfile.count(queries.distinctKeys, context, "entity-identity");
   return {
     ...base,
     rows,
@@ -84,20 +54,17 @@ async function observe(deps: AnsweringDeps, target: IdentityTarget, context: Bus
 async function readCalendar(deps: AnsweringDeps, target: CalendarTarget, context: BusinessContext): Promise<CalendarCoverageReport> {
   const sql = calendarQuery(target, deps.sqlExecutor.dialect);
   if (!sql) return { ruleVersion: CALENDAR_COVERAGE_RULE_VERSION, status: "unknown", target, limitations: [`dialect ${deps.sqlExecutor.dialect} is not read`] };
-  try {
-    const result = await deps.sqlExecutor.run(sql, CALENDAR_COVERAGE_MAX_PERIODS * 31, {
-      kind: "exploration",
-      idempotencyKey: `calendar-coverage:${contentHash({ sql })}`,
-      ...(context.signal ? { signal: context.signal } : {}),
-      ...(context.deadlineAt ? { deadlineAt: context.deadlineAt } : {}),
-      ...(context.queryScope ? { scope: context.queryScope } : {}),
-    });
-    if (result.truncated) return { ruleVersion: CALENDAR_COVERAGE_RULE_VERSION, status: "unknown", target, limitations: ["the period list was truncated"] };
-    return evaluateCalendarCoverage(target, result.rows.map((row) => row[0]));
-  } catch (error) {
-    if (context.signal?.aborted) throw error;
-    return { ruleVersion: CALENDAR_COVERAGE_RULE_VERSION, status: "unknown", target, limitations: [`${target.table}.${target.column} could not be read`] };
+  // The profile records how the column is stored; a column that is not ISO text is not read by prefix.
+  const profile = await deps.schemaProfile.profile(target.table, context);
+  const stored = profile.timeColumns.find((item) => item.column.toLowerCase() === target.column.toLowerCase());
+  if (stored && (stored.format === "integer" || stored.format === "other")) {
+    return { ruleVersion: CALENDAR_COVERAGE_RULE_VERSION, status: "unknown", target, limitations: [`${target.table}.${target.column} is stored as ${stored.format === "integer" ? "integers" : "non-ISO text"} (e.g. ${stored.min ?? "?"}), not ISO dates`] };
   }
+  const limit = CALENDAR_COVERAGE_MAX_PERIODS * 31;
+  const rows = await deps.schemaProfile.read(sql, limit + 1, context, "calendar-coverage");
+  if (!rows) return { ruleVersion: CALENDAR_COVERAGE_RULE_VERSION, status: "unknown", target, limitations: [`${target.table}.${target.column} could not be read`] };
+  if (rows.length > limit) return { ruleVersion: CALENDAR_COVERAGE_RULE_VERSION, status: "unknown", target, limitations: ["the period list was truncated"] };
+  return evaluateCalendarCoverage(target, rows.map((row) => row[0]));
 }
 
 function sameCalendar(left: CalendarTarget | undefined, right: CalendarTarget): boolean {

@@ -14,7 +14,7 @@ import { MemoryChildSessionRepository } from "./child-session-repo.js";
 import { NativeDelegation } from "./delegation.js";
 import { PiSessionDelegationLedger } from "./ledger.js";
 
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 
 describe("main AgentHarness to child AgentHarness", () => {
   it("binds the actual prompt entry to Answering before the main agent delegates", async () => {

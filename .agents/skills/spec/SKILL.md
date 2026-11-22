@@ -25,7 +25,7 @@ requires-tools:
 | 路径 | 内容 | 值 |
 | --- | --- | --- |
 | `population.entity` | 统计实体与业务键（按名称还是按键、版本是否合并） | 文本，或 `{ name, keyColumns? }` |
-| `population.eligibility` | 零值、空值实体是否纳入（例如没有订单的客户算不算） | 一句话 |
+| `population.eligibility` | 零值、空值实体是否纳入（例如没有订单的客户算不算） | `{ zeroActivity: "include" | "exclude" | "n/a", nullKey: "include" | "exclude" | "n/a", note? }` |
 | `population.conditions` | 资格条件及其作用阶段（WHERE 还是 HAVING） | 列表，每项为文本或 `{ condition, stage? }` |
 | `population.source` | 数据来源 | `{ tables: [...], note? }` |
 | `population.time` | 时间范围、端点、参考日、日历与时区 | 文本，或 `{ expression, boundary? }`，`boundary` 取 `inclusive`、`exclusive`、`mixed` |
@@ -33,7 +33,7 @@ requires-tools:
 | `population.missing` | 缺期是否补零，相邻观测还是相邻日历期 | 一句话 |
 | `population.joinMultiplicity` | 连接后会不会重复计数，要不要去重 | 一句话 |
 | `measure.formula` | 逐层的运算表达式（§3） | 表达式 |
-| `measure.countGrain` | 按行、按实体还是按事件计数 | 一句话 |
+| `measure.countGrain` | 按行、按实体还是按事件计数 | `{ grain: "row" | "entity" | "event", keyColumns?: [列], note? }`；按实体计数时 `keyColumns` 写实体键，Runtime 据此核对 SQL 是否 `COUNT(DISTINCT 键)` |
 | `measure.denominator` | 分母的总体；分母为 0 怎么处理 | 一句话 |
 | `measure.window` | 滚动或累计窗口从哪里开始、多长 | 一句话 |
 | `grouping` | 分组键与日历粒度 | 列表，每项为文本或 `{ key, grain? }` |

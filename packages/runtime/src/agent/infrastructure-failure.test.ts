@@ -18,7 +18,7 @@ import { infrastructureFailureOf } from "./infrastructure-failure.js";
 
 const UNAVAILABLE = "DATABASE_UNAVAILABLE: database process unavailable after 3 reconnects (Connection closed)";
 const unavailable = () => Object.assign(new Error(UNAVAILABLE), { code: "DATABASE_UNAVAILABLE" });
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 
 describe("infrastructure failure", () => {
   it("extracts the database failure line from tool result text", () => {

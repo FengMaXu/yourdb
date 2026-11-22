@@ -10,7 +10,7 @@ import type { BusinessContext } from "../answering/model.js";
 import { createQueryTaskDelegationResolver, type DelegationSqlExplorer } from "./delegation.js";
 import { KnowledgeIndex } from "../knowledge.js";
 
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 const business = (invocationId: string, principal = "user-1"): BusinessContext => ({ principal: { id: principal }, sessionId: "session-1", lane: "main", operationId: "parent-op", invocationId });
 const childContext = { childSessionId: "child-1", runId: "run-1", role: "explorer" as const };
 const childInvocation = (id: string) => ({ invocationId: id, operationId: "child-op", turnId: "child-turn", getMemo: async () => undefined, setMemo: async () => undefined });

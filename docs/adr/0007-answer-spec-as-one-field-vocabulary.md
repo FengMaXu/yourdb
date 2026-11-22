@@ -394,3 +394,14 @@ output                    行粒度、行数、列、每列的单位与精度（
 ## 修订（2026-10-15）：封存前补读日历覆盖
 
 日历覆盖在 `set_answer_spec` 的 Revision 提交之后、另一事务中写入。同一轮并行发出的结果查询若先到达该 Revision，封存时还没有覆盖结果，`population.missing` 不会成为必须声明的字段。现在结果查询在封存前检查该 Revision 是否已有实体身份与日历覆盖读数，没有就先读取并记录（同目标沿用父 Revision 的读数，不重复查询），再判断必须声明的字段。`set` 仍在提交后读取，让模型在写字段时就看到缺期。
+
+## 修订（2026-11-21）：Schema Profile 落地；countGrain 与 eligibility 结构化
+
+第 4 步的 Schema Profile 由 Runtime 持有（`answering/schema-profile.ts`），每个 Answering 实例（一个会话）一份：数据检查的每次读取按 SQL 记忆，同一会话内不同 Query Task 不再重复扫表；每张来源表只采集一次表行数、主键/唯一键实际基数、时间列格式与 min/max、低基数文本列取值。超过 200,000 行的表只读行数，并如实记为 limitation。这些读取不计入任务预算，也不是模型工具。来源表有多个同类候选列（多个日期列、多个金额列），而模型直接假定其中一列、没有建 `open` 时，结果附带 `physical_candidates` 提醒，只披露不阻断。
+
+`measure.countGrain` 与 `population.eligibility` 直接改为结构化值，不保留自由文本写法：
+
+- `measure.countGrain`：`{ grain: "row" | "entity" | "event", keyColumns?: string[], note?: string }`；
+- `population.eligibility`：`{ zeroActivity: "include" | "exclude" | "n/a", nullKey: "include" | "exclude" | "n/a", note?: string }`。
+
+一句话的旧写法被 `parseFieldValue` 拒绝，报错中给出精确结构。`ANSWERING_SNAPSHOT_VERSION` 升到 3，Pi Session 的记录按版本放在各自的命名空间（`data-agent.answering.v3.*`），旧版本记录不会被读入。

@@ -9,7 +9,7 @@ import { buildEvaluationReport } from "./evaluation.mjs";
 import { AttemptRecorder, publicationFromReceipt } from "./record.mjs";
 
 const profile = { provider: "openai", model: "test-model", apiKey: "test" };
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 const invocation = (id) => ({ invocationId: id, operationId: "operation-1", turnId: "turn-1", getMemo: async () => undefined, setMemo: async () => undefined });
 
  test("production Application receipt crosses EpisodeRecord into the report without rerunning SQL", async () => {
