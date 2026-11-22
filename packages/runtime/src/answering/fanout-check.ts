@@ -1,3 +1,5 @@
+import { maskSql } from "./sql-lex.js";
+import { digestSql } from "./sql-digest.js";
 import type { FanoutReport, FanoutTargetReport, FanoutProbeObservation } from "./model.js";
 
 export const FANOUT_RULE_VERSION = "answering-fanout-v1" as const;
@@ -77,46 +79,9 @@ export interface FanoutCheckInput {
   readonly maxInputRows?: number;
 }
 
+/** Literals and comments blanked, identifiers kept; offsets match the SQL (shared lexer, sql-lex.ts). */
 function maskLiteralsAndComments(sql: string): string {
-  const chars = [...sql];
-  let index = 0;
-  while (index < chars.length) {
-    if (chars[index] === "'") {
-      chars[index++] = " ";
-      while (index < chars.length) {
-        if (chars[index] === "'" && chars[index + 1] === "'") {
-          chars[index++] = " ";
-          chars[index++] = " ";
-          continue;
-        }
-        const closing = chars[index] === "'";
-        chars[index++] = " ";
-        if (closing) break;
-      }
-      continue;
-    }
-    if (chars[index] === "-" && chars[index + 1] === "-") {
-      chars[index++] = " ";
-      chars[index++] = " ";
-      while (index < chars.length && chars[index] !== "\n") chars[index++] = " ";
-      continue;
-    }
-    if (chars[index] === "/" && chars[index + 1] === "*") {
-      chars[index++] = " ";
-      chars[index++] = " ";
-      while (index < chars.length) {
-        if (chars[index] === "*" && chars[index + 1] === "/") {
-          chars[index++] = " ";
-          chars[index++] = " ";
-          break;
-        }
-        chars[index++] = " ";
-      }
-      continue;
-    }
-    index += 1;
-  }
-  return chars.join("");
+  return maskSql(sql, { identifiers: false });
 }
 
 function depthByOffset(maskedSql: string): Int32Array {
@@ -244,6 +209,11 @@ function targetIdentity(depth: number, relation: ParsedRelation, sourceKey: stri
  * COUNT(key) or simple SUM(column). It never claims a derived CTE is safe.
  */
 export function planFanoutTargets(sql: string, schema?: FanoutSchema): FanoutPlan {
+  // When the parser reads the statement and no block aggregates over a join, nothing can fan out.
+  const digest = digestSql(sql);
+  if (digest.status === "parsed" && !digest.blocks.some((block) => block.relations.some((relation) => relation.join) && block.aggregates.some((item) => !item.windowed && (item.fn === "count" || item.fn === "sum")))) {
+    return { targets: [], potential: false, unsupportedReasons: [] };
+  }
   const masked = maskLiteralsAndComments(sql);
   const depths = depthByOffset(masked);
   const selectOffsets = keywordOffsets(masked, /\bSELECT\b/gi);

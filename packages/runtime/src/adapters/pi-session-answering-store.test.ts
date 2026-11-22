@@ -33,7 +33,7 @@ async function answeringWrites(root: string): Promise<string[]> {
         for (const line of (await readFile(path, "utf8")).split("\n").filter(Boolean)) {
           const parsed = JSON.parse(line) as unknown;
           for (const op of (Array.isArray(parsed) ? parsed : [parsed]) as Array<{ kind?: string; op?: string; namespace?: string; key?: string }>) {
-            if (op.kind === "value" && op.namespace === "data-agent.answering.records") writes.push(`${op.op} ${op.namespace}/${op.key}`);
+            if (op.kind === "value" && op.namespace === "data-agent.answering.v3.records") writes.push(`${op.op} ${op.namespace}/${op.key}`);
           }
         }
       }
@@ -49,10 +49,10 @@ describe("PiSessionAnsweringStore", () => {
       const store = new PiSessionAnsweringStore(session);
       await store.transact((state) => { state.putTask(task("t1", 1)); state.putTask(task("t2", 1)); }, context);
       const first = await answeringWrites(root);
-      expect(first).toEqual(["set data-agent.answering.records/task/t1", "set data-agent.answering.records/task/t2"]);
+      expect(first).toEqual(["set data-agent.answering.v3.records/task/t1", "set data-agent.answering.v3.records/task/t2"]);
 
       await store.transact((state) => { state.putTask(task("t2", 2)); }, context);
-      expect((await answeringWrites(root)).slice(first.length)).toEqual(["set data-agent.answering.records/task/t2"]);
+      expect((await answeringWrites(root)).slice(first.length)).toEqual(["set data-agent.answering.v3.records/task/t2"]);
 
       // Nothing changed, nothing written.
       const count = (await answeringWrites(root)).length;

@@ -112,6 +112,8 @@ for (const file of productionFiles) {
 
   if (isAnswering && /\bas any\b/.test(text)) fail(`${rel}: Answering production contains as any`);
   // The domain names next steps with action markers; transports render routes and tool names (plan T3.2).
+  // The SQL parser and its AST types stay behind the Query Digest (plan T5.1).
+  if (rel !== "packages/runtime/src/answering/sql-digest.ts" && /node-sql-parser/.test(text)) fail(`${rel}: references node-sql-parser outside answering/sql-digest.ts`);
   if (isAnswering && /\/api\/runtime\//.test(text)) fail(`${rel}: Answering production hard-codes a transport route`);
   if (isAnswering && /\b(?:set_answer_spec|query_database|ask_user_clarification|publish_query_result|export_query|inspect_answer|begin_query_task)\b/.test(text)) fail(`${rel}: Answering production hard-codes a model tool name`);
   if (isElectronOrServer && /(?:@data-agent\/runtime\/protocol|packages\/runtime\/dist\/protocol|packages\/runtime\/src\/protocol)/.test(text.replaceAll("\\", "/"))) {

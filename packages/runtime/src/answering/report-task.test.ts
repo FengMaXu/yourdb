@@ -34,7 +34,7 @@ const shared = {
 
 const own = {
   "measure.formula": { op: "count", of: "orders" },
-  "measure.countGrain": "one row per order",
+  "measure.countGrain": { grain: "row", note: "one row per order" },
   grouping: "n/a",
   selection: "n/a",
   output: { rowMode: "scalar", rowCount: 1 },
@@ -171,7 +171,7 @@ describe("Report Task", () => {
     const answering = service();
     const parent = await report(answering, {
       ...shared,
-      "measures.negative_rate": { formula: { op: "ratio", numerator: "1-2 星订单数", denominator: "有评价订单数" }, denominator: "有评价的订单", countGrain: "按订单" },
+      "measures.negative_rate": { formula: { op: "ratio", numerator: "1-2 星订单数", denominator: "有评价订单数" }, denominator: "有评价的订单", countGrain: { grain: "row", note: "按订单" } },
       "measures.late_rate": { formula: { op: "ratio", numerator: "超期送达订单", denominator: "已送达订单" } },
     });
     const { "measure.formula": _formula, "measure.countGrain": _grain, ...rest } = own;

@@ -5,7 +5,7 @@ import { parseFieldValue, requiredPaths } from "./fields.js";
 
 const context = (invocationId: string): BusinessContext => ({ principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "operation-1", invocationId });
 const REQUEST = "How many delivered orders were counted in each delivery month of 2017?";
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 const rationale = "Delivered orders are counted in the month the delivery happened";
 
 function service(options: { populationDecisions?: "require_evidence" | "allow_disclosed"; fieldProbes?: boolean } = {}) {
@@ -132,7 +132,7 @@ describe("bases and layers (ADR-0006, ADR-0007)", () => {
       requestId: "observed",
       fields: {
         "population.joinMultiplicity": { value: "order_items repeat each order; count distinct order_id", evidenceIds: [observation] },
-        "population.eligibility": { value: "orders without items are excluded", evidenceIds: [observation], reason: "observed" },
+        "population.eligibility": { value: { zeroActivity: "exclude", nullKey: "n/a", note: "orders without items are excluded" }, evidenceIds: [observation], reason: "observed" },
       },
     }, context("observed"));
     expect(revised.fields.find((item) => item.path === "population.joinMultiplicity")).toMatchObject({ status: "evidence" });
@@ -142,7 +142,7 @@ describe("bases and layers (ADR-0006, ADR-0007)", () => {
 
   it("records an eligibility assumption as disclosed when no clarification path exists", async () => {
     const answering = service({ populationDecisions: "allow_disclosed" });
-    const view = await begin(answering, { "population.eligibility": { value: "customers with no orders count as zero", basis: "assumed", rationale: "every customer is listed" } });
+    const view = await begin(answering, { "population.eligibility": { value: { zeroActivity: "exclude", nullKey: "n/a", note: "customers with no orders count as zero" }, basis: "assumed", rationale: "every customer is listed" } });
     expect(view.fields.find((item) => item.path === "population.eligibility")).toMatchObject({ status: "assumed", rationale: "every customer is listed" });
     expect(view.unverified).toContain("population.eligibility");
   });

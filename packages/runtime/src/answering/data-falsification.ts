@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { BusinessContext, CheckCoverage, Finding } from "./model.js";
 import { contentHash } from "./model.js";
 import { maskSql } from "./sql-lex.js";
+import { degeneratedOuterJoins, digestSql, type QueryDigest } from "./sql-digest.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 
 /**
@@ -151,6 +152,15 @@ function leftJoinFindings(text: Text): { readonly applied: boolean; readonly fin
       break;
     }
   }
+  return { applied, findings };
+}
+
+function digestJoinFindings(digest: QueryDigest): { readonly applied: boolean; readonly findings: DataFalsificationFinding[] } {
+  const applied = digest.blocks.some((block) => block.relations.some((relation) => relation.join === "left"));
+  const findings = degeneratedOuterJoins(digest).map((item): DataFalsificationFinding => ({
+    rule: "left_join_degenerated",
+    message: `A WHERE predicate filters ${item.alias}.${item.column}, the right side of a LEFT JOIN of ${item.table}; rows ${item.alias} does not match have NULL there and are removed, so the LEFT JOIN acts as an INNER JOIN. Move the condition into the ON clause if unmatched rows should stay, or write INNER JOIN if they should not`,
+  }));
   return { applied, findings };
 }
 
@@ -309,7 +319,9 @@ export async function evaluateDataFalsification(
   const rels = relations(text);
   const limitations: string[] = [];
   const probes = probeRunner(executor, context, options);
-  const join = leftJoinFindings(text);
+  const digest = digestSql(sql, executor.dialect);
+  // The parser reads join and filter structure exactly; the text rule is the fallback when it cannot.
+  const join = digest.status === "parsed" ? digestJoinFindings(digest) : leftJoinFindings(text);
   const dates = await dateBoundFindings(text, rels, probes, limitations);
   const literals = looksEmpty(result.rows) ? await literalFindings(text, rels, probes, limitations) : { applied: false, findings: [] };
   const findings = [...join.findings, ...dates.findings, ...literals.findings];

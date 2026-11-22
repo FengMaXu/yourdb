@@ -61,7 +61,7 @@ describe("entity identity in Answering", () => {
     "population.source": { tables: ["mst_users"] },
     "population.time": "n/a",
     "measure.formula": { op: "count", of: "user_id" },
-    "measure.countGrain": "one row per user",
+    "measure.countGrain": { grain: "row", note: "one row per user" },
     grouping: "n/a",
     selection: "n/a",
     output: { rowMode: "scalar", rowCount: 1 },
@@ -88,7 +88,7 @@ describe("entity identity in Answering", () => {
     expect(view.entityIdentity).toMatchObject({ status: "finding", findings: [{ code: "key_not_unique" }] });
     expect(queries).toHaveLength(3);
 
-    const revised = await answering.set({ taskId: view.taskId, requestId: "revise", fields: { "measure.countGrain": { value: "one row per user record", reason: "clarify" } } }, business("revise"));
+    const revised = await answering.set({ taskId: view.taskId, requestId: "revise", fields: { "measure.countGrain": { value: { grain: "row", note: "one row per user record" }, reason: "clarify" } } }, business("revise"));
     expect(revised.entityIdentity).toMatchObject({ status: "finding" });
     expect(queries).toHaveLength(3);
 

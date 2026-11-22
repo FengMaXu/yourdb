@@ -21,6 +21,7 @@ import { CALENDAR_COVERAGE_CHECK_ID, calendarCoverageDisclosure } from "./calend
 import { candidateLifecycle, markCandidateCorrupt } from "./result-execution.js";
 import { realizationDisclosure, SPEC_REALIZATION_CHECK_ID } from "./realization-check.js";
 import { buildPhysicalProfile } from "./physical-profile.js";
+import { PHYSICAL_CANDIDATES_CHECK_ID } from "./schema-profile.js";
 import type { PrivateResultObject } from "./result-store.js";
 import { now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
@@ -35,7 +36,7 @@ export function defaultPublicRef(receiptId: string, _sessionId: string): string 
 }
 
 /** The checks a Receipt carries from the Revision's data checks and the SQL, not from the rows. */
-export const ROW_INDEPENDENT_CHECK_IDS: ReadonlySet<string> = new Set([SPEC_REALIZATION_CHECK_ID, ENTITY_IDENTITY_CHECK_ID, CALENDAR_COVERAGE_CHECK_ID]);
+export const ROW_INDEPENDENT_CHECK_IDS: ReadonlySet<string> = new Set([SPEC_REALIZATION_CHECK_ID, ENTITY_IDENTITY_CHECK_ID, CALENDAR_COVERAGE_CHECK_ID, PHYSICAL_CANDIDATES_CHECK_ID]);
 
 export interface ReceiptParts {
   readonly candidate: ResultCandidateRecord;
@@ -95,6 +96,7 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
   const calendar = calendarCoverageDisclosure(candidate.findings);
   const domain = (candidate.findings ?? []).filter((item) => item.kind === "result_domain");
   const falsified = (candidate.findings ?? []).filter((item) => item.kind === "data_falsification");
+  const physical = (candidate.findings ?? []).filter((item) => item.kind === "physical_candidates");
   const unadvised = (Object.entries(revision.fields) as [string, FieldRecord][])
     .filter(([, field]) => field.state === "decided" && field.adviceUnavailable)
     .map(([path]) => path);
@@ -123,8 +125,9 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
       .map((item) => ({ kind: "calendar_coverage" as const, paths: [...(item.paths ?? ["population.time"])], detail: item.message, ...(item.periods ? { periods: item.periods } : {}) })),
     ...domain.map((item) => ({ kind: "result_domain" as const, paths: [...(item.paths ?? ["measure.formula"])], detail: item.message })),
     ...falsified.map((item) => ({ kind: "data_falsification" as const, paths: [...(item.paths ?? [])], detail: item.message })),
+    ...physical.map((item) => ({ kind: "physical_candidates" as const, paths: [...(item.paths ?? [])], detail: item.message })),
   ];
-  if (unverified.length === 0 && unadvised.length === 0 && undecided.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar && domain.length === 0 && falsified.length === 0) return undefined;
+  if (unverified.length === 0 && unadvised.length === 0 && undecided.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar && domain.length === 0 && falsified.length === 0 && physical.length === 0) return undefined;
   return {
     required: true,
     unverifiedFields: unverified,
@@ -141,6 +144,7 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
       ...(calendar ? [calendar] : []),
       ...(domain.length > 0 ? [`结果数值与度量口径的取值范围可能不符（规则检查，未经人工确认）：${domain.map((item) => item.message).join("；")}。`] : []),
       ...(falsified.length > 0 ? [`SQL 与数据核对发现可能的偏差（规则检查，未经人工确认）：${falsified.map((item) => item.message).join("；")}。`] : []),
+      ...(physical.length > 0 ? [`来源表有多个同类候选列，所用的一列为假定（未经确认）：${physical.map((item) => item.message).join("；")}。`] : []),
     ].join(" "),
     items,
     ...(fanoutDisclosure && candidate.fanout ? { fanoutStatus: candidate.fanout.status } : {}),

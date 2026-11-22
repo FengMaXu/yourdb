@@ -27,7 +27,7 @@ Answer Spec 按计算顺序分为五段，每个歧义写在它实际发生的�
 | 段 | 字段 | 必须回答的问题 |
 |---|---|---|
 | 统计总体 | `population.entity` | 统计什么实体或事件？稳定键是什么？源表一行与业务实体有何关系？同名对象按名称还是按键合并？ |
-| | `population.eligibility` | 零值、空值、从未发生活动的实体算不算在内？ |
+| | `population.eligibility` | 零值、空值、从未发生活动的实体算不算在内？（结构化：`zeroActivity`、`nullKey` 各取 include / exclude / n/a） |
 | | `population.conditions` | 各条件来自哪里？作用于资格总体、事实、指标有效值、聚合结果、窗口后还是展示层？ |
 | | `population.source` | 读哪些表或视图？明细表还是汇总表？ |
 | | `population.time` | 观察期、基准期、参考日、端点、日历与时区是什么？ |
@@ -35,7 +35,7 @@ Answer Spec 按计算顺序分为五段，每个歧义写在它实际发生的�
 | | `population.missing` | 缺期补零吗？“上一期”是相邻观测还是相邻日历期？ |
 | | `population.joinMultiplicity` | 连接后一行业务对象会不会变成多行？要不要先去重或预聚合？ |
 | 度量 | `measure.formula` | 逐层的运算是什么？每层在什么粒度上计算？分子分母、差值方向、量纲是什么？ |
-| | `measure.countGrain` | 数行、数实体还是数事件？ |
+| | `measure.countGrain` | 数行、数实体还是数事件？（结构化：`grain` 取 row / entity / event，按实体时写 `keyColumns`） |
 | | `measure.denominator` | 分母的总体是什么？分母为 0 怎么处理？ |
 | | `measure.window` | 滚动或累计窗口从哪里开始、多长？ |
 | 分组 | `grouping` | 最终按什么分组、什么日历粒度？比较基准是全局还是组内？ |

@@ -82,7 +82,7 @@ describe("T4.1 probe witness rows", () => {
       fieldProbes: true,
       fieldAdvice: { advisor: { compare: advisor }, getOriginalQuestion: async () => "每月已送达订单数" },
     });
-    const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: ["month"], selection: "n/a", output: { rowMode: "grouped" }, "population.timeField": { open: ["按下单时间", "按送达时间"] } };
+    const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: ["month"], selection: "n/a", output: { rowMode: "grouped" }, "population.timeField": { open: ["按下单时间", "按送达时间"] } };
     const view = await answering.set({ requestMessageId: "m", requestId: "begin", fields: spec }, context("begin"));
     const [purchase, delivered] = view.fields.find((item) => item.path === "population.timeField")!.alternatives!.map((item) => item.id as string);
     await answering.execute({ kind: "exploration", taskId: view.taskId, sql: "SELECT purchase", probe: { path: "population.timeField", alternativeId: purchase! } }, context("p1"));

@@ -18,7 +18,8 @@ import {
  * One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`),
  * each id percent-encoded so an id containing "/" can neither collide nor regroup.
  */
-const RECORDS_NAMESPACE = "data-agent.answering.records";
+// Records of one snapshot version live in their own namespace, so records of another version are never read.
+const RECORDS_NAMESPACE = `data-agent.answering.v${ANSWERING_SNAPSHOT_VERSION}.records`;
 const ALL_RECORDS = value<StoredRecord>(RECORDS_NAMESPACE, "");
 const recordValue = (key: string): Value<StoredRecord> => value<StoredRecord>(RECORDS_NAMESPACE, key);
 const recordKey = (kind: string, ...ids: string[]): string => [kind, ...ids.map(encodeURIComponent)].join("/");
@@ -26,7 +27,7 @@ const recordKey = (kind: string, ...ids: string[]): string => [kind, ...ids.map(
  * Bumped with every commit that changes a record. A reader whose cache was
  * built at the current version skips scanning and decoding every record.
  */
-const VERSION_VALUE = value<number>("data-agent.answering.meta", "version");
+const VERSION_VALUE = value<number>(`data-agent.answering.v${ANSWERING_SNAPSHOT_VERSION}.meta`, "version");
 
 /**
  * A stored record and its place among the records of its kind. The in-memory

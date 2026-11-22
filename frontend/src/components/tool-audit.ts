@@ -812,6 +812,8 @@ export function disclosureNoteText(note: DisclosureNote, isEn: boolean, withFiel
                 : (isEn ? 'some periods have no data' : '部分期间没有数据'));
         case 'result_domain':
             return on(isEn ? 'the values may not fit this measure (e.g. a fraction where a percentage is defined)' : '结果数值可能与度量口径的取值范围不符');
+        case 'physical_candidates':
+            return on(isEn ? 'the table has several candidate columns; the one used was assumed' : '来源表有多个同类候选列，所用的一列为假定');
         case 'data_falsification':
             return isEn ? 'A check against the data found the SQL may not answer as intended.' : '与数据核对发现 SQL 可能没有按预期作答。';
         default:

@@ -60,7 +60,7 @@ describe("T1.2 refresh keeps the publish disclosures and its own invariants", ()
     "population.joinMultiplicity": "each transaction is one row; customer_nodes is not joined",
     "population.missing": "every month of 2020 appears; a month without data is zero",
     "measure.formula": { op: "count", of: "customer_id" },
-    "measure.countGrain": "one row per customer",
+    "measure.countGrain": { grain: "row", note: "one row per customer" },
     grouping: [{ key: "month", grain: "month" }],
     selection: "n/a",
     output: { rowMode: "grouped" },
@@ -158,7 +158,7 @@ describe("T1.4 a chart query deciding an inherited open field records a deviatio
       requestMessageId: "m",
       requestId: "chart",
       parent: { taskId: parent.taskId },
-      fields: { "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } },
+      fields: { "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } },
     }, context("chart"));
     const alternatives = parent.fields.find((item) => item.path === "population.conditions")!.alternatives!;
     // Probed on the Report Task so it does not block the chart, and on the chart query under its own fields.
@@ -206,7 +206,7 @@ describe("T1.5 coalesced result executions keep each caller's signal and memo", 
         },
       },
     });
-    const begun = await answering.set({ requestMessageId: "m", requestId: "begin", fields: { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } } }, context("begin"));
+    const begun = await answering.set({ requestMessageId: "m", requestId: "begin", fields: { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } } }, context("begin"));
     const input = { kind: "result" as const, taskId: begun.taskId, revisionId: begun.revisionId, sql: "SELECT COUNT(*) FROM orders" };
     const firstController = new AbortController();
     const firstMemo = memo();
@@ -237,7 +237,7 @@ describe("T1.5 coalesced result executions keep each caller's signal and memo", 
         },
       },
     });
-    const begun = await answering.set({ requestMessageId: "m", requestId: "begin", fields: { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } } }, context("begin"));
+    const begun = await answering.set({ requestMessageId: "m", requestId: "begin", fields: { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } } }, context("begin"));
     const input = { kind: "result" as const, taskId: begun.taskId, revisionId: begun.revisionId, sql: "SELECT COUNT(*) FROM orders" };
     const a = new AbortController();
     const b = new AbortController();

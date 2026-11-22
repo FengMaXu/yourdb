@@ -22,7 +22,7 @@ const spec = {
   "population.conditions": "n/a",
   "population.time": "n/a",
   "measure.formula": { op: "count", of: "orders" },
-  "measure.countGrain": "one row per order",
+  "measure.countGrain": { grain: "row", note: "one row per order" },
   grouping: "n/a",
   selection: "n/a",
   output: { rowMode: "scalar", rowCount: 1 },

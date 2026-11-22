@@ -86,3 +86,13 @@ Answering 改进方案 Phase 4 新增两组确定性检查，都带独立的 `ru
 - **SQL-数据证伪**（`data_falsification`，`data-falsification-v1`）：LEFT JOIN 右表列在 WHERE 中被 NULL 行无法通过的谓词过滤（纯静态）；`<= 'YYYY-MM-DD'` 或 `BETWEEN … AND 'YYYY-MM-DD'` 上界丢掉当日带时刻的记录（数据探针）；空结果下 `col = '字面量'` 零命中而该列存在只差大小写或首尾空格的值（数据探针）。每次结果查询最多 4 个探针，单个探针 3 秒超时，不计入任务预算。
 
 回放 135 题开发运行（129 题可用，错 82、对 47）和 40 题独立留出运行（34 题可用，错 23、对 11），见 [离线校准报告](../answering-falsification-calibration.md)。`ratio_as_percentage` 在留出集正确题上误报 1/11（人均年数大于 1 是正常值），其余子规则在留出集上零触发。没有子规则满足“留出集正确题误报率 ≤ 1% 且有触发样本”的升级条件，全部按第 2 条记为 finding 并随结果披露，不阻断。
+
+## 修订（2026-11-21）：Spec Realization 基于 Query Digest 的结构核对按第 2 条披露
+
+Spec Realization 升级为 `spec-realization-v2`，改为读取多方言 SQL 解析器产生的 Query Digest（`answering/sql-digest.ts`，解析器与其 AST 类型不出该文件）。新增三条结构核对，全部是 `likely`，按第 2 条记为 finding 并随结果披露，不阻断：
+
+- `measure.formula` 多层嵌套：内层的 `per` 被 SQL 按外层粒度分组（例如应先按球员求和，SQL 却直接按国家求和）。
+- `measure.countGrain`：按实体计数却 `COUNT` 了未去重的行，或按行计数却写了 `COUNT(DISTINCT …)`。
+- `population.conditions`：带 `stage` 的条件落在了与声明不同的阶段（例如声明 HAVING，SQL 写在 WHERE）。
+
+解析器读不懂的语句标为 `unsupported`：依赖 Digest 的核对记为不可判定，没有其他 finding 时覆盖记为 `unknown`，不记为 `clear`。聚合层数仍沿用原规则，Digest 可读时按块精确计数，不可读时退回文本扫描。

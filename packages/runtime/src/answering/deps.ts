@@ -1,3 +1,4 @@
+import type { SchemaProfile } from "./schema-profile.js";
 import type { DataFalsificationOptions } from "./data-falsification.js";
 import type { BusinessContext, QueryBudgetPolicy } from "./model.js";
 import type { AnsweringStore } from "./answering-store.js";
@@ -43,6 +44,8 @@ export interface AnsweringDeps {
   readonly entityIdentity?: EntityIdentityOptions;
   /** Bounds of the data falsification probes after a result query (plan T4.3). */
   readonly dataFalsification?: DataFalsificationOptions;
+  /** Session-scoped Schema Profile: every data-check read is memoized here (plan T5.3). */
+  readonly schemaProfile: SchemaProfile;
   /** How a Receipt names its published artifact for the transport; an opaque handle by default. */
   readonly formatPublicRef?: (receiptId: string, sessionId: string) => string;
   /** Cached per Answering instance; loaded lazily from the executor. */

@@ -6,7 +6,7 @@ import { UNAVAILABLE_ADVICE_RETRY_MS } from "./advice-execution.js";
 import { renderAnsweringText } from "../tools/answering.js";
 import type { CompareHypothesesInput, HypothesisChoiceAssessment, HypothesisChoiceRecommendation } from "../judgment/hypothesis-choice.js";
 
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 const business = (invocationId: string) => ({ principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "operation-1", invocationId });
 const PATH = "population.timeField";
 const RATIONALE = "The request counts orders when they are purchased";
@@ -165,7 +165,7 @@ describe("deciding against advice (ADR-0005)", () => {
   });
 
   it("does not let observations outweigh a lean on a semantic field", async () => {
-    const semantic = "measure.countGrain";
+    const semantic = "measure.denominator";
     const { answering, view, purchase } = await setup(assessment([0.04, 0.45], "second"), { path: semantic });
     const inspected = await answering.inspect({ taskId: view.taskId }, business("inspect"));
     const observation = inspected.task.fieldProbes!.find((probe) => probe.alternativeId === purchase)!.evidenceId;

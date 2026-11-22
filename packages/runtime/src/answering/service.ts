@@ -32,6 +32,7 @@ import type { AnsweringDeps, EntityIdentityOptions, FanoutAnsweringOptions, Sema
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { FieldAdviceOptions } from "./advice-execution.js";
 import type { DataFalsificationOptions } from "./data-falsification.js";
+import { SchemaProfile, type SchemaProfileOptions } from "./schema-profile.js";
 import { assertContext } from "./support.js";
 import { taskViewFromBundle } from "./views.js";
 
@@ -89,6 +90,8 @@ export interface InMemoryAnsweringOptions {
   readonly entityIdentity?: EntityIdentityOptions;
   /** Bounds of the data falsification probes after a result query (probe count, per-probe timeout). */
   readonly dataFalsification?: DataFalsificationOptions;
+  /** Bounds of the session's Schema Profile reads (rows above which a table is not scanned, per-read timeout). */
+  readonly schemaProfile?: SchemaProfileOptions;
   /** How a Receipt names its published artifact; the HTTP composition root injects its route. Default: an opaque handle. */
   readonly formatPublicRef?: (receiptId: string, sessionId: string) => string;
 }
@@ -96,6 +99,8 @@ export interface InMemoryAnsweringOptions {
 
 function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
   const fanout = { ...(options.fanout ?? {}) };
+  const loadFanoutSchema = createFanoutSchemaLoader(fanout, options.sqlExecutor);
+  const timeoutMs = options.schemaProfile?.timeoutMs ?? options.entityIdentity?.timeoutMs;
   return {
     store: options.store,
     resultStore: options.resultStore ?? new InMemoryResultStore(),
@@ -112,7 +117,8 @@ function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
     ...(options.entityIdentity ? { entityIdentity: options.entityIdentity } : {}),
     ...(options.dataFalsification ? { dataFalsification: options.dataFalsification } : {}),
     ...(options.formatPublicRef ? { formatPublicRef: options.formatPublicRef } : {}),
-    loadFanoutSchema: createFanoutSchemaLoader(fanout, options.sqlExecutor),
+    loadFanoutSchema,
+    schemaProfile: new SchemaProfile(options.sqlExecutor, loadFanoutSchema, { ...(options.schemaProfile?.maxRows !== undefined ? { maxRows: options.schemaProfile.maxRows } : {}), ...(timeoutMs !== undefined ? { timeoutMs } : {}) }),
   };
 }
 

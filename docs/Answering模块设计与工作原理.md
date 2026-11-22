@@ -208,6 +208,8 @@ flowchart TB
 | | `result-domain.ts` | 结果值域检查（count 为负/小数、百分比与比值量纲错位、度量列全 NULL），只披露 |
 | | `data-falsification.ts` | SQL-数据证伪（LEFT JOIN 退化、日期闭区间截断、空结果字面量不命中），有界探针，只披露 |
 | | `probe-diff.ts` | 探针差异见证行：不同候选输出间的少量具体差异行，供 Jev 与 `[PROBE]` 视图 |
+| | `sql-digest.ts` | Query Digest：多方言 SQL 解析（`node-sql-parser`，类型不出本文件）得到读表、JOIN 类型与条件、各块 GROUP BY 与聚合、过滤阶段、窗口与截断；读不懂时为 `unsupported` |
+| | `schema-profile.ts` | 会话级 Schema Profile：数据检查读取的记忆缓存、来源表画像（行数、键基数、时间列格式与范围、低基数取值）、多候选列提醒 |
 | | `sql-lex.ts` | SQL 词法屏蔽（字符串、引号标识符、注释），供只读判定与结构检查复用 |
 | | `physical-profile.ts` | 发布结果的列画像 |
 | 基础设施 | `answering-store.ts` | 事务存储接口、写时复制的内存实现、快照、访问控制；只存取记录（`readTaskBundle`），不计算投影 |

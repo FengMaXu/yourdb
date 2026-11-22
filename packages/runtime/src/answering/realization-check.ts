@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
-import { grainOf, type MeasureExpression, type MeasureOperand, type SpecPath, type Grain } from "./fields.js";
+import { grainOf, layersOf, type MeasureExpression, type MeasureOperand, type SpecPath, type Grain } from "./fields.js";
+import { aggregatingBlocks, aggregationCapacity, digestSql, type DigestBlock, type DigestColumn, type DigestResult, type QueryDigest } from "./sql-digest.js";
+import type { FanoutDialect } from "./fanout-check.js";
 import { settledField } from "./support.js";
 import { maskSql } from "./sql-lex.js";
 
@@ -14,7 +16,7 @@ import { maskSql } from "./sql-lex.js";
  * A path the rules cannot read is reported as not determinable, never as realized.
  */
 export const SPEC_REALIZATION_CHECK_ID = "spec_realization";
-export const SPEC_REALIZATION_RULE_VERSION = "spec-realization-v1";
+export const SPEC_REALIZATION_RULE_VERSION = "spec-realization-v2";
 
 export type RealizationVerdict =
   | { readonly path: SpecPath; readonly outcome: "realized" }
@@ -33,9 +35,11 @@ interface SqlText {
   /** Lower-cased SQL with comments blanked; literals kept for date formats such as '%Y-%m'. */
   readonly withLiterals: string;
   readonly depths: Int32Array;
+  /** Structure read by the SQL parser; `unsupported` leaves the digest rules not determinable. */
+  readonly digest: DigestResult;
 }
 
-function sqlText(sql: string): SqlText {
+function sqlText(sql: string, dialect?: FanoutDialect): SqlText {
   const masked = maskSql(sql, { identifiers: false }).toLowerCase();
   const depths = new Int32Array(masked.length);
   let depth = 0;
@@ -44,7 +48,7 @@ function sqlText(sql: string): SqlText {
     if (masked[index] === "(") depth += 1;
     else if (masked[index] === ")") depth = Math.max(0, depth - 1);
   }
-  return { masked, withLiterals: maskSql(sql, { strings: false, identifiers: false }).toLowerCase(), depths };
+  return { masked, withLiterals: maskSql(sql, { strings: false, identifiers: false }).toLowerCase(), depths, digest: digestSql(sql, dialect) };
 }
 
 
@@ -192,7 +196,8 @@ function formulaVerdicts(fields: SpecFields, sql: SqlText): readonly Realization
     verdicts.push({ path, outcome: "contradicted", certainty: "likely", message: "measure.formula uses count_distinct, but the SQL has no DISTINCT. Count distinct keys unless an earlier GROUP BY already made them unique" });
   }
   const depth = aggregateDepth(formula);
-  const capacity = aggregateCapacity(sql);
+  // The digest counts aggregation blocks exactly; the text scan is the fallback when the parser cannot read the SQL.
+  const capacity = sql.digest.status === "parsed" ? aggregationCapacity(sql.digest) : aggregateCapacity(sql);
   if (depth > 1 && capacity < depth) {
     verdicts.push({ path, outcome: "contradicted", certainty: "likely", message: `measure.formula nests ${depth} aggregation layers, but the SQL aggregates in at most ${capacity}. Compute each layer per its declared grain, unless the source rows are already at an inner layer's grain` });
   }
@@ -224,15 +229,138 @@ function groupingVerdicts(fields: SpecFields, sql: SqlText): readonly Realizatio
   return verdicts.find((item) => item.outcome === "contradicted") ? verdicts.filter((item) => item.outcome === "contradicted") : verdicts.slice(0, 1);
 }
 
+// --- digest rules (plan T5.2): per-layer grain, count grain, condition stage -------
+
+const DIGEST_UNREAD = "the SQL parser could not read the statement";
+
+/** Lower-case word stems of a text, for matching a declared grain against column and table names. */
+function stems(text: string): readonly string[] {
+  return text.toLowerCase().split(/[^a-z0-9\u4e00-\u9fff]+/).filter((word) => word.length >= 3).map((word) => word.replace(/(ies)$/, "y").replace(/(?<=[a-z]{3})s$/, ""));
+}
+
+/** Names a grouping column stands for: the column, and for an id-like column the table it belongs to. */
+function columnNames(block: DigestBlock, column: DigestColumn): readonly string[] {
+  const relation = block.relations.find((item) => item.alias === column.table || item.table === column.table);
+  return [column.column, ...(relation ? [relation.table] : [])];
+}
+
+function mentions(per: string, names: readonly string[]): boolean {
+  const wanted = stems(per);
+  const have = names.flatMap(stems);
+  return wanted.some((word) => have.some((name) => name === word || name.startsWith(word) || word.startsWith(name)));
+}
+
+function layerVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
+  const formula = settledField(fields, "measure.formula");
+  if (!formula) return [];
+  const layers = layersOf(formula).filter((layer) => AGGREGATE_OPS.has(layer.op));
+  const inner = layers.slice(1).filter((layer) => layer.per);
+  if (inner.length === 0) return [];
+  const path = "measure.formula";
+  if (sql.digest.status !== "parsed") return [{ path, outcome: "not_determinable", reason: `${DIGEST_UNREAD}: ${sql.digest.reason}` }];
+  // Innermost aggregation first, on both sides: formula layers nest outer to inner, SQL blocks by depth.
+  const blocks = [...aggregatingBlocks(sql.digest)].sort((left, right) => right.depth - left.depth || right.id - left.id);
+  // Fewer aggregation blocks than layers is the capacity rule’s finding; matching layers to blocks needs one block per layer.
+  if (blocks.length < layers.length) return [];
+  const declared = layers.slice(1).reverse();
+  const verdicts: RealizationVerdict[] = [];
+  declared.forEach((layer, index) => {
+    const block = blocks[index];
+    if (!layer.per || !block) return;
+    const keys = block.groupBy.flatMap((column) => columnNames(block, column));
+    if (block.groupBy.length === 0) {
+      verdicts.push({ path, outcome: "contradicted", certainty: "likely", message: `measure.formula computes ${layer.op} per ${layer.per}, but the SQL block that aggregates at that layer has no GROUP BY, so it aggregates over every row at once. Group that layer by ${layer.per}` });
+      return;
+    }
+    if (mentions(layer.per, keys)) return;
+    const outer = layers.find((other) => other !== layer && other.per && mentions(other.per, keys));
+    verdicts.push(outer
+      ? { path, outcome: "contradicted", certainty: "likely", message: `measure.formula computes ${layer.op} per ${layer.per}, but the SQL groups that layer by ${block.groupBy.map((column) => column.column).join(", ")}, the grain of the ${outer.op} per ${outer.per} layer. Group the inner layer by ${layer.per} first` }
+      : { path, outcome: "not_determinable", reason: `the GROUP BY ${block.groupBy.map((column) => column.column).join(", ")} does not name ${layer.per} in a way the rules read` });
+  });
+  return verdicts.length > 0 ? verdicts : [{ path, outcome: "realized" }];
+}
+
+function countAggregates(digest: QueryDigest): readonly { readonly block: DigestBlock; readonly distinct: boolean; readonly columns: readonly DigestColumn[] }[] {
+  return digest.blocks.flatMap((block) => block.aggregates.filter((item) => !item.windowed && item.fn === "count").map((item) => ({ block, distinct: item.distinct, columns: item.columns })));
+}
+
+function countGrainVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
+  const grain = settledField(fields, "measure.countGrain");
+  const formula = settledField(fields, "measure.formula");
+  if (!grain || !formula || !layersOf(formula).some((layer) => layer.op === "count" || layer.op === "count_distinct")) return [];
+  const path = "measure.countGrain";
+  if (grain.grain === "event" || (grain.grain === "entity" && !grain.keyColumns?.length)) return [{ path, outcome: "not_determinable", reason: `countGrain ${grain.grain} names no key the rules can read` }];
+  if (sql.digest.status !== "parsed") return [{ path, outcome: "not_determinable", reason: `${DIGEST_UNREAD}: ${sql.digest.reason}` }];
+  const counts = countAggregates(sql.digest);
+  if (counts.length === 0) return [{ path, outcome: "not_determinable", reason: "the SQL has no COUNT to compare with the count grain" }];
+  if (grain.grain === "row") {
+    const distinct = counts.find((item) => item.distinct);
+    return distinct
+      ? [{ path, outcome: "contradicted", certainty: "likely", message: `measure.countGrain counts rows, but the SQL counts COUNT(DISTINCT ${distinct.columns.map((column) => column.column).join(", ")}), which merges equal values. Count rows, or rewrite measure.countGrain as entity with its keyColumns` }]
+      : [{ path, outcome: "realized" }];
+  }
+  const keys = new Set((grain.keyColumns ?? []).map((key) => key.split(".").at(-1)!.toLowerCase()));
+  const distinctOnKey = counts.some((item) => item.distinct && item.columns.some((column) => keys.has(column.column)));
+  // Rows already made unique per key by a GROUP BY below the count are entities too.
+  const groupedOnKey = sql.digest.blocks.some((block) => block.groupBy.some((column) => keys.has(column.column)));
+  if (distinctOnKey || groupedOnKey) return [{ path, outcome: "realized" }];
+  return [{ path, outcome: "contradicted", certainty: "likely", message: `measure.countGrain counts entities by ${[...keys].join(", ")}, but the SQL counts rows (COUNT without DISTINCT on that key, and no GROUP BY on it), so an entity with several rows counts several times. Count DISTINCT ${[...keys].join(", ")}, or rewrite measure.countGrain as row` }];
+}
+
+type Stage = "pre" | "post" | "window";
+
+function expectedStage(text: string): Stage | undefined {
+  if (/window|qualify|窗口/i.test(text)) return "window";
+  if (/having|group|aggregat|after|聚合后|分组后/i.test(text)) return "post";
+  if (/where|row|before|聚合前|行/i.test(text)) return "pre";
+  return undefined;
+}
+
+function conditionVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
+  const conditions = settledField(fields, "population.conditions");
+  const staged = (conditions ?? []).flatMap((item) => typeof item === "string" || !item.stage ? [] : [{ condition: item.condition, stage: expectedStage(item.stage), declared: item.stage }]);
+  if (staged.length === 0) return [];
+  const path = "population.conditions";
+  if (sql.digest.status !== "parsed") return [{ path, outcome: "not_determinable", reason: `${DIGEST_UNREAD}: ${sql.digest.reason}` }];
+  const digest = sql.digest;
+  const aggregating = new Set(aggregatingBlocks(digest).map((block) => block.id));
+  const verdicts: RealizationVerdict[] = [];
+  for (const item of staged) {
+    if (!item.stage) { verdicts.push({ path, outcome: "not_determinable", reason: `stage ${JSON.stringify(item.declared)} is not a stage the rules read` }); continue; }
+    const words = new Set(stems(item.condition));
+    const found = new Set<Stage | "either">();
+    for (const block of digest.blocks) {
+      for (const filter of block.filters) {
+        if (!filter.columns.some((column) => stems(column.column).some((word) => words.has(word)))) continue;
+        if (filter.stage === "having") found.add("post");
+        else if (filter.stage === "qualify") found.add("window");
+        // A WHERE over an aggregated CTE or subquery filters groups, not source rows.
+        else if (block.reads.some((id) => aggregating.has(id))) found.add("either");
+        else found.add("pre");
+      }
+    }
+    if (found.size === 0) { verdicts.push({ path, outcome: "not_determinable", reason: `no filter reads the columns of ${JSON.stringify(item.condition)}` }); continue; }
+    if (found.has(item.stage) || found.has("either")) { verdicts.push({ path, outcome: "realized" }); continue; }
+    const where = [...found].map((stage) => stage === "pre" ? "WHERE/ON on source rows" : stage === "post" ? "HAVING on groups" : "QUALIFY after a window").join(" and ");
+    verdicts.push({ path, outcome: "contradicted", certainty: "likely", message: `population.conditions applies ${JSON.stringify(item.condition)} at stage ${JSON.stringify(item.declared)}, but the SQL filters it in ${where}. Move the filter to the declared stage, or rewrite its stage with a reason` });
+  }
+  const contradicted = verdicts.filter((verdict) => verdict.outcome === "contradicted");
+  return contradicted.length > 0 ? contradicted : verdicts;
+}
+
 // --- report --------------------------------------------------------------------
 
-export function evaluateSpecRealization(fields: SpecFields, sql: string): RealizationReport {
-  const text = sqlText(sql);
+export function evaluateSpecRealization(fields: SpecFields, sql: string, dialect?: FanoutDialect): RealizationReport {
+  const text = sqlText(sql, dialect);
   const verdicts = [
     ...[sourceVerdict(fields, text)].filter((item): item is RealizationVerdict => item !== undefined),
     ...selectionVerdicts(fields, text),
     ...formulaVerdicts(fields, text),
     ...groupingVerdicts(fields, text),
+    ...layerVerdicts(fields, text),
+    ...countGrainVerdicts(fields, text),
+    ...conditionVerdicts(fields, text),
   ];
   const findings = verdicts.flatMap((verdict): Finding[] => verdict.outcome === "contradicted"
     ? [{ id: `finding_realization_conflict_${randomUUID()}`, kind: "realization_conflict", message: verdict.message, blocking: verdict.certainty === "certain", checkId: SPEC_REALIZATION_CHECK_ID, paths: [verdict.path] }]
@@ -242,7 +370,7 @@ export function evaluateSpecRealization(fields: SpecFields, sql: string): Realiz
     ? { checkId: SPEC_REALIZATION_CHECK_ID, ruleVersion: SPEC_REALIZATION_RULE_VERSION, outcome: "not_applicable", reason: "no sealed field has a rule that reads SQL" }
     : findings.length > 0
       ? { checkId: SPEC_REALIZATION_CHECK_ID, ruleVersion: SPEC_REALIZATION_RULE_VERSION, outcome: "finding", reason: findings.map((item) => item.message).join(" | ") }
-      : undetermined.length > 0 && verdicts.every((verdict) => verdict.outcome === "not_determinable")
+      : undetermined.length > 0 && (verdicts.every((verdict) => verdict.outcome === "not_determinable") || verdicts.some((verdict) => verdict.outcome === "not_determinable" && verdict.reason.startsWith(DIGEST_UNREAD)))
         ? { checkId: SPEC_REALIZATION_CHECK_ID, ruleVersion: SPEC_REALIZATION_RULE_VERSION, outcome: "unknown", reason: undetermined.join(" | ") }
         : { checkId: SPEC_REALIZATION_CHECK_ID, ruleVersion: SPEC_REALIZATION_RULE_VERSION, outcome: "clear", ...(undetermined.length > 0 ? { reason: `not determinable: ${undetermined.join(" | ")}` } : {}) };
   return { verdicts, findings, coverage };

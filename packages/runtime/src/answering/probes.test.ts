@@ -16,7 +16,7 @@ const context = (invocationId: string): BusinessContext => ({
   invocationId,
 });
 
-const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
 const PATH = "population.timeField";
 const PURCHASE = "Count each order in the month it was purchased";
 const DELIVERED = "Count each order in the month it was delivered";
