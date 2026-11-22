@@ -1,3 +1,4 @@
+import { actionRef } from "./actions.js";
 import type {
   AdviceOverride,
   AlternativeId,
@@ -240,7 +241,7 @@ export function disqualification(path: SpecPath, evidence: Evidence): string | u
 function resolveRefs(refs: readonly string[], resolve: EvidenceResolver, label: string): Evidence[] {
   return refs.map((ref) => {
     const evidence = resolve(ref);
-    if (!evidence) evidenceRejected(`${label} references unknown evidence ${ref}; cite it again or use an evidenceId returned by query_database`);
+    if (!evidence) evidenceRejected(`${label} references unknown evidence ${ref}; cite it again or use an evidenceId returned by an exploration query (${actionRef({ kind: "explore" })})`);
     return evidence;
   });
 }
@@ -317,7 +318,7 @@ function governDecision(
   const summary = summarizeProbes(path, current.alternatives, governance.probes, current.waivers ?? [], probeContext(fields, path));
   if (!summary.covered) {
     const stale = summary.stale.length > 0 ? ` (${summary.stale.join(", ")} were probed before other fields changed)` : "";
-    transitionInvalid(`${path} needs the output of every alternative under the current other fields before a decision: run query_database kind=exploration with probe {path: "${path}", alternativeId} for ${summary.missing.join(", ")}${stale}, or write {notProbeable: {<alternativeId>: reason}}`);
+    transitionInvalid(`${path} needs the output of every alternative under the current other fields before a decision: run ${actionRef({ kind: "explore", probePath: path })} for ${summary.missing.join(", ")}${stale}, or write {notProbeable: {<alternativeId>: reason}}`);
   }
   // Advice applies only to the alternatives and probe outputs it was asked about.
   const advice = applicableAdvice(governance.advice?.(path), current.alternatives, summary);
@@ -330,7 +331,7 @@ function governDecision(
     const settled = decisionCites.some((evidence) => SETTLES_UNDECIDED.includes(evidence.kind) && isAdmissibleProof(evidence));
     if (settled) return {};
     if (governance.populationDecisions === "require_evidence") {
-      transitionInvalid(`${path}: the advice favoured no alternative (${advice.recommendation}), so the request does not settle it; ask the user with ask_user_clarification and cite the answer (cite source "clarification:<id>"), or cite a business document that settles it`);
+      transitionInvalid(`${path}: the advice favoured no alternative (${advice.recommendation}), so the request does not settle it; ask the user (${actionRef({ kind: "clarify" })}) and cite the answer (cite source "clarification:<id>"), or cite a business document that settles it`);
     }
     return { adviceUndecided: advice.recommendation };
   }

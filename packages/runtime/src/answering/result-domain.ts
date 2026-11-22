@@ -1,6 +1,5 @@
 import type { SpecFields } from "./model.js";
-import type { MeasureExpression } from "./fields.js";
-import { settled } from "./support.js";
+import { settledField } from "./support.js";
 
 /**
  * Result domain (plan T4.2): values the declared measure cannot take. It reads
@@ -34,7 +33,7 @@ function numberOf(value: unknown): number | undefined {
 
 /** The op that produces the delivered number: the top operation of the formula. */
 function measureOp(fields: SpecFields): string | undefined {
-  return settled<MeasureExpression>(fields["measure.formula"])?.op;
+  return settledField(fields, "measure.formula")?.op;
 }
 
 export function evaluateResultDomain(fields: SpecFields, result: { readonly columns: readonly string[]; readonly rows: readonly (readonly unknown[])[] }): ResultDomainOutcome {

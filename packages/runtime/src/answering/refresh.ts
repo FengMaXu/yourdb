@@ -83,7 +83,7 @@ export async function refreshPublication(deps: AnsweringDeps, input: RefreshPubl
     const disclosure = composeDisclosure(revision, refreshed, parentSuperseded);
     const encoded = await deps.resultStore.encodeCsv(privateResult.resultRef, context);
     const format = original.format === "inline" && privateResult.rowCount > INLINE_ROW_LIMIT ? "csv" : original.format;
-    const receipt = buildReceipt({ candidate: refreshed, result: privateResult, format, presentationContentHash: encoded.contentHash, ...(disclosure ? { disclosure } : {}), refreshes: original.receiptId, requestId: input.requestId }, context);
+    const receipt = buildReceipt({ candidate: refreshed, result: privateResult, format, presentationContentHash: encoded.contentHash, ...(disclosure ? { disclosure } : {}), refreshes: original.receiptId, requestId: input.requestId }, context, deps.formatPublicRef);
     const stored = await deps.store.transact((tx) => {
       const task = tx.getTask(receipt.taskId);
       assertTaskAccess(task, context);

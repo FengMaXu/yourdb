@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import type { FanoutDialect } from "./fanout-check.js";
-import { grainOf, layersOf, type GroupingKeyValue, type MeasureExpression, type SourceValue, type TimeValue } from "./fields.js";
-import { settled } from "./support.js";
+import { grainOf, layersOf } from "./fields.js";
+import { settledField } from "./support.js";
 
 /**
  * Calendar coverage: does the data have every period the Spec groups by? When
@@ -49,8 +49,8 @@ function calendarGrainOf(text: string): CalendarGrain | "unsupported" | undefine
 
 /** The calendar grain the answer is computed per: a grouping key first, then a formula layer's `per`. */
 function grainFor(fields: SpecFields): CalendarGrain | "unsupported" | undefined {
-  const keys = settled<readonly (string | GroupingKeyValue)[]>(fields.grouping) ?? [];
-  const formula = settled<MeasureExpression>(fields["measure.formula"]);
+  const keys = settledField(fields, "grouping") ?? [];
+  const formula = settledField(fields, "measure.formula");
   const texts = [
     ...keys.map((key) => typeof key === "string" ? key : key.grain ?? key.key),
     ...(formula ? layersOf(formula).flatMap((layer) => layer.per ? [layer.per] : []) : []),
@@ -102,14 +102,14 @@ export function periodOf(grain: CalendarGrain, text: string): string {
 /** What to read for this Revision: a target, a reason it cannot be read, or nothing when no calendar grain applies. */
 export function calendarTarget(fields: SpecFields): { readonly target?: CalendarTarget; readonly limitation?: string } {
   const grain = grainFor(fields);
-  const time = settled<TimeValue>(fields["population.time"]);
+  const time = settledField(fields, "population.time");
   if (!grain || !time) return {};
   if (grain === "unsupported") return { limitation: "only year, quarter, month and day grains are read" };
   const range = dateRange(time.expression);
   if ("reason" in range) return { limitation: range.reason };
   if (periodsIn(grain, range.start, range.end).length > CALENDAR_COVERAGE_MAX_PERIODS) return { limitation: `the range has more than ${CALENDAR_COVERAGE_MAX_PERIODS} ${grain} periods` };
-  const timeField = settled<string>(fields["population.timeField"]);
-  const source = settled<SourceValue>(fields["population.source"]);
+  const timeField = settledField(fields, "population.timeField");
+  const source = settledField(fields, "population.source");
   // table.column may be followed by prose; a bare column must stand alone, so "the date the order shipped" names nothing.
   const named = timeField
     ? new RegExp(`^\\s*(${IDENTIFIER})\\.(${IDENTIFIER})`).exec(timeField) ?? new RegExp(`^\\s*(${IDENTIFIER})\\s*(?:$|[(（,;，；:：])`).exec(timeField)

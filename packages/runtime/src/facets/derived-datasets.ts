@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BusinessContext, PhysicalProfile } from "../answering/public.js";
-import { buildPhysicalProfile } from "../answering/physical-profile.js";
+import { buildPhysicalProfile } from "../answering/public.js";
 
 /**
  * Derived datasets (ADR-0008 decision 4): results a Runtime-run Python job

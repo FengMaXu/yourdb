@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Choice 以探针输出为准，并纳入处置完整性阻断

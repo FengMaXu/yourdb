@@ -1,3 +1,4 @@
+import { possibleValues } from "./support.js";
 import { randomUUID } from "node:crypto";
 import {
   type AnswerRevisionRecord,
@@ -13,8 +14,6 @@ import {
   isSharedPath,
   requiredPaths,
   type FieldPath,
-  type MeasureExpression,
-  type SourceValue,
   type SpecPath,
 } from "./fields.js";
 import { calendarRequiredPaths } from "./calendar-coverage.js";
@@ -29,19 +28,11 @@ export function isAdmissibleProof(evidence: Evidence): boolean {
   return Boolean(evidence.verification && evidence.quote?.trim());
 }
 
-/** The values a field can still take: its value, or every alternative while it is open. */
-function valuesOf(field: FieldRecord | undefined): readonly unknown[] {
-  if (!field) return [];
-  if (field.state === "specified" || field.state === "decided") return [field.value];
-  if (field.state === "open") return field.alternatives.map((item) => item.value);
-  return [];
-}
-
 /** Fields the necessity rules require for these fields (ADR-0007). */
 export function requiredFor(fields: SpecFields): readonly FieldPath[] {
   return requiredPaths({
-    formulas: valuesOf(fields["measure.formula"]) as MeasureExpression[],
-    sources: valuesOf(fields["population.source"]) as SourceValue[],
+    formulas: possibleValues(fields, "measure.formula"),
+    sources: possibleValues(fields, "population.source"),
     selection: Boolean(fields.selection) && fields.selection!.state !== "not_applicable",
   });
 }

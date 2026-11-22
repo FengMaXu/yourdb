@@ -3,13 +3,12 @@ import {
   AnsweringError,
   DEFAULT_QUERY_BUDGET_POLICY,
   InMemoryAnswering,
-  InMemoryAnsweringStore,
-  InMemoryResultStore,
   type AnsweringStore,
   type BusinessContext,
   isScopedReadOnlySql,
   SqlExecutionError,
 } from "./public.js";
+import { InMemoryAnsweringStore, InMemoryResultStore } from "./storage.js";
 
 const context = (invocationId = "invocation-1"): BusinessContext => ({
   principal: { id: "user-1" },

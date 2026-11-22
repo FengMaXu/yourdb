@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
-import { grainOf, type GroupingKeyValue, type MeasureExpression, type MeasureOperand, type SelectionValue, type SourceValue, type SpecPath, type TiesValue, type Grain } from "./fields.js";
-import { settled } from "./support.js";
+import { grainOf, type MeasureExpression, type MeasureOperand, type SpecPath, type Grain } from "./fields.js";
+import { settledField } from "./support.js";
 import { maskSql } from "./sql-lex.js";
 
 /**
@@ -63,7 +63,7 @@ function declaredTable(item: string): string | undefined {
 }
 
 function sourceVerdict(fields: SpecFields, sql: SqlText): RealizationVerdict | undefined {
-  const source = settled<SourceValue>(fields["population.source"]);
+  const source = settledField(fields, "population.source");
   if (!source) return undefined;
   const path = "population.source";
   const names = source.tables.map(declaredTable);
@@ -100,8 +100,8 @@ function outermostCap(sql: SqlText): { readonly rows: number; readonly withTies:
 }
 
 function selectionVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
-  const selection = settled<SelectionValue>(fields.selection);
-  const ties = settled<TiesValue>(fields["selection.ties"]);
+  const selection = settledField(fields, "selection");
+  const ties = settledField(fields, "selection.ties");
   if (!selection || !ties) return [];
   const path = "selection.ties";
   const cap = outermostCap(sql);
@@ -176,7 +176,7 @@ function aggregateCapacity(sql: SqlText): number {
 }
 
 function formulaVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
-  const formula = settled<MeasureExpression>(fields["measure.formula"]);
+  const formula = settledField(fields, "measure.formula");
   if (!formula) return [];
   const path = "measure.formula";
   const verdicts: RealizationVerdict[] = [];
@@ -211,7 +211,7 @@ const GRAIN_SQL: Readonly<Record<Grain, RegExp>> = {
 };
 
 function groupingVerdicts(fields: SpecFields, sql: SqlText): readonly RealizationVerdict[] {
-  const keys = settled<readonly (string | GroupingKeyValue)[]>(fields.grouping);
+  const keys = settledField(fields, "grouping");
   if (!keys) return [];
   const grains = keys.flatMap((key) => typeof key === "string" || !key.grain ? [] : [key.grain]);
   if (grains.length === 0) return [{ path: "grouping", outcome: "not_determinable", reason: "no grouping key declares a calendar grain" }];

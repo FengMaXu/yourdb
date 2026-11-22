@@ -43,6 +43,8 @@ export interface AnsweringDeps {
   readonly entityIdentity?: EntityIdentityOptions;
   /** Bounds of the data falsification probes after a result query (plan T4.3). */
   readonly dataFalsification?: DataFalsificationOptions;
+  /** How a Receipt names its published artifact for the transport; an opaque handle by default. */
+  readonly formatPublicRef?: (receiptId: string, sessionId: string) => string;
   /** Cached per Answering instance; loaded lazily from the executor. */
   readonly loadFanoutSchema: (context: BusinessContext) => Promise<FanoutSchema | undefined>;
 }

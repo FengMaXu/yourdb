@@ -50,7 +50,8 @@ describe("Pi Session Answering production seam", () => {
       const recovered = await reconstructed.inspect({ taskId: begun.taskId }, context("inspect-1"));
       expect(recovered.publication).toEqual(receipt);
       expect(receipt.resultRef).toBe(candidate.artifact.resultRef);
-      expect(receipt.publicRef).toBe(`/api/runtime/publications/${receipt.receiptId}?session_id=session-1`);
+      // Without a transport route the reference is an opaque handle (the Session Host injects its route).
+      expect(receipt.publicRef).toBe(`publication:${receipt.receiptId}`);
       const encoded = await results.encodeCsv(receipt.resultRef, context("read-published"));
       expect(encoded.content).toBe("count\n1\n");
       expect(receipt.presentationContentHash).toBe(encoded.contentHash);

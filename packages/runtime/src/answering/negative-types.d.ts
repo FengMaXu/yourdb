@@ -33,3 +33,19 @@ publishCandidate(observationArtifact);
 const emptyEvidenceBasis: FieldBasis = { kind: "evidence", evidenceIds: [] };
 
 void [badFromString, badRevision, badCandidate, badTask, badEvidence, badAlternative, emptyEvidenceBasis];
+
+import type { SpecFields } from "./model.js";
+import type { OutputValue, SelectionValue } from "./fields.js";
+import type { settledField } from "./support.js";
+declare const fields: SpecFields;
+declare const read: typeof settledField;
+
+// settledField returns the exact value type of its path.
+const goodOutput: OutputValue | undefined = read(fields, "output");
+// @ts-expect-error The output path does not hold a selection value.
+const badSelection: SelectionValue | undefined = read(fields, "output");
+// @ts-expect-error A path that is not a field path is refused at compile time.
+read(fields, "measure.nope");
+// @ts-expect-error A sentence field is a string, not a structured value.
+const badSentence: OutputValue | undefined = read(fields, "population.eligibility");
+void goodOutput; void badSelection; void badSentence;

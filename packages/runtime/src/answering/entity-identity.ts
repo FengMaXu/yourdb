@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
-import { layersOf, type EntityValue, type MeasureExpression, type SourceValue } from "./fields.js";
-import { settled } from "./support.js";
+import { layersOf, type MeasureExpression } from "./fields.js";
+import { settledField } from "./support.js";
 import type { FanoutDialect } from "./fanout-check.js";
 
 /**
@@ -70,8 +70,8 @@ export interface IdentityTarget {
 
 /** Tables to observe for this Revision; empty when entity or source is not settled. */
 export function identityTargets(fields: SpecFields): { readonly targets: readonly IdentityTarget[]; readonly limitations: readonly string[] } {
-  const entity = settled<EntityValue>(fields["population.entity"]);
-  const source = settled<SourceValue>(fields["population.source"]);
+  const entity = settledField(fields, "population.entity");
+  const source = settledField(fields, "population.source");
   if (!entity || !source) return { targets: [], limitations: [] };
   const limitations: string[] = [];
   const keys = entity.keyColumns?.map(columnName);
@@ -132,7 +132,7 @@ function names(text: string, key: string): boolean {
  */
 export function evaluateEntityIdentity(fields: SpecFields, observations: readonly TableIdentityObservation[], limitations: readonly string[] = []): EntityIdentityReport {
   const findings: EntityIdentityFinding[] = [];
-  const counts = countLayers(settled<MeasureExpression>(fields["measure.formula"]));
+  const counts = countLayers(settledField(fields, "measure.formula"));
   for (const item of observations) {
     if (item.rows === undefined) continue;
     if (item.keyColumns && item.distinctKeys !== undefined && item.distinctKeys < item.rows) {

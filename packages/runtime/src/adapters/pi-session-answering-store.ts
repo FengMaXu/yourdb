@@ -8,8 +8,11 @@ import {
   type AnsweringStoreSnapshot,
   type AnsweringTransaction,
   type TaskBundle,
-} from "../answering/answering-store.js";
-import type { BusinessContext, TaskId, QueryTaskRecord, ResultCandidateRecord } from "../answering/model.js";
+  type BusinessContext,
+  type TaskId,
+  type QueryTaskRecord,
+  type ResultCandidateRecord,
+} from "../answering/storage.js";
 
 /**
  * One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`),

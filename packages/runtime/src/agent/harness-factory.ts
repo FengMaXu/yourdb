@@ -8,7 +8,7 @@ import type {
 import { InMemoryCredentialStore, type Model, type Models } from "@earendil-works/pi-ai";
 import { builtinModels } from "@earendil-works/pi-ai/providers/all";
 import type { Answering, AnsweringStore, QueryExecutionScope, ResultStore } from "../answering/public.js";
-import type { FanoutDialect, FanoutSchema } from "../answering/fanout-check.js";
+import type { FanoutDialect, FanoutSchema } from "../answering/public.js";
 import type { DataAgentToolContext } from "../tools/answering.js";
 import { PiTranscriptFacet, type PresentationAgentEvent, type RuntimeExecutionSnapshot, type RuntimeObservation, type TranscriptSnapshot } from "../facets/transcript.js";
 import type { ArtifactDirectory } from "../facets/artifact-directory.js";
