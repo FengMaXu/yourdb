@@ -20,7 +20,7 @@ export {
   type FanoutTarget,
   type FanoutPlan,
 } from "./fanout-check.js";
-export { InMemoryAnsweringStore, type AnsweringStore } from "./answering-store.js";
+export type { AnsweringStore } from "./answering-store.js";
 export {
   FIELD_PATHS,
   FIELD_SECTIONS,
@@ -35,7 +35,7 @@ export {
 } from "./fields.js";
 export { FIELD_FORMS } from "./field-transition.js";
 export { quoteAppearsIn, type AuthorizedEvidenceDocument, type EvidenceSource } from "./evidence-admission.js";
-export { InMemoryResultStore, type ResultStore } from "./result-store.js";
+export type { ResultStore } from "./result-store.js";
 export {
   type AdviceView,
   type AnswerRevisionView,
@@ -76,3 +76,7 @@ export {
   isScopedReadOnlySql,
 } from "./model.js";
 export { witnessText, type ProbeSample, type WitnessRow } from "./probe-diff.js";
+export { renderActions, type AnsweringAction } from "./actions.js";
+export { renderEntityIdentity } from "./entity-identity.js";
+export { renderCalendarCoverage } from "./calendar-coverage.js";
+export { buildPhysicalProfile } from "./physical-profile.js";

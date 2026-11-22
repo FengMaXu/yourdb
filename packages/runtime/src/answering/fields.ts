@@ -50,24 +50,21 @@ export type FieldSection = typeof FIELD_SECTIONS[number];
  * Physical fields are facts about this database rather than the user's
  * meaning; they are settled by schema facts and observations, not by quotes.
  */
-const PHYSICAL_PATHS = new Set<SpecPath>(["population.source", "population.timeField", "population.joinMultiplicity"]);
 export type FieldLayer = "semantic" | "physical";
 
 export function layerOf(path: SpecPath): FieldLayer {
-  return PHYSICAL_PATHS.has(path) ? "physical" : "semantic";
+  return registryEntry(path).layer;
 }
 
-/** Semantic fields that settle the material population (ADR-0006). */
-export const POPULATION_PATHS = new Set<SpecPath>(["population.entity", "population.eligibility", "population.conditions"]);
 
 /** A Report Task owns the population and the named measures; its chart queries inherit them (ADR-0009). */
 export function isSharedPath(path: string): boolean {
-  return path.startsWith("population.") || MEASURE_DEFINITION.test(path);
+  return isSpecPath(path) && registryEntry(path).shared;
 }
 
 /** Paths whose open alternatives need advice before a decision when an advisor is configured. */
 export function needsAdvice(path: SpecPath): boolean {
-  return path !== "selection" && path !== "selection.ties" && path !== "output";
+  return registryEntry(path).needsAdvice;
 }
 
 export const MEASURE_OPS = [
@@ -189,6 +186,52 @@ export interface FieldValues {
 }
 
 export type FieldValue = FieldValues[FieldPath] | MeasureDefinitionValue;
+
+/** The value type of each field path. */
+export type FieldValueMap = FieldValues;
+
+/** What the Runtime knows about one field path, in one place. */
+export interface FieldRegistryEntry {
+  /** semantic: the user's meaning; physical: a fact about this database. */
+  readonly layer: FieldLayer;
+  /** A Report Task shares it with its chart queries (ADR-0009). */
+  readonly shared: boolean;
+  /** Settles the material population, so its decisions are governed by ADR-0006. */
+  readonly populationGoverned: boolean;
+  /** Open alternatives need advice before a decision when an advisor is configured (ADR-0005). */
+  readonly needsAdvice: boolean;
+}
+
+const entry = (layer: FieldLayer, shared: boolean, populationGoverned: boolean, needsAdvice: boolean): FieldRegistryEntry => ({ layer, shared, populationGoverned, needsAdvice });
+
+export const FIELD_REGISTRY: { readonly [P in FieldPath]: FieldRegistryEntry } = {
+  "population.entity": entry("semantic", true, true, true),
+  "population.eligibility": entry("semantic", true, true, true),
+  "population.conditions": entry("semantic", true, true, true),
+  "population.source": entry("physical", true, false, true),
+  "population.time": entry("semantic", true, false, true),
+  "population.timeField": entry("physical", true, false, true),
+  "population.missing": entry("semantic", true, false, true),
+  "population.joinMultiplicity": entry("physical", true, false, true),
+  "measure.formula": entry("semantic", false, false, true),
+  "measure.countGrain": entry("semantic", false, false, true),
+  "measure.denominator": entry("semantic", false, false, true),
+  "measure.window": entry("semantic", false, false, true),
+  grouping: entry("semantic", false, false, true),
+  selection: entry("semantic", false, false, false),
+  "selection.ties": entry("semantic", false, false, false),
+  output: entry("semantic", false, false, false),
+};
+
+/** A Report Task measure definition is shared, semantic and advised. */
+const MEASURE_DEFINITION_ENTRY = entry("semantic", true, false, true);
+
+export function registryEntry(path: SpecPath): FieldRegistryEntry {
+  return isFieldPath(path) ? FIELD_REGISTRY[path] : MEASURE_DEFINITION_ENTRY;
+}
+
+/** Semantic fields that settle the material population (ADR-0006). */
+export const POPULATION_PATHS: ReadonlySet<SpecPath> = new Set<SpecPath>(FIELD_PATHS.filter((path) => FIELD_REGISTRY[path].populationGoverned));
 
 export class FieldValueError extends Error {
   constructor(message: string) {

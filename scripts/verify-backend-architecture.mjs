@@ -90,6 +90,12 @@ for (const file of productionFiles) {
     if (isCapabilities && hasAny(normalized, ["/agent/", "/answering/", "/application/", "/tools/"])) fail(`${rel}: capability imports forbidden ${specifier}`);
     if (isAnswering && hasAny(normalized, ["pi-agent", "electron", "fastify", "http", "/tools/", "/application/"])) fail(`${rel}: Answering imports forbidden seam ${specifier}`);
     if ((isAgent || isTools) && hasAny(normalized, ["/answering/answering-store", "/answering/result-store"])) fail(`${rel}: Agent/Tool imports concrete Answering store ${specifier}`);
+    // Answering has one public entry; storage.js is for the composition root and storage adapters only.
+    const answeringModule = /(?:^|\/)answering\/([^/]+)\.js$/.exec(normalized)?.[1];
+    if (!isAnswering && rel.startsWith("packages/runtime/src/") && answeringModule && answeringModule !== "public") {
+      const storageAllowed = rel.startsWith("packages/runtime/src/adapters/") || rel.startsWith("packages/runtime/src/application/");
+      if (!(answeringModule === "storage" && storageAllowed)) fail(`${rel}: imports Answering internals ${specifier}; use answering/public.js${storageAllowed ? " or answering/storage.js" : ""}`);
+    }
     if (isDelegation && hasAny(normalized, ["/application/", "/answering/"])) fail(`${rel}: Delegation core imports forbidden host/business dependency ${specifier}`);
     if (isFacets && hasAny(normalized, ["/answering/answering-store", "/answering/result-store"])) fail(`${rel}: Facet imports concrete Answering store ${specifier}`);
     if (isContracts && hasAny(normalized, ["pi-agent", "chord", "better-sqlite", "sqlite"])) fail(`${rel}: contracts imports infrastructure ${specifier}`);
@@ -105,6 +111,9 @@ for (const file of productionFiles) {
   }
 
   if (isAnswering && /\bas any\b/.test(text)) fail(`${rel}: Answering production contains as any`);
+  // The domain names next steps with action markers; transports render routes and tool names (plan T3.2).
+  if (isAnswering && /\/api\/runtime\//.test(text)) fail(`${rel}: Answering production hard-codes a transport route`);
+  if (isAnswering && /\b(?:set_answer_spec|query_database|ask_user_clarification|publish_query_result|export_query|inspect_answer|begin_query_task)\b/.test(text)) fail(`${rel}: Answering production hard-codes a model tool name`);
   if (isElectronOrServer && /(?:@data-agent\/runtime\/protocol|packages\/runtime\/dist\/protocol|packages\/runtime\/src\/protocol)/.test(text.replaceAll("\\", "/"))) {
     fail(`${rel}: transport Host references Runtime protocol internals`);
   }

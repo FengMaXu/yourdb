@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_QUERY_BUDGET_POLICY,
   InMemoryAnswering,
-  InMemoryAnsweringStore,
-  InMemoryResultStore,
   type AnsweringStore,
   type BusinessContext,
 } from "./public.js";
+import { InMemoryAnsweringStore, InMemoryResultStore } from "./storage.js";
 import { resultFingerprint } from "./result-fingerprint.js";
 
 const context = (invocationId: string): BusinessContext => ({

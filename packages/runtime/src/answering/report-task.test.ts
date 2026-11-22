@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   InMemoryAnswering,
-  InMemoryAnsweringStore,
-  InMemoryResultStore,
   type BusinessContext,
 } from "./public.js";
+import { InMemoryAnsweringStore, InMemoryResultStore } from "./storage.js";
+import { renderAnsweringText } from "../tools/answering.js";
 
 const context = (invocationId: string): BusinessContext => ({
   principal: { id: "user-1" },
@@ -97,7 +97,9 @@ describe("Report Task", () => {
     const changed = await revise(answering, parent.taskId, "parent-2", { "population.time": { value: { expression: "2017", boundary: "inclusive" }, reason: "the report covers 2017" } });
     // The change itself names the chart query that must rebind, and the refused query says how.
     expect(changed.staleChartQueries).toEqual([child.taskId]);
-    await expect(result(answering, child.taskId, child.revisionId, "stale")).rejects.toMatchObject({ code: "PARENT_REVISION_STALE", message: expect.stringContaining(`"taskId": "${child.taskId}", "rebind": true`) });
+    await expect(result(answering, child.taskId, child.revisionId, "stale")).rejects.toMatchObject({ code: "PARENT_REVISION_STALE", details: { action: "rebind", taskId: child.taskId } });
+    const stale = await result(answering, child.taskId, child.revisionId, "stale-again").catch((error: Error) => error);
+    expect(renderAnsweringText((stale as Error).message)).toContain(`"taskId": "${child.taskId}", "rebind": true`);
     await expect(answering.execute({ kind: "exploration", taskId: child.taskId, sql: "SELECT 1" }, context("explore"))).resolves.toMatchObject({ kind: "exploration" });
 
     const rebound = await revise(answering, child.taskId, "rebind", {}, { rebind: true });

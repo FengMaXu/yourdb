@@ -29,8 +29,9 @@ import type { AnsweringDeps } from "./deps.js";
 export const INLINE_ROW_LIMIT = 10;
 export const PUBLICATION_POLICY_VERSION = "answering-publication-v1" as const;
 
-export function publicRefFor(receiptId: string, sessionId: string): string {
-  return `/api/runtime/publications/${receiptId}?session_id=${encodeURIComponent(sessionId)}`;
+/** The default public reference is an opaque handle; a transport injects its own route (InMemoryAnsweringOptions.formatPublicRef). */
+export function defaultPublicRef(receiptId: string, _sessionId: string): string {
+  return `publication:${receiptId}`;
 }
 
 /** The checks a Receipt carries from the Revision's data checks and the SQL, not from the rows. */
@@ -47,7 +48,7 @@ export interface ReceiptParts {
 }
 
 /** One Receipt shape for publish and refresh: the bound Candidate, its checks, and the rows' physical profile. */
-export function buildReceipt(parts: ReceiptParts, context: BusinessContext): PublicationReceipt {
+export function buildReceipt(parts: ReceiptParts, context: BusinessContext, formatPublicRef: (receiptId: string, sessionId: string) => string = defaultPublicRef): PublicationReceipt {
   const { candidate } = parts;
   const receiptId = makeInternalId("publication") as unknown as PublicationReceipt["receiptId"];
   return {
@@ -59,7 +60,7 @@ export function buildReceipt(parts: ReceiptParts, context: BusinessContext): Pub
     revisionId: candidate.revisionId,
     resultRef: candidate.resultRef,
     format: parts.format,
-    publicRef: publicRefFor(receiptId, context.sessionId),
+    publicRef: formatPublicRef(receiptId, context.sessionId),
     contentHash: candidate.contentHash,
     presentationContentHash: parts.presentationContentHash,
     ...(candidate.coverage ? { coverage: candidate.coverage } : {}),
@@ -242,6 +243,6 @@ export async function publishCandidate(deps: AnsweringDeps, input: PublishCandid
   if (format === "inline" && result.rowCount > INLINE_ROW_LIMIT) throw new AnsweringError("INLINE_RESULT_TOO_LARGE", `Inline publication is limited to ${INLINE_ROW_LIMIT} rows`);
   // The published artifact is always CSV; format only decides whether the rows are also echoed inline.
   const encoded = await deps.resultStore.encodeCsv(result.resultRef, context);
-  const receipt = buildReceipt({ candidate: preparation.candidate, result, format, presentationContentHash: encoded.contentHash, ...(preparation.disclosure ? { disclosure: preparation.disclosure } : {}), requestId: input.requestId }, context);
+  const receipt = buildReceipt({ candidate: preparation.candidate, result, format, presentationContentHash: encoded.contentHash, ...(preparation.disclosure ? { disclosure: preparation.disclosure } : {}), requestId: input.requestId }, context, deps.formatPublicRef);
   return (await commitPublication(deps, receipt, context)).receipt;
 }

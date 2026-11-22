@@ -89,6 +89,8 @@ export interface InMemoryAnsweringOptions {
   readonly entityIdentity?: EntityIdentityOptions;
   /** Bounds of the data falsification probes after a result query (probe count, per-probe timeout). */
   readonly dataFalsification?: DataFalsificationOptions;
+  /** How a Receipt names its published artifact; the HTTP composition root injects its route. Default: an opaque handle. */
+  readonly formatPublicRef?: (receiptId: string, sessionId: string) => string;
 }
 
 
@@ -109,6 +111,7 @@ function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
     fanout,
     ...(options.entityIdentity ? { entityIdentity: options.entityIdentity } : {}),
     ...(options.dataFalsification ? { dataFalsification: options.dataFalsification } : {}),
+    ...(options.formatPublicRef ? { formatPublicRef: options.formatPublicRef } : {}),
     loadFanoutSchema: createFanoutSchemaLoader(fanout, options.sqlExecutor),
   };
 }

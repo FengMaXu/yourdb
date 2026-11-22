@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
-import type { OutputValue } from "./fields.js";
+import { settledField } from "./support.js";
 import type { PrivateResultObject } from "./result-store.js";
 import { evaluateResultDomain, RESULT_DOMAIN_CHECK_ID, RESULT_DOMAIN_RULE_VERSION } from "./result-domain.js";
 
@@ -42,9 +42,8 @@ function cryptoRandomId(): string {
 const shapeCheck: CandidateCheck = {
   id: "result_shape",
   evaluate(input) {
-    const field = input.fields.output;
-    if (!field || (field.state !== "specified" && field.state !== "decided")) return { kind: "not_applicable" };
-    const output = field.value as OutputValue;
+    const output = settledField(input.fields, "output");
+    if (!output) return { kind: "not_applicable" };
     if (output.rowMode === "scalar" && input.result.rowCount !== 1) {
       return { kind: "confirmed", finding: finding("shape_conflict", `Expected one scalar row but received ${input.result.rowCount}`, true, "result_shape") };
     }

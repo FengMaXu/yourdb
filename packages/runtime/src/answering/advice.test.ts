@@ -3,6 +3,7 @@ import { InMemoryAnswering } from "./service.js";
 import { InMemoryAnsweringStore } from "./answering-store.js";
 import { InMemoryResultStore } from "./result-store.js";
 import { UNAVAILABLE_ADVICE_RETRY_MS } from "./advice-execution.js";
+import { renderAnsweringText } from "../tools/answering.js";
 import type { CompareHypothesesInput, HypothesisChoiceAssessment, HypothesisChoiceRecommendation } from "../judgment/hypothesis-choice.js";
 
 const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": "one row per order", grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
@@ -203,7 +204,9 @@ describe("deciding against advice (ADR-0005)", () => {
   it("sends a decision the advice cannot separate to the user while the user can be asked", async () => {
     const { answering, view } = await setup(noLean);
     const decided = await decide(answering, view.taskId, "按下单时间");
-    expect(decided.outcomes?.[0]).toMatchObject({ status: "rejected", code: "SPEC_TRANSITION_INVALID", message: expect.stringContaining("ask the user with ask_user_clarification") });
+    expect(decided.outcomes?.[0]).toMatchObject({ status: "rejected", code: "SPEC_TRANSITION_INVALID", message: expect.stringContaining("ask the user (") });
+    // The domain names the step, not the tool; the tool layer renders it.
+    expect(renderAnsweringText(decided.outcomes?.[0]?.message ?? "")).toContain("ask the user (ask_user_clarification)");
   });
 
   it("decides an inseparable field without a user, and discloses it", async () => {

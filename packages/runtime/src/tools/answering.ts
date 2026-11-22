@@ -1,5 +1,4 @@
 import { Type, type Static } from "typebox";
-import { rebindCall } from "../answering/report.js";
 import { Value } from "typebox/value";
 import type { JsonValue } from "@earendil-works/chord";
 import type {
@@ -8,9 +7,7 @@ import type {
   AgentToolResult,
   Context,
 } from "@earendil-works/pi-agent-core";
-import { AnsweringError, FIELD_FORMS, FIELD_PATHS, witnessText, type WitnessRow } from "../answering/public.js";
-import { renderEntityIdentity } from "../answering/entity-identity.js";
-import { renderCalendarCoverage } from "../answering/calendar-coverage.js";
+import { AnsweringError, FIELD_FORMS, FIELD_PATHS, renderActions, renderCalendarCoverage, renderEntityIdentity, witnessText, type WitnessRow } from "../answering/public.js";
 import type {
   AdviceView,
   Answering,
@@ -22,6 +19,7 @@ import type {
   InspectAnswer,
   PublishCandidate,
 } from "../answering/public.js";
+import type { AnsweringAction } from "../answering/public.js";
 import { defineDataAgentTool, type DataAgentToolDefinition, type ToolPromptMetadata } from "./tool-definition.js";
 import { bigintSafeJson } from "../primitives.js";
 
@@ -187,6 +185,45 @@ function witnessLines(witnesses: readonly WitnessRow[] | undefined, indent = "")
   return witnesses.map((witness) => `\n${indent}[WITNESS] ${witnessText(witness, (id) => id)}`).join("");
 }
 
+/** The call that rebinds a chart query to its Report Task's current Revision. */
+export function rebindCall(taskId: string): string {
+  return `set_answer_spec({"taskId": "${taskId}", "rebind": true, "fields": {}})`;
+}
+
+/** Answering's next-step markers in this tool vocabulary. */
+function renderAction(action: AnsweringAction): string {
+  if (action.kind === "clarify") return "ask_user_clarification";
+  if (action.kind === "rebind") return rebindCall(action.taskId);
+  return action.probePath ? `query_database kind=exploration with probe {path: "${action.probePath}", alternativeId}` : "query_database";
+}
+
+/** Every Answering message reaches the model through here, so markers never leak. */
+export function renderAnsweringText(text: string): string {
+  return renderActions(text, renderAction);
+}
+
+/** An AnsweringError keeps its type and code; only its message is rendered for the model. */
+function rendered(answering: Answering): Answering {
+  const call = async <T>(run: () => Promise<T>): Promise<T> => {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof AnsweringError) {
+        error.message = renderAnsweringText(error.message);
+        if (error.obstacle) (error.obstacle as { message: string }).message = renderAnsweringText(error.obstacle.message);
+      }
+      throw error;
+    }
+  };
+  return {
+    set: (input, context) => call(() => answering.set(input, context)),
+    execute: (input, context) => call(() => answering.execute(input, context)),
+    publish: (input, context) => call(() => answering.publish(input, context)),
+    refresh: (input, context) => call(() => answering.refresh(input, context)),
+    inspect: (input, context) => call(() => answering.inspect(input, context)),
+  };
+}
+
 function queryText(view: Awaited<ReturnType<Answering["execute"]>>): string {
   const artifact = view.artifact.kind === "exploration"
     ? `[EXPLORATION_EVIDENCE] evidenceId=${view.artifact.evidenceId}\nCite this evidenceId in a field's evidenceIds; do not resubmit the observation body.`
@@ -213,7 +250,7 @@ function beginQueryTaskTool(answering: Answering): AgentHarnessTool<DataAgentToo
       const business = trustedContext(toolContext, invocation, context);
       const requestMessageId = toolContext?.requestMessageId?.trim();
       if (!requestMessageId) throw new Error("ANSWERING_REQUEST_MESSAGE_REQUIRED");
-      const view = await answering.set({
+      const view = await rendered(answering).set({
         requestMessageId,
         // Stable across model retries or duplicate bootstrap calls so a second
         // invocation cannot mint a fresh Query Task budget.
@@ -301,7 +338,7 @@ function setSpecTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
       // Request and current message identities come from the trusted Session Host, never from model arguments.
       const requestMessageId = toolContext?.requestMessageId?.trim();
       if (!value.taskId && !requestMessageId) throw new Error("ANSWERING_REQUEST_MESSAGE_REQUIRED");
-      const view = await answering.set({
+      const view = await rendered(answering).set({
         ...(value.taskId ? { taskId: value.taskId } : { requestMessageId: requestMessageId! }),
         ...(requestMessageId ? { currentMessageId: requestMessageId } : {}),
         requestId: invocation.invocationId,
@@ -310,7 +347,7 @@ function setSpecTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
         ...(value.parentTaskId ? { parent: { taskId: value.parentTaskId } } : {}),
         ...(value.rebind ? { rebind: true } : {}),
       }, business);
-      const lines = (view.outcomes ?? []).map((outcome) => outcome.status === "applied" ? `- ✓ ${outcome.path}` : `- ✗ ${outcome.path}: ${outcome.message ?? "not applied"}`);
+      const lines = (view.outcomes ?? []).map((outcome) => outcome.status === "applied" ? `- ✓ ${outcome.path}` : `- ✗ ${outcome.path}: ${renderAnsweringText(outcome.message ?? "not applied")}`);
       const rejected = (view.outcomes ?? []).some((outcome) => outcome.status === "rejected");
       const stale = view.supersededCandidateId ? [`- 失效: 上一版的结果候选 ${view.supersededCandidateId} 未发布，已不能发布`] : [];
       const identity = renderEntityIdentity(view.entityIdentity);
@@ -343,7 +380,7 @@ function queryTool(answering: Answering): AgentHarnessTool<DataAgentToolContext>
       const value = checked(ANSWERING_QUERY_PARAMETERS, input) as QueryInput;
       const business = trustedContext(toolContext, invocation, context);
       try {
-        const view = await answering.execute(value as ExecuteQuery, business);
+        const view = await rendered(answering).execute(value as ExecuteQuery, business);
         return result(queryText(view), view);
       } catch (error) {
         // An inner-loop obstacle is structured feedback for the main Agent,
@@ -373,7 +410,7 @@ function publishTool(answering: Answering, contentReader: PublishedContentReader
       void toolCallId;
       const value = checked(ANSWERING_PUBLISH_PARAMETERS, input) as PublishInput;
       const business = trustedContext(toolContext, invocation, context);
-      const view = await answering.publish({ candidateId: value.candidateId, format: value.format, requestId: invocation.invocationId } satisfies PublishCandidate, business);
+      const view = await rendered(answering).publish({ candidateId: value.candidateId, format: value.format, requestId: invocation.invocationId } satisfies PublishCandidate, business);
       // A Receipt is the authorization handle. Large CSV/typed rows stay in
       // ResultStore and are never copied into the Pi tool settlement. Bounded
       // inline content is reread through the Receipt for user-visible display.
@@ -407,7 +444,7 @@ function inspectTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
       void toolCallId;
       const value = checked(ANSWERING_INSPECT_PARAMETERS, input) as InspectInput;
       const business = trustedContext(toolContext, invocation, context);
-      const view = await answering.inspect(value as InspectAnswer, business);
+      const view = await rendered(answering).inspect(value as InspectAnswer, business);
       return result(bigintSafeJson(modelVisibleTaskView(view)), view);
     },
   };

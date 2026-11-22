@@ -3,10 +3,8 @@ import type { Session, Skill } from "@earendil-works/pi-agent-core";
 import { InMemoryAnswering, isScopedReadOnlySql, type Answering, type AnsweringSqlExecutor, type AnsweringStore, type EvidenceSource, type FanoutAnsweringOptions, type QueryBudgetPolicy, type ResultStore } from "../answering/public.js";
 import { PiSessionAnsweringStore } from "../adapters/pi-session-answering-store.js";
 import { PiSessionClarificationLedger } from "../adapters/pi-session-clarification-ledger.js";
-import { FileResultStore, InMemoryResultStore } from "../answering/result-store.js";
+import { FileResultStore, InMemoryResultStore, assertTaskAccess, type PublicationId } from "../answering/storage.js";
 import { ResultReclamation } from "./result-reclamation.js";
-import { assertTaskAccess } from "../answering/answering-store.js";
-import type { PublicationId } from "../answering/model.js";
 import { loadSkillsFromRoots, resolveSkillRoots } from "../skills.js";
 import { renderKnowledgeCatalog, type KnowledgeIndex } from "../knowledge.js";
 import { ClarificationManager } from "../clarification.js";
@@ -254,6 +252,8 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
   const resultStore = options.resultStore ?? (options.resultRoot ? new FileResultStore(options.resultRoot) : new InMemoryResultStore());
   const piRuntime = await createDataAgentPiRuntime(options.profile);
   const answeringDomain: Answering = new InMemoryAnswering({
+    // The Session Host serves published artifacts under this route.
+    formatPublicRef: (receiptId, sessionId) => `/api/runtime/publications/${receiptId}?session_id=${encodeURIComponent(sessionId)}`,
     store: answeringStore,
     resultStore,
     sqlExecutor: asSqlExecutor(options.queryExecutor),

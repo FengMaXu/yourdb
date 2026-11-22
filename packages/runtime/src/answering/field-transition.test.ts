@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { InMemoryAnswering, InMemoryAnsweringStore, InMemoryResultStore, type BusinessContext } from "./public.js";
+import { InMemoryAnswering, type BusinessContext } from "./public.js";
+import { InMemoryAnsweringStore, InMemoryResultStore } from "./storage.js";
 import { parseFieldValue, requiredPaths } from "./fields.js";
 
 const context = (invocationId: string): BusinessContext => ({ principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "operation-1", invocationId });

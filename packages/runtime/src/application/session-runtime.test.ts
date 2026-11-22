@@ -7,7 +7,7 @@ import { canonicalPrompt, composeKnowledgeCatalogPrompt, composeSubagentSystemPr
 import type { BusinessContext } from "../answering/model.js";
 import { KnowledgeIndex } from "../knowledge.js";
 import { ClarificationManager } from "../clarification.js";
-import { InMemoryAnsweringStore } from "../answering/answering-store.js";
+import { InMemoryAnsweringStore } from "../answering/storage.js";
 import type { CompareHypothesesInput, HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
 
 const profile: DataAgentModelProfile = { provider: "openai", model: "test-model", apiKey: "test" };

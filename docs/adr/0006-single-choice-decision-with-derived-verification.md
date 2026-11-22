@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Choice 只有一种决定动作，是否已证实由运行时判定
