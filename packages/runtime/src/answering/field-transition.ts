@@ -495,7 +495,7 @@ export function applyFieldWrite(body: FieldBody, parsed: ParsedField, context: W
     const basis = basisFor(path, cited, rationale);
     guardPopulation(path, basis, "decided", cited, context.governance.populationDecisions);
     const { adviceOverride, adviceUnavailable, adviceUndecided } = governDecision(path, open, alternative.id, write.adviceOverride, context.governance, context.resolve, cited, body.fields);
-    return own(setField(body, path, {
+    return finish(own(setField(body, path, {
       state: "decided",
       alternatives: open.alternatives,
       ...(open.waivers ? { waivers: open.waivers } : {}),
@@ -506,7 +506,7 @@ export function applyFieldWrite(body: FieldBody, parsed: ParsedField, context: W
       ...(adviceOverride ? { adviceOverride } : {}),
       ...(adviceUnavailable ? { adviceUnavailable } : {}),
       ...(adviceUndecided ? { adviceUndecided } : {}),
-    }));
+    })));
   }
 
   // A value: its basis is evidence when what it cites qualifies, otherwise a disclosed assumption.

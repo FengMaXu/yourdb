@@ -15,6 +15,7 @@ import {
   type RevisionId,
   type TaskId,
   type QueryBudgetPolicy,
+  type InvocationMemo,
 } from "./model.js";
 import { assertTaskAccess, type AnsweringStore } from "./answering-store.js";
 import { AnsweringError } from "./errors.js";
@@ -115,7 +116,9 @@ export class InMemoryAnswering implements Answering {
   /** Ephemeral coalescing only; Pi Invocation remains the durable replay authority. */
   private readonly invocationExecutions = new Map<string, { signature: string; promise: Promise<QueryExecutionView> }>();
   /** Coalesce equivalent final executions even when a transport retry receives a new invocation id. */
-  private readonly resultExecutions = new Map<string, Promise<QueryExecutionView>>();
+  private readonly resultExecutions = new Map<string, SharedExecution<QueryExecutionView>>();
+  /** Coalesce concurrent refreshes of one Receipt under one request id: the query runs once. */
+  private readonly refreshes = new Map<string, Promise<PublicationReceipt>>();
 
   constructor(options: InMemoryAnsweringOptions) {
     this.deps = resolveDeps(options);
@@ -138,17 +141,22 @@ export class InMemoryAnswering implements Answering {
     const resultKey = input.kind === "result"
       ? contentHash({ sessionId: context.sessionId, taskId: input.taskId, revisionId: input.revisionId, sql: input.sql.trim() })
       : undefined;
-    let shared = resultKey ? this.resultExecutions.get(resultKey) : undefined;
-    if (!shared) {
-      shared = this.executeOnce(input, context);
-      if (resultKey) {
-        this.resultExecutions.set(resultKey, shared);
-        void shared.finally(() => {
-          if (this.resultExecutions.get(resultKey) === shared) this.resultExecutions.delete(resultKey);
+    let joined: Promise<QueryExecutionView>;
+    if (resultKey) {
+      let shared = this.resultExecutions.get(resultKey);
+      if (!shared) {
+        const created = new SharedExecution<QueryExecutionView>((sharedContext) => this.executeOnce(input, { ...context, ...sharedContext }), context.memo);
+        shared = created;
+        this.resultExecutions.set(resultKey, created);
+        void created.promise.finally(() => {
+          if (this.resultExecutions.get(resultKey) === created) this.resultExecutions.delete(resultKey);
         }).catch(() => undefined);
       }
+      joined = shared.join(context);
+    } else {
+      joined = this.executeOnce(input, context);
     }
-    const promise = shared.finally(() => {
+    const promise = joined.finally(() => {
       if (this.invocationExecutions.get(key)?.promise === promise) this.invocationExecutions.delete(key);
     });
     this.invocationExecutions.set(key, { signature, promise });
@@ -183,7 +191,14 @@ export class InMemoryAnswering implements Answering {
 
   async refresh(input: RefreshPublication, context: BusinessContext): Promise<PublicationReceipt> {
     assertContext(context);
-    return refreshPublication(this.deps, input, context);
+    const key = `${context.sessionId}:${input.receiptId}:${input.requestId}`;
+    const existing = this.refreshes.get(key);
+    if (existing) return existing;
+    const promise = refreshPublication(this.deps, input, context).finally(() => {
+      if (this.refreshes.get(key) === promise) this.refreshes.delete(key);
+    });
+    this.refreshes.set(key, promise);
+    return promise;
   }
 
   async inspect(input: InspectAnswer, context: BusinessContext): Promise<AnswerTaskView> {
@@ -191,5 +206,64 @@ export class InMemoryAnswering implements Answering {
     const view = await this.deps.store.inspect(input.taskId as unknown as TaskId, context);
     if (!view) throw new AnsweringError("TASK_NOT_FOUND", `Task ${input.taskId} was not found`);
     return view;
+  }
+}
+
+/**
+ * One execution shared by concurrent equivalent callers. It runs under its own
+ * AbortController, cancelled only once every caller has aborted, so one
+ * caller's cancellation never fails another's request. Memo writes go to
+ * every caller's own memo, including callers that join later.
+ */
+class SharedExecution<T> {
+  readonly promise: Promise<T>;
+  private readonly controller = new AbortController();
+  private readonly memos = new Set<InvocationMemo>();
+  private readonly written = new Map<string, unknown>();
+  private active = 0;
+
+  constructor(run: (context: { readonly signal: AbortSignal; readonly memo: InvocationMemo }) => Promise<T>, private readonly leaderMemo: InvocationMemo | undefined) {
+    const memo: InvocationMemo = {
+      get: async (name) => this.written.has(name) ? this.written.get(name) : this.leaderMemo?.get(name),
+      set: async (name, value) => {
+        this.written.set(name, value);
+        await Promise.all([...this.memos].map((item) => item.set(name, value)));
+      },
+    };
+    // Start after the constructor returns, so the first caller is registered before the run begins.
+    this.promise = Promise.resolve().then(() => run({ signal: this.controller.signal, memo }));
+    this.promise.catch(() => undefined);
+  }
+
+  async join(context: BusinessContext): Promise<T> {
+    const signal = context.signal;
+    if (signal?.aborted) throw signal.reason ?? new DOMException("Aborted", "AbortError");
+    if (context.memo && !this.memos.has(context.memo)) {
+      this.memos.add(context.memo);
+      // A late caller's memo catches up with what the shared run already recorded.
+      for (const [name, value] of this.written) await context.memo.set(name, value);
+    }
+    this.active += 1;
+    let detached = false;
+    const detach = () => {
+      if (detached) return;
+      detached = true;
+      this.active -= 1;
+      if (this.active === 0) this.controller.abort(signal?.reason);
+    };
+    if (!signal) return this.promise.finally(() => { detached = true; });
+    return new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        const last = this.active === 1;
+        detach();
+        // The last caller cancels the run and sees its own outcome; an earlier one leaves the others running.
+        if (!last) reject(signal.reason ?? new DOMException("Aborted", "AbortError"));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      this.promise.then(resolve, reject).finally(() => {
+        detached = true;
+        signal.removeEventListener("abort", onAbort);
+      });
+    });
   }
 }

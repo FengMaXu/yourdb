@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import { grainOf, type GroupingKeyValue, type MeasureExpression, type MeasureOperand, type SelectionValue, type SourceValue, type SpecPath, type TiesValue, type Grain } from "./fields.js";
 import { settled } from "./support.js";
+import { maskSql } from "./sql-lex.js";
 
 /**
  * Spec realization: does the final SQL implement the sealed fields? The Spec
@@ -34,47 +35,8 @@ interface SqlText {
   readonly depths: Int32Array;
 }
 
-function blankComments(sql: string, blankStrings: boolean): string {
-  const chars = [...sql];
-  let index = 0;
-  while (index < chars.length) {
-    if (chars[index] === "'") {
-      if (blankStrings) chars[index] = " ";
-      index += 1;
-      while (index < chars.length) {
-        if (chars[index] === "'" && chars[index + 1] === "'") {
-          if (blankStrings) {
-            chars[index] = " ";
-            chars[index + 1] = " ";
-          }
-          index += 2;
-          continue;
-        }
-        const closing = chars[index] === "'";
-        if (blankStrings) chars[index] = " ";
-        index += 1;
-        if (closing) break;
-      }
-      continue;
-    }
-    if (chars[index] === "-" && chars[index + 1] === "-") {
-      while (index < chars.length && chars[index] !== "\n") chars[index++] = " ";
-      continue;
-    }
-    if (chars[index] === "/" && chars[index + 1] === "*") {
-      chars[index++] = " ";
-      chars[index++] = " ";
-      while (index < chars.length && !(chars[index] === "*" && chars[index + 1] === "/")) chars[index++] = " ";
-      for (let end = 0; end < 2 && index < chars.length; end++) chars[index++] = " ";
-      continue;
-    }
-    index += 1;
-  }
-  return chars.join("").toLowerCase();
-}
-
 function sqlText(sql: string): SqlText {
-  const masked = blankComments(sql, true);
+  const masked = maskSql(sql, { identifiers: false }).toLowerCase();
   const depths = new Int32Array(masked.length);
   let depth = 0;
   for (let index = 0; index < masked.length; index++) {
@@ -82,7 +44,7 @@ function sqlText(sql: string): SqlText {
     if (masked[index] === "(") depth += 1;
     else if (masked[index] === ")") depth = Math.max(0, depth - 1);
   }
-  return { masked, withLiterals: blankComments(sql, false), depths };
+  return { masked, withLiterals: maskSql(sql, { strings: false, identifiers: false }).toLowerCase(), depths };
 }
 
 

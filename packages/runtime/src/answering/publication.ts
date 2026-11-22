@@ -16,16 +16,64 @@ import { makeInternalId } from "./internal-ids.js";
 import { unverifiedFields } from "./qualification.js";
 import { assertDeliverable } from "./report.js";
 import { fanoutDisclosureSummary } from "./fanout-execution.js";
-import { entityIdentityDisclosure } from "./entity-identity.js";
-import { calendarCoverageDisclosure } from "./calendar-coverage.js";
+import { ENTITY_IDENTITY_CHECK_ID, entityIdentityDisclosure } from "./entity-identity.js";
+import { CALENDAR_COVERAGE_CHECK_ID, calendarCoverageDisclosure } from "./calendar-coverage.js";
 import { candidateLifecycle, markCandidateCorrupt } from "./result-execution.js";
-import { realizationDisclosure } from "./realization-check.js";
+import { realizationDisclosure, SPEC_REALIZATION_CHECK_ID } from "./realization-check.js";
 import { buildPhysicalProfile } from "./physical-profile.js";
 import type { PrivateResultObject } from "./result-store.js";
 import { now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
 
-const INLINE_ROW_LIMIT = 10;
+/** Rows echoed inline at most; a larger result is delivered as CSV only. */
+export const INLINE_ROW_LIMIT = 10;
+export const PUBLICATION_POLICY_VERSION = "answering-publication-v1" as const;
+
+export function publicRefFor(receiptId: string, sessionId: string): string {
+  return `/api/runtime/publications/${receiptId}?session_id=${encodeURIComponent(sessionId)}`;
+}
+
+/** The checks a Receipt carries from the Revision's data checks and the SQL, not from the rows. */
+export const ROW_INDEPENDENT_CHECK_IDS: ReadonlySet<string> = new Set([SPEC_REALIZATION_CHECK_ID, ENTITY_IDENTITY_CHECK_ID, CALENDAR_COVERAGE_CHECK_ID]);
+
+export interface ReceiptParts {
+  readonly candidate: ResultCandidateRecord;
+  readonly result: PrivateResultObject;
+  readonly format: PublicationReceipt["format"];
+  readonly presentationContentHash: string;
+  readonly disclosure?: PublicationDisclosure;
+  readonly refreshes?: PublicationReceipt["refreshes"];
+  readonly requestId: string;
+}
+
+/** One Receipt shape for publish and refresh: the bound Candidate, its checks, and the rows' physical profile. */
+export function buildReceipt(parts: ReceiptParts, context: BusinessContext): PublicationReceipt {
+  const { candidate } = parts;
+  const receiptId = makeInternalId("publication") as unknown as PublicationReceipt["receiptId"];
+  return {
+    receiptId,
+    taskId: candidate.taskId,
+    principalId: context.principal.id,
+    sessionId: context.sessionId,
+    candidateId: candidate.candidateId,
+    revisionId: candidate.revisionId,
+    resultRef: candidate.resultRef,
+    format: parts.format,
+    publicRef: publicRefFor(receiptId, context.sessionId),
+    contentHash: candidate.contentHash,
+    presentationContentHash: parts.presentationContentHash,
+    ...(candidate.coverage ? { coverage: candidate.coverage } : {}),
+    ...(candidate.fanout ? { fanout: candidate.fanout } : {}),
+    ...(parts.disclosure ? { disclosure: parts.disclosure } : {}),
+    // Profiled from the integrity-checked object; it is not part of either content hash.
+    physicalProfile: buildPhysicalProfile(parts.result),
+    ...(parts.refreshes ? { refreshes: parts.refreshes } : {}),
+    policyVersion: PUBLICATION_POLICY_VERSION,
+    createdByInvocationId: context.invocationId,
+    requestId: parts.requestId,
+    createdAt: now(),
+  };
+}
 
 /**
  * Everything a Receipt must disclose about the exact published Candidate:
@@ -132,7 +180,7 @@ async function preparePublication(deps: AnsweringDeps, input: PublishCandidate, 
         revisionId: candidate.revisionId,
         resultRef: candidate.resultRef,
         contentHash: candidate.contentHash,
-        policyVersion: "answering-publication-v1",
+        policyVersion: PUBLICATION_POLICY_VERSION,
       },
       ...(disclosure ? { disclosure } : {}),
     } as const;
@@ -185,31 +233,9 @@ export async function publishCandidate(deps: AnsweringDeps, input: PublishCandid
     throw new AnsweringError("RESULT_INTEGRITY_MISMATCH", "Result Candidate content hash does not match ResultStore");
   }
   const format = input.format === "auto" ? (result.rowCount <= INLINE_ROW_LIMIT ? "inline" : "csv") : input.format;
-  if (format === "inline" && result.rowCount > INLINE_ROW_LIMIT) throw new AnsweringError("INLINE_RESULT_TOO_LARGE", "Inline publication is limited to ten rows");
+  if (format === "inline" && result.rowCount > INLINE_ROW_LIMIT) throw new AnsweringError("INLINE_RESULT_TOO_LARGE", `Inline publication is limited to ${INLINE_ROW_LIMIT} rows`);
   // The published artifact is always CSV; format only decides whether the rows are also echoed inline.
   const encoded = await deps.resultStore.encodeCsv(result.resultRef, context);
-  const receiptId = makeInternalId("publication") as unknown as PublicationReceipt["receiptId"];
-  const receipt: PublicationReceipt = {
-    receiptId,
-    taskId: permit.taskId,
-    principalId: context.principal.id,
-    sessionId: context.sessionId,
-    candidateId: permit.candidateId,
-    revisionId: permit.revisionId,
-    resultRef: permit.resultRef,
-    format,
-    publicRef: `/api/runtime/publications/${receiptId}?session_id=${encodeURIComponent(context.sessionId)}`,
-    contentHash: permit.contentHash,
-    presentationContentHash: encoded.contentHash,
-    ...(preparation.candidate.coverage ? { coverage: preparation.candidate.coverage } : {}),
-    ...(preparation.candidate.fanout ? { fanout: preparation.candidate.fanout } : {}),
-    ...(preparation.disclosure ? { disclosure: preparation.disclosure } : {}),
-    // Profiled from the integrity-checked object; it is not part of either content hash.
-    physicalProfile: buildPhysicalProfile(result),
-    policyVersion: permit.policyVersion,
-    createdByInvocationId: context.invocationId,
-    requestId: input.requestId,
-    createdAt: now(),
-  };
+  const receipt = buildReceipt({ candidate: preparation.candidate, result, format, presentationContentHash: encoded.contentHash, ...(preparation.disclosure ? { disclosure: preparation.disclosure } : {}), requestId: input.requestId }, context);
   return (await commitPublication(deps, receipt, context)).receipt;
 }
