@@ -295,7 +295,6 @@ function setSpecTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
       // Request and current message identities come from the trusted Session Host, never from model arguments.
       const requestMessageId = toolContext?.requestMessageId?.trim();
       if (!value.taskId && !requestMessageId) throw new Error("ANSWERING_REQUEST_MESSAGE_REQUIRED");
-      const before = value.taskId ? await answering.inspect({ taskId: value.taskId }, business) : undefined;
       const view = await answering.set({
         ...(value.taskId ? { taskId: value.taskId } : { requestMessageId: requestMessageId! }),
         ...(requestMessageId ? { currentMessageId: requestMessageId } : {}),
@@ -307,12 +306,10 @@ function setSpecTool(answering: Answering): AgentHarnessTool<DataAgentToolContex
       }, business);
       const lines = (view.outcomes ?? []).map((outcome) => outcome.status === "applied" ? `- ✓ ${outcome.path}` : `- ✗ ${outcome.path}: ${outcome.message ?? "not applied"}`);
       const rejected = (view.outcomes ?? []).some((outcome) => outcome.status === "rejected");
-      const stale = before && view.revisionId !== before.task.currentRevisionId && before.candidate && before.publication?.candidateId !== before.candidate.candidateId
-        ? [`- 失效: 上一版的结果候选 ${before.candidate.candidateId} 未发布，已不能发布`]
-        : [];
+      const stale = view.supersededCandidateId ? [`- 失效: 上一版的结果候选 ${view.supersededCandidateId} 未发布，已不能发布`] : [];
       const identity = renderEntityIdentity(view.entityIdentity);
       const calendar = renderCalendarCoverage(view.calendarCoverage);
-      const changed = !before || view.revisionId !== before.task.currentRevisionId;
+      const changed = !view.unchanged;
       return result([
         `[${changed ? "ANSWER_SPEC_SET" : "ANSWER_SPEC_UNCHANGED"}] taskId=${view.taskId} revisionId=${view.revisionId}`,
         ...lines,

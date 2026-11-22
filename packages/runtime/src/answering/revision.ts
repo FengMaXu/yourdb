@@ -352,7 +352,7 @@ async function reviseFields(deps: AnsweringDeps, input: SetAnswerFields, context
     const shape: TaskShape = { report: existingTask.role === "report", ...(inherited ? { inherited } : {}) };
     const applied = applyWrites(start, prepared, [...evidence, ...(parent?.evidence ?? [])], governanceFor(deps, existingTask), shape, createdAt);
     if (!applied.applied && !rebound) {
-      extras = taskExtras(tx, existingTask, applied.outcomes);
+      extras = { ...taskExtras(tx, existingTask, applied.outcomes), unchanged: true };
       return { view: viewFromRevision(taskId, previous, probeContextFor(deps, existingTask, evidence), existingTask.role === "report") } as const;
     }
     const reservation = reserveAttempt(tx, existingTask, deps.budgetPolicy, "revision", previous.revisionId, context.invocationId);
@@ -369,7 +369,9 @@ async function reviseFields(deps: AnsweringDeps, input: SetAnswerFields, context
     tx.putAttempt({ ...reservation.attempt!, state: "succeeded", outcome: "succeeded", sqlExecuted: false, updatedAt: createdAt });
     const revisedTask: QueryTaskRecord = { ...taskWithoutResults, currentRevisionId: revisionId, lifecycle: "open", updatedAt: createdAt, ...(rebound ? { parent: parent!.binding } : {}) };
     tx.putTask(revisedTask);
-    extras = taskExtras(tx, revisedTask, applied.outcomes);
+    const publishedCandidateId = existingTask.publicationId ? tx.getReceipt(existingTask.publicationId)?.candidateId : undefined;
+    const superseded = existingTask.latestCandidateId && existingTask.latestCandidateId !== publishedCandidateId ? existingTask.latestCandidateId : undefined;
+    extras = { ...taskExtras(tx, revisedTask, applied.outcomes), ...(superseded ? { supersededCandidateId: superseded } : {}) };
     return { view: viewFromRevision(taskId, revision, probeContextFor(deps, task, allEvidence), task.role === "report") } as const;
   }, context);
   if ("obstacle" in outcome) {

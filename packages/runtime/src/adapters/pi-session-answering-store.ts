@@ -7,8 +7,9 @@ import {
   type AnsweringStore,
   type AnsweringStoreSnapshot,
   type AnsweringTransaction,
+  type TaskBundle,
 } from "../answering/answering-store.js";
-import type { AnswerTaskView, BusinessContext, TaskId, QueryTaskRecord } from "../answering/model.js";
+import type { BusinessContext, TaskId, QueryTaskRecord, ResultCandidateRecord } from "../answering/model.js";
 
 /**
  * One Value per record, keyed `<kind>/<id>` (evidence and attempts: `<kind>/<taskId>/<id>`),
@@ -18,6 +19,11 @@ const RECORDS_NAMESPACE = "data-agent.answering.records";
 const ALL_RECORDS = value<StoredRecord>(RECORDS_NAMESPACE, "");
 const recordValue = (key: string): Value<StoredRecord> => value<StoredRecord>(RECORDS_NAMESPACE, key);
 const recordKey = (kind: string, ...ids: string[]): string => [kind, ...ids.map(encodeURIComponent)].join("/");
+/**
+ * Bumped with every commit that changes a record. A reader whose cache was
+ * built at the current version skips scanning and decoding every record.
+ */
+const VERSION_VALUE = value<number>("data-agent.answering.meta", "version");
 
 /**
  * A stored record and its place among the records of its kind. The in-memory
@@ -33,8 +39,17 @@ function encodeJson(valueToEncode: unknown): JsonValue {
   return JSON.parse(JSON.stringify(valueToEncode, (_key, valueToVisit) => typeof valueToVisit === "bigint" ? { __type: "bigint", value: valueToVisit.toString() } : valueToVisit)) as JsonValue;
 }
 
+/** A fresh copy of a stored JSON value with bigint markers restored, without a serialize round trip. */
 function decodeJson(valueToDecode: unknown): unknown {
-  return JSON.parse(JSON.stringify(valueToDecode), (_key, valueToVisit) => valueToVisit && typeof valueToVisit === "object" && valueToVisit.__type === "bigint" ? BigInt(valueToVisit.value) : valueToVisit);
+  if (Array.isArray(valueToDecode)) return valueToDecode.map(decodeJson);
+  if (valueToDecode && typeof valueToDecode === "object") {
+    const record = valueToDecode as Record<string, unknown>;
+    if (record.__type === "bigint" && typeof record.value === "string") return BigInt(record.value);
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(record)) out[key] = decodeJson(record[key]);
+    return out;
+  }
+  return valueToDecode;
 }
 
 /** Stored records back to a snapshot; within each kind, records keep the order they were first stored in. */
@@ -108,6 +123,9 @@ function recordingWrites(state: AnsweringTransaction, written: Map<string, JsonV
  */
 export class PiSessionAnsweringStore implements AnsweringStore {
   private delegate = new InMemoryAnsweringStore();
+  /** Stored records as last read or written, with the version they were read at. */
+  private records = new Map<string, StoredRecord>();
+  private version: number | undefined;
   private loaded = false;
   private tail: Promise<void> = Promise.resolve();
 
@@ -116,78 +134,81 @@ export class PiSessionAnsweringStore implements AnsweringStore {
     private readonly piContext: Context = TODO_CONTEXT,
   ) {}
 
-  private async readRecords(reader: Reader): Promise<Map<string, StoredRecord>> {
-    return new Map((await reader.scanValues(ALL_RECORDS, this.piContext)).map((entry) => [entry.address.key, entry.value] as const));
-  }
-
-  private async readSnapshot(): Promise<AnsweringStoreSnapshot | undefined> {
-    const records = await this.readRecords(this.session);
-    return records.size > 0 ? recordsSnapshot(records) : undefined;
-  }
-
-  private async load(): Promise<void> {
-    if (!this.loaded) await this.reload();
-  }
-
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const run = this.tail.then(operation, operation);
     this.tail = run.then(() => undefined, () => undefined);
     return run;
   }
 
+  /** Rebuild the cache from the Session unless it was built at the Session's current version. */
+  private async refresh(reader: Reader & Pick<Session<any>, "getValue">): Promise<void> {
+    const version = (await reader.getValue(VERSION_VALUE, this.piContext))?.value;
+    if (this.loaded && version !== undefined && version === this.version) return;
+    this.records = new Map((await reader.scanValues(ALL_RECORDS, this.piContext)).map((entry) => [entry.address.key, entry.value] as const));
+    this.delegate = this.records.size > 0 ? InMemoryAnsweringStore.adopt(recordsSnapshot(this.records)) : new InMemoryAnsweringStore();
+    this.version = version;
+    this.loaded = true;
+  }
+
   async transact<T>(command: (state: AnsweringTransaction) => T | Promise<T>, context: BusinessContext): Promise<T> {
     return this.enqueue(async () => {
-      await this.load();
       let answer!: T;
       await this.session.mutate(async (mutator) => {
         // Read inside the mutation so a concurrent native Session writer cannot
         // silently overwrite the Answering records between read and commit.
-        const before = await this.readRecords(mutator);
-        const nextDelegate = new InMemoryAnsweringStore(before.size > 0 ? recordsSnapshot(before) : this.delegate.snapshot());
+        await this.refresh(mutator);
         const written = new Map<string, JsonValue>();
-        answer = await nextDelegate.transact((state) => command(recordingWrites(state, written)), context);
+        // The delegate rolls back a failed command itself; a failed Pi commit invalidates the cache below.
+        answer = await this.delegate.transact((state) => command(recordingWrites(state, written)), context);
         let nextOrder = 0;
-        for (const entry of before.values()) if (entry.order >= nextOrder) nextOrder = entry.order + 1;
+        for (const entry of this.records.values()) if (entry.order >= nextOrder) nextOrder = entry.order + 1;
         const writes: ValueWrite[] = [];
+        const changed = new Map<string, StoredRecord>();
         for (const [key, record] of written) {
-          const previous = before.get(key);
+          const previous = this.records.get(key);
           if (previous && JSON.stringify(previous.record) === JSON.stringify(record)) continue;
-          writes.push(setValue(recordValue(key), { order: previous?.order ?? nextOrder++, record }));
+          const stored = { order: previous?.order ?? nextOrder++, record };
+          changed.set(key, stored);
+          writes.push(setValue(recordValue(key), stored));
         }
-        if (writes.length > 0) await mutator.commit(writes, this.piContext);
-        this.delegate = nextDelegate;
-        this.loaded = true;
-      }, this.piContext);
+        if (writes.length === 0) return;
+        const version = (this.version ?? 0) + 1;
+        writes.push(setValue(VERSION_VALUE, version));
+        try {
+          await mutator.commit(writes, this.piContext);
+        } catch (error) {
+          this.loaded = false;
+          throw error;
+        }
+        for (const [key, stored] of changed) this.records.set(key, stored);
+        this.version = version;
+      }, this.piContext).catch((error: unknown) => {
+        // Whatever failed, the in-memory delegate may be ahead of the Session.
+        this.loaded = false;
+        throw error;
+      });
       return answer;
     });
   }
 
-  async inspect(taskId: TaskId, context: BusinessContext): Promise<AnswerTaskView | undefined> {
+  async readTaskBundle(taskId: TaskId, context: BusinessContext): Promise<TaskBundle | undefined> {
     return this.enqueue(async () => {
-      await this.reload();
-      return this.delegate.inspect(taskId, context);
+      await this.refresh(this.session);
+      return this.delegate.readTaskBundle(taskId, context);
     });
   }
 
   async list(context: BusinessContext): Promise<readonly QueryTaskRecord[]> {
     return this.enqueue(async () => {
-      await this.reload();
+      await this.refresh(this.session);
       return this.delegate.list(context);
     });
   }
 
-  async listReferencedResultRefs(context: BusinessContext): Promise<readonly import("../answering/model.js").ResultCandidateRecord[]> {
+  async listReferencedResultRefs(context: BusinessContext): Promise<readonly ResultCandidateRecord[]> {
     return this.enqueue(async () => {
-      await this.reload();
-      const tasks = await this.delegate.list(context);
-      const visible = new Set(tasks.map((task) => task.taskId));
-      return this.delegate.snapshot().candidates.filter((candidate) => visible.has(candidate.taskId));
+      await this.refresh(this.session);
+      return this.delegate.listReferencedResultRefs(context);
     });
-  }
-
-  private async reload(): Promise<void> {
-    const stored = await this.readSnapshot();
-    this.delegate = stored ? new InMemoryAnsweringStore(stored) : new InMemoryAnsweringStore();
-    this.loaded = true;
   }
 }

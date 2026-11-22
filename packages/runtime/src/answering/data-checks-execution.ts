@@ -3,6 +3,7 @@ import { assertTaskAccess } from "./answering-store.js";
 import type { AnsweringDeps } from "./deps.js";
 import {
   ENTITY_IDENTITY_MAX_ROWS,
+  ENTITY_IDENTITY_TIMEOUT_MS,
   evaluateEntityIdentity,
   identityQueries,
   identityTargets,
@@ -27,10 +28,13 @@ function sameTarget(observation: TableIdentityObservation, target: IdentityTarge
 }
 
 async function count(deps: AnsweringDeps, sql: string, context: BusinessContext): Promise<number> {
+  // Bounded on its own, so a slow count of a large table cannot hold the set call; the caller's abort still wins.
+  const timeout = AbortSignal.timeout(deps.entityIdentity?.timeoutMs ?? ENTITY_IDENTITY_TIMEOUT_MS);
+  const signal = context.signal ? AbortSignal.any([context.signal, timeout]) : timeout;
   const result = await deps.sqlExecutor.run(sql, 1, {
     kind: "exploration",
     idempotencyKey: `entity-identity:${contentHash({ sql })}`,
-    ...(context.signal ? { signal: context.signal } : {}),
+    signal,
     ...(context.deadlineAt ? { deadlineAt: context.deadlineAt } : {}),
     ...(context.queryScope ? { scope: context.queryScope } : {}),
   });
@@ -40,7 +44,8 @@ async function count(deps: AnsweringDeps, sql: string, context: BusinessContext)
 }
 
 async function observe(deps: AnsweringDeps, target: IdentityTarget, context: BusinessContext): Promise<TableIdentityObservation> {
-  const queries = identityQueries(target);
+  const queries = identityQueries(target, deps.sqlExecutor.dialect);
+  const maxRows = deps.entityIdentity?.maxRows ?? ENTITY_IDENTITY_MAX_ROWS;
   const base = { table: target.table, ...(target.keyColumns ? { keyColumns: target.keyColumns } : {}) };
   let rows: number;
   try {
@@ -49,7 +54,7 @@ async function observe(deps: AnsweringDeps, target: IdentityTarget, context: Bus
     if (context.signal?.aborted) throw error;
     return { ...base, limitation: "the table could not be counted" };
   }
-  if (rows > ENTITY_IDENTITY_MAX_ROWS) return { ...base, rows, limitation: `more than ${ENTITY_IDENTITY_MAX_ROWS} rows; distinct counts skipped` };
+  if (rows > maxRows) return { ...base, rows, limitation: `more than ${maxRows} rows; distinct counts skipped` };
   let distinctRows: number | undefined;
   let distinctKeys: number | undefined;
   const limitations: string[] = [];

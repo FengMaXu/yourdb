@@ -4,6 +4,7 @@ import { InMemoryAnswering, isScopedReadOnlySql, type Answering, type AnsweringS
 import { PiSessionAnsweringStore } from "../adapters/pi-session-answering-store.js";
 import { PiSessionClarificationLedger } from "../adapters/pi-session-clarification-ledger.js";
 import { FileResultStore, InMemoryResultStore } from "../answering/result-store.js";
+import { ResultReclamation } from "./result-reclamation.js";
 import { assertTaskAccess } from "../answering/answering-store.js";
 import type { PublicationId } from "../answering/model.js";
 import { loadSkillsFromRoots, resolveSkillRoots } from "../skills.js";
@@ -252,7 +253,7 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
   const clarificationLedger = new PiSessionClarificationLedger(session, TODO_CONTEXT);
   const resultStore = options.resultStore ?? (options.resultRoot ? new FileResultStore(options.resultRoot) : new InMemoryResultStore());
   const piRuntime = await createDataAgentPiRuntime(options.profile);
-  const answering: Answering = new InMemoryAnswering({
+  const answeringDomain: Answering = new InMemoryAnswering({
     store: answeringStore,
     resultStore,
     sqlExecutor: asSqlExecutor(options.queryExecutor),
@@ -278,6 +279,14 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
       clarifications: clarificationLedger,
     }),
   });
+  const reclamation = new ResultReclamation({
+    answeringStore,
+    resultStore,
+    context: () => ({ principal: { id: options.principalId ?? "local" }, sessionId: options.sessionId, lane: "main", operationId: "result-reclamation", invocationId: `result-reclamation-${Date.now()}` }),
+  });
+  const answering = reclamation.track(answeringDomain);
+  // Startup recovery: objects a previous process wrote but never committed are reclaimed.
+  await reclaimResults(reclamation);
   const clarificationDialogs = new ClarificationDialogs(options.clarifications ?? new ClarificationManager(), clarificationLedger);
   // Derived datasets sit beside the session's results, outside its workspace, so no workspace write can alter them.
   const derivedDatasets = new DerivedDatasets(options.resultRoot ? new FileDerivedDatasetStore(`${options.resultRoot}/derived`) : new InMemoryDerivedDatasetStore());
@@ -380,14 +389,24 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
     piRuntime,
   };
   const host = await createPiSessionHost(hostOptions);
-  if (!delegation) return host;
   return {
     ...host,
     close: async () => {
-      await delegation.close();
+      await delegation?.close();
+      // Session close is an idle point: nothing of this session runs after it.
+      await reclaimResults(reclamation);
       await host.close();
     },
   };
 }
 
 export type { DataAgentModelProfile, DataAgentSessionHost, OpenOperation, PresentationAgentEvent, SessionQueryExecutor };
+
+/** Reclamation never fails the session: a failed pass leaves the objects for the next one. */
+async function reclaimResults(reclamation: ResultReclamation): Promise<void> {
+  try {
+    await reclamation.reclaim();
+  } catch (error) {
+    console.warn(`[data-agent] Result reclamation skipped: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}

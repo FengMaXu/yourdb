@@ -38,6 +38,15 @@ export interface AnsweringDeps {
   readonly populationDecisions: "require_evidence" | "allow_disclosed";
   readonly evidenceSource?: EvidenceSource;
   readonly fanout: FanoutAnsweringOptions;
+  /** Bounds of the entity identity counts run after a set call. */
+  readonly entityIdentity?: EntityIdentityOptions;
   /** Cached per Answering instance; loaded lazily from the executor. */
   readonly loadFanoutSchema: (context: BusinessContext) => Promise<FanoutSchema | undefined>;
+}
+
+export interface EntityIdentityOptions {
+  /** Above this many rows the DISTINCT counts are skipped and reported as a limitation. */
+  readonly maxRows?: number;
+  /** Each counting query is abandoned after this long and reported as a limitation. */
+  readonly timeoutMs?: number;
 }

@@ -1,7 +1,6 @@
 import {
   clone,
   type AnswerRevisionRecord,
-  type AnswerTaskView,
   type BusinessContext,
   type CandidateId,
   type QueryAttemptRecord,
@@ -14,9 +13,7 @@ import {
   type RevisionId,
   type TaskId,
 } from "./model.js";
-import { openPaths, undeclaredPaths } from "./qualification.js";
-import { calendarRequiredPaths } from "./calendar-coverage.js";
-import { equivalentPaths } from "./probes.js";
+import { AnsweringError } from "./errors.js";
 import { assertContext } from "./support.js";
 
 export interface AnsweringTransaction {
@@ -46,9 +43,19 @@ export interface AnsweringTransaction {
   putReceipt(receipt: PublicationReceipt): void;
 }
 
+/** The stored records of one task, as stored; projections such as open or undeclared paths belong to the domain. */
+export interface TaskBundle {
+  readonly task: QueryTaskRecord;
+  readonly currentRevision: AnswerRevisionRecord;
+  readonly attempts: readonly QueryAttemptRecord[];
+  readonly candidate?: ResultCandidateRecord;
+  readonly publication?: PublicationReceipt;
+}
+
 export interface AnsweringStore {
   transact<T>(command: (state: AnsweringTransaction) => T | Promise<T>, context: BusinessContext): Promise<T>;
-  inspect(taskId: TaskId, context: BusinessContext): Promise<AnswerTaskView | undefined>;
+  /** A read-only copy of one visible task's records, or undefined when the task is not visible. */
+  readTaskBundle(taskId: TaskId, context: BusinessContext): Promise<TaskBundle | undefined>;
   list(context: BusinessContext): Promise<readonly QueryTaskRecord[]>;
   listReferencedResultRefs(context: BusinessContext): Promise<readonly ResultCandidateRecord[]>;
 }
@@ -89,6 +96,45 @@ function emptyState(): StoreState {
   };
 }
 
+/** The Map operations a transaction uses; a transaction sees an Overlay, the store holds plain Maps. */
+interface MapView<K, V> {
+  get(key: K): V | undefined;
+  set(key: K, value: V): unknown;
+  values(): IterableIterator<V>;
+}
+
+type StateView = { [Kind in keyof StoreState]: StoreState[Kind] extends Map<infer K, infer V> ? MapView<K, V> : never };
+
+/**
+ * Copy-on-write view over one committed Map: writes stay in the overlay until
+ * commit, so a failed transaction leaves the store untouched without copying
+ * every record first. Iteration follows Map order: an updated key keeps its
+ * place, a new key comes last.
+ */
+class Overlay<K, V> implements MapView<K, V> {
+  private readonly writes = new Map<K, V>();
+  constructor(private readonly base: Map<K, V>) {}
+  get(key: K): V | undefined { return this.writes.has(key) ? this.writes.get(key) : this.base.get(key); }
+  set(key: K, value: V): this { this.writes.set(key, value); return this; }
+  *values(): IterableIterator<V> {
+    for (const [key, value] of this.base) yield this.writes.has(key) ? this.writes.get(key)! : value;
+    for (const [key, value] of this.writes) if (!this.base.has(key)) yield value;
+  }
+  commit(): void { for (const [key, value] of this.writes) this.base.set(key, value); }
+}
+
+function overlayState(state: StoreState): { readonly view: StateView; readonly commit: () => void } {
+  const layers = {
+    tasks: new Overlay(state.tasks),
+    revisions: new Overlay(state.revisions),
+    evidence: new Overlay(state.evidence),
+    attempts: new Overlay(state.attempts),
+    candidates: new Overlay(state.candidates),
+    receipts: new Overlay(state.receipts),
+  };
+  return { view: layers, commit: () => { for (const layer of Object.values(layers)) layer.commit(); } };
+}
+
 function cloneState(source: StoreState): StoreState {
   return {
     tasks: new Map([...source.tasks].map(([key, value]) => [key, clone(value)])),
@@ -100,12 +146,11 @@ function cloneState(source: StoreState): StoreState {
   };
 }
 
-
 function taskVisible(task: QueryTaskRecord, context: BusinessContext): boolean {
   return task.sessionId === context.sessionId && task.principalId === context.principal.id;
 }
 
-function createTransaction(state: StoreState): AnsweringTransaction {
+function createTransaction(state: StateView): AnsweringTransaction {
   return {
     getTask: (taskId) => state.tasks.get(taskId),
     findTaskByRequest: (sessionId, requestId) => [...state.tasks.values()].find((task) => task.sessionId === sessionId && task.requestId === requestId),
@@ -120,8 +165,11 @@ function createTransaction(state: StoreState): AnsweringTransaction {
     getEvidence: (taskId, evidenceId) => state.evidence.get(taskId)?.get(evidenceId),
     listEvidence: (taskId) => [...(state.evidence.get(taskId)?.values() ?? [])].map(clone),
     appendEvidence: (taskId, evidence) => {
-      const values = state.evidence.get(taskId) ?? new Map<EvidenceId, Evidence>();
-      if (!values.has(evidence.id)) values.set(evidence.id, clone(evidence));
+      const current = state.evidence.get(taskId);
+      if (current?.has(evidence.id)) return;
+      // The committed inner Map is never written; the task's items are copied once per write.
+      const values = new Map<EvidenceId, Evidence>(current ?? []);
+      values.set(evidence.id, clone(evidence));
       state.evidence.set(taskId, values);
     },
     findObservationByInvocation: (taskId, invocationId) => [...(state.evidence.get(taskId)?.values() ?? [])].find((evidence) => evidence.kind === "query_observation" && evidence.sourceRef === invocationId),
@@ -129,7 +177,7 @@ function createTransaction(state: StoreState): AnsweringTransaction {
     findAttemptByQuery: (taskId, revisionId, queryHash, kind) => [...(state.attempts.get(taskId)?.values() ?? [])].reverse().find((attempt) => attempt.revisionId === revisionId && attempt.queryHash === queryHash && attempt.kind === kind),
     listAttempts: (taskId) => [...(state.attempts.get(taskId)?.values() ?? [])].map(clone),
     putAttempt: (attempt) => {
-      const values = state.attempts.get(attempt.taskId) ?? new Map<string, QueryAttemptRecord>();
+      const values = new Map<string, QueryAttemptRecord>(state.attempts.get(attempt.taskId) ?? []);
       values.set(attempt.attemptId, clone(attempt));
       state.attempts.set(attempt.taskId, values);
     },
@@ -146,22 +194,29 @@ function createTransaction(state: StoreState): AnsweringTransaction {
 
 /**
  * In-memory Answering store used by isolated composition and focused tests. A
- * transaction works on a copy and becomes visible only after the callback
- * succeeds, so failed multi-record commands cannot leave half a task.
+ * transaction writes into a copy-on-write overlay that becomes visible only
+ * after the callback succeeds, so failed multi-record commands cannot leave
+ * half a task. Records are cloned on write and on the way out of the store.
  */
 export class InMemoryAnsweringStore implements AnsweringStore {
   private state: StoreState;
   private tail: Promise<void> = Promise.resolve();
 
-  constructor(snapshot?: AnsweringStoreSnapshot) {
+  /** A store that takes ownership of freshly decoded records instead of cloning them. */
+  static adopt(snapshot: AnsweringStoreSnapshot): InMemoryAnsweringStore {
+    return new InMemoryAnsweringStore(snapshot, true);
+  }
+
+  constructor(snapshot?: AnsweringStoreSnapshot, owned = false) {
     this.state = emptyState();
+    const copy = owned ? <T>(value: T): T => value : clone;
     if (snapshot) {
-      for (const task of snapshot.tasks) this.state.tasks.set(task.taskId, clone(task));
-      for (const revision of snapshot.revisions) this.state.revisions.set(revision.revisionId, clone(revision));
-      for (const group of snapshot.evidence) this.state.evidence.set(group.taskId, new Map(group.items.map((item) => [item.id, clone(item)])));
-      for (const group of snapshot.attempts ?? []) this.state.attempts.set(group.taskId, new Map(group.items.map((item) => [item.attemptId, clone(item)])));
-      for (const candidate of snapshot.candidates) this.state.candidates.set(candidate.candidateId, clone(candidate));
-      for (const receipt of snapshot.receipts) this.state.receipts.set(receipt.receiptId, clone(receipt));
+      for (const task of snapshot.tasks) this.state.tasks.set(task.taskId, copy(task));
+      for (const revision of snapshot.revisions) this.state.revisions.set(revision.revisionId, copy(revision));
+      for (const group of snapshot.evidence) this.state.evidence.set(group.taskId, new Map(group.items.map((item) => [item.id, copy(item)])));
+      for (const group of snapshot.attempts ?? []) this.state.attempts.set(group.taskId, new Map(group.items.map((item) => [item.attemptId, copy(item)])));
+      for (const candidate of snapshot.candidates) this.state.candidates.set(candidate.candidateId, copy(candidate));
+      for (const receipt of snapshot.receipts) this.state.receipts.set(receipt.receiptId, copy(receipt));
     }
   }
 
@@ -169,10 +224,10 @@ export class InMemoryAnsweringStore implements AnsweringStore {
     assertContext(context);
     const run = async (): Promise<T> => {
       assertContext(context);
-      const next = cloneState(this.state);
-      const result = await command(createTransaction(next));
+      const next = overlayState(this.state);
+      const result = await command(createTransaction(next.view));
       assertContext(context);
-      this.state = next;
+      next.commit();
       return result;
     };
     const result = this.tail.then(run, run);
@@ -180,7 +235,7 @@ export class InMemoryAnsweringStore implements AnsweringStore {
     return result;
   }
 
-  async inspect(taskId: TaskId, context: BusinessContext): Promise<AnswerTaskView | undefined> {
+  async readTaskBundle(taskId: TaskId, context: BusinessContext): Promise<TaskBundle | undefined> {
     assertContext(context);
     await this.tail;
     const task = this.state.tasks.get(taskId);
@@ -188,11 +243,9 @@ export class InMemoryAnsweringStore implements AnsweringStore {
     const currentRevision = this.state.revisions.get(task.currentRevisionId);
     if (!currentRevision) throw new Error("ANSWERING_REVISION_MISSING");
     const attempts = [...(this.state.attempts.get(taskId)?.values() ?? [])];
-    const undeclared = undeclaredPaths(currentRevision.fields, task.role === "report", calendarRequiredPaths(currentRevision.calendarCoverage));
-    const open = openPaths(currentRevision.fields, equivalentPaths(currentRevision.fields, task.fieldProbes ?? []));
     const candidate = task.latestCandidateId ? this.state.candidates.get(task.latestCandidateId) : undefined;
     const publication = task.publicationId ? this.state.receipts.get(task.publicationId) : undefined;
-    return clone({ task, currentRevision, undeclared, open, attempts, ...(candidate ? { candidate } : {}), ...(publication ? { publication } : {}) });
+    return clone({ task, currentRevision, attempts, ...(candidate ? { candidate } : {}), ...(publication ? { publication } : {}) });
   }
 
   async list(context: BusinessContext): Promise<readonly QueryTaskRecord[]> {
@@ -225,5 +278,5 @@ export class InMemoryAnsweringStore implements AnsweringStore {
 
 export function assertTaskAccess(task: QueryTaskRecord | undefined, context: BusinessContext): asserts task is QueryTaskRecord {
   assertContext(context);
-  if (!task || !taskVisible(task, context)) throw new Error("ANSWERING_TASK_NOT_FOUND");
+  if (!task || !taskVisible(task, context)) throw new AnsweringError("TASK_NOT_FOUND", "ANSWERING_TASK_NOT_FOUND");
 }
