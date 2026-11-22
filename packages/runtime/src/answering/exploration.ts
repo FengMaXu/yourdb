@@ -19,8 +19,6 @@ import { PROBE_ROW_LIMIT, probeContext, summarizeProbes } from "./probes.js";
 import { sampleProbeOutput } from "./probe-diff.js";
 import type { SpecPath } from "./fields.js";
 import { resultFingerprint } from "./result-fingerprint.js";
-import { ensureAdvice } from "./advice-execution.js";
-import { adviceView } from "./advice.js";
 
 type ExplorationInput = Extract<ExecuteQuery, { readonly kind: "exploration" }>;
 
@@ -169,10 +167,7 @@ export async function executeExploration(
         : { state: "available" as const, output: resultFingerprint(raw.columns, raw.rows).slice(0, 12) }),
       ...(postExecution.witnesses.length > 0 ? { witnesses: postExecution.witnesses } : {}),
     } : undefined;
-    // The probe that completes an open field's outputs brings the advice with it, before the model decides (ADR-0005).
-    const advice = probe ? (await ensureAdvice(deps, taskId, context, [probe.path])).find((item) => item.path === probe.path) : undefined;
-    const probed = probeView ? { ...probeView, ...(advice ? { advice: adviceView(advice) } : {}) } : undefined;
-    return { kind: "exploration", artifact: { kind: "exploration", evidenceId, preview: result }, preview: result, findings: [], attemptId: attempt.attemptId, ...(probed ? { probe: probed } : {}) };
+    return { kind: "exploration", artifact: { kind: "exploration", evidenceId, preview: result }, preview: result, findings: [], attemptId: attempt.attemptId, ...(probeView ? { probe: probeView } : {}) };
   } catch (error) {
     return throwExecutionFailure(deps.store, taskId, revisionId, attempt, error, sqlStarted, queryHash, context);
   }

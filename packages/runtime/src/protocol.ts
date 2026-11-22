@@ -635,4 +635,3 @@ export { ClarificationManager } from "./clarification.js";
 export { AgentControllerError } from "./facets/agent-controller.js";
 export { KnowledgeIndex } from "./knowledge.js";
 export { DataAgentSessionApplication } from "./application/host.js";
-export { JevHypothesisChoiceAdvisor } from "./adapters/jev-hypothesis-choice-advisor.js";

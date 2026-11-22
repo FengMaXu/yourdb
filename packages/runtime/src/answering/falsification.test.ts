@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { diffProbeSamples, sampleProbeOutput, witnessText, PROBE_SAMPLE_MAX_ROWS, WITNESS_CELL_CHARS } from "./probe-diff.js";
 import { evaluateResultDomain } from "./result-domain.js";
@@ -9,7 +9,6 @@ import { InMemoryAnsweringStore } from "./answering-store.js";
 import { InMemoryResultStore } from "./result-store.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { BusinessContext, SpecFields } from "./model.js";
-import type { CompareHypothesesInput, HypothesisChoiceAssessment } from "../judgment/hypothesis-choice.js";
 
 const context = (invocationId = "invocation"): BusinessContext => ({ principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "operation-1", invocationId });
 const specified = (value: unknown) => ({ state: "specified", value, basis: { kind: "assumed" } }) as const;
@@ -63,34 +62,29 @@ describe("T4.1 probe witness rows", () => {
     expect(witnesses.every((item) => item.kind !== "only_in" || item.partial)).toBe(true);
   });
 
-  it("gives the comparison advisor the witness rows, not only row counts", async () => {
+  it("records differential witness rows on differing probes and exposes them on the field view", async () => {
     const outputs: Record<string, { columns: string[]; rows: unknown[][]; truncated: boolean }> = {
       "SELECT purchase": { columns: ["month", "n"], rows: [["2018-01", 120], ["2018-02", 145]], truncated: false },
       "SELECT delivered": { columns: ["month", "n"], rows: [["2018-01", 98], ["2018-02", 145], ["2018-03", 7]], truncated: false },
     };
-    const advisor = vi.fn(async (input: CompareHypothesesInput): Promise<HypothesisChoiceAssessment> => ({
-      model: "jev-test",
-      recommendation: { kind: "insufficient_evidence" },
-      probabilities: input.hypotheses.map((item) => ({ hypothesisId: item.id, probability: 0.5 })),
-      abstentionProbabilities: { insufficientEvidence: 0, multiplePlausible: 0, noneSupported: 0 },
-      confidence: 0.5,
-    }));
     const answering = new InMemoryAnswering({
       store: new InMemoryAnsweringStore(),
       resultStore: new InMemoryResultStore(),
       sqlExecutor: { run: async (sql) => outputs[sql]! },
       fieldProbes: true,
-      fieldAdvice: { advisor: { compare: advisor }, getOriginalQuestion: async () => "每月已送达订单数" },
     });
     const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: ["month"], selection: "n/a", output: { rowMode: "grouped" }, "population.timeField": { open: ["按下单时间", "按送达时间"] } };
     const view = await answering.set({ requestMessageId: "m", requestId: "begin", fields: spec }, context("begin"));
     const [purchase, delivered] = view.fields.find((item) => item.path === "population.timeField")!.alternatives!.map((item) => item.id as string);
     await answering.execute({ kind: "exploration", taskId: view.taskId, sql: "SELECT purchase", probe: { path: "population.timeField", alternativeId: purchase! } }, context("p1"));
     const last = await answering.execute({ kind: "exploration", taskId: view.taskId, sql: "SELECT delivered", probe: { path: "population.timeField", alternativeId: delivered! } }, context("p2"));
-    const evidence = advisor.mock.calls[0]![0].evidence.find((item) => item.id === "probe_outputs")!;
-    expect(evidence.content).toContain("difference: same key, different values: alternative 1 (month=2018-01, n=120.00) vs alternative 2 (month=2018-01, n=98.00)");
-    expect(evidence.content).toContain("difference: only alternative 2 returns (month=2018-03, n=7.00)");
-    expect(last.probe?.witnesses?.length).toBe(2);
+    expect(last.probe?.witnesses).toHaveLength(2);
+    expect(last.probe?.witnesses?.map((item) => witnessText(item, (id) => id))).toEqual([
+      `same key, different values: ${purchase} (month=2018-01, n=120.00) vs ${delivered} (month=2018-01, n=98.00)`,
+      `only ${delivered} returns (month=2018-03, n=7.00)`,
+    ]);
+    const refreshed = await answering.set({ taskId: view.taskId, requestId: "noop", fields: {} }, context("noop"));
+    expect(refreshed.fields.find((item) => item.path === "population.timeField")?.witnesses).toEqual(last.probe?.witnesses);
   });
 });
 

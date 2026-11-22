@@ -62,11 +62,6 @@ export function isSharedPath(path: string): boolean {
   return isSpecPath(path) && registryEntry(path).shared;
 }
 
-/** Paths whose open alternatives need advice before a decision when an advisor is configured. */
-export function needsAdvice(path: SpecPath): boolean {
-  return registryEntry(path).needsAdvice;
-}
-
 export const MEASURE_OPS = [
   "count",
   "count_distinct",
@@ -213,33 +208,31 @@ export interface FieldRegistryEntry {
   readonly shared: boolean;
   /** Settles the material population, so its decisions are governed by ADR-0006. */
   readonly populationGoverned: boolean;
-  /** Open alternatives need advice before a decision when an advisor is configured (ADR-0005). */
-  readonly needsAdvice: boolean;
 }
 
-const entry = (layer: FieldLayer, shared: boolean, populationGoverned: boolean, needsAdvice: boolean): FieldRegistryEntry => ({ layer, shared, populationGoverned, needsAdvice });
+const entry = (layer: FieldLayer, shared: boolean, populationGoverned: boolean): FieldRegistryEntry => ({ layer, shared, populationGoverned });
 
 export const FIELD_REGISTRY: { readonly [P in FieldPath]: FieldRegistryEntry } = {
-  "population.entity": entry("semantic", true, true, true),
-  "population.eligibility": entry("semantic", true, true, true),
-  "population.conditions": entry("semantic", true, true, true),
-  "population.source": entry("physical", true, false, true),
-  "population.time": entry("semantic", true, false, true),
-  "population.timeField": entry("physical", true, false, true),
-  "population.missing": entry("semantic", true, false, true),
-  "population.joinMultiplicity": entry("physical", true, false, true),
-  "measure.formula": entry("semantic", false, false, true),
-  "measure.countGrain": entry("semantic", false, false, true),
-  "measure.denominator": entry("semantic", false, false, true),
-  "measure.window": entry("semantic", false, false, true),
-  grouping: entry("semantic", false, false, true),
-  selection: entry("semantic", false, false, false),
-  "selection.ties": entry("semantic", false, false, false),
-  output: entry("semantic", false, false, false),
+  "population.entity": entry("semantic", true, true),
+  "population.eligibility": entry("semantic", true, true),
+  "population.conditions": entry("semantic", true, true),
+  "population.source": entry("physical", true, false),
+  "population.time": entry("semantic", true, false),
+  "population.timeField": entry("physical", true, false),
+  "population.missing": entry("semantic", true, false),
+  "population.joinMultiplicity": entry("physical", true, false),
+  "measure.formula": entry("semantic", false, false),
+  "measure.countGrain": entry("semantic", false, false),
+  "measure.denominator": entry("semantic", false, false),
+  "measure.window": entry("semantic", false, false),
+  grouping: entry("semantic", false, false),
+  selection: entry("semantic", false, false),
+  "selection.ties": entry("semantic", false, false),
+  output: entry("semantic", false, false),
 };
 
-/** A Report Task measure definition is shared, semantic and advised. */
-const MEASURE_DEFINITION_ENTRY = entry("semantic", true, false, true);
+/** A Report Task measure definition is shared and semantic. */
+const MEASURE_DEFINITION_ENTRY = entry("semantic", true, false);
 
 export function registryEntry(path: SpecPath): FieldRegistryEntry {
   return isFieldPath(path) ? FIELD_REGISTRY[path] : MEASURE_DEFINITION_ENTRY;

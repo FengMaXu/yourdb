@@ -25,7 +25,6 @@ import { createQueryTaskDelegationResolver, type DelegationSqlExplorer } from ".
 import { createSubagentToolDefinition } from "../tools/subagent.js";
 import type { DataAgentToolDefinition } from "../tools/tool-definition.js";
 import { createMcpPluginToolDefinitions, type McpPluginTool } from "../tools/mcp-plugins.js";
-import type { HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
 import { isRuntimeInjected } from "../runtime-injected.js";
 
 export interface DataAgentSessionRuntimeOptions {
@@ -51,8 +50,6 @@ export interface DataAgentSessionRuntimeOptions {
   readonly profile: DataAgentModelProfile;
   readonly answeringStore?: AnsweringStore;
   readonly resultStore?: ResultStore;
-  /** Optional external advisor for unresolved competing hypotheses. */
-  readonly hypothesisChoiceAdvisor?: HypothesisChoiceAdvisor;
   /** Evaluation-only semantic-spec ablation. Product composition leaves this required. */
   readonly semanticSpecMode?: SemanticSpecMode;
   /** Tools of the MCP plugins the user enabled, resolved when the session opens. */
@@ -182,18 +179,12 @@ function messageText(content: unknown): string | undefined {
 }
 
 async function readUserMessageText(session: Session<any>, messageId: string, signal?: AbortSignal): Promise<string | undefined> {
-  if (signal?.aborted) throw new Error("ORIGINAL_QUESTION_READ_CANCELLED");
+  if (signal?.aborted) throw new Error("USER_MESSAGE_READ_CANCELLED");
   const entry = await session.getEntry(messageId, TODO_CONTEXT);
   if (entry?.type !== "message" || entry.message.role !== "user") return undefined;
   // A Runtime-injected follow-up is user-role in Pi but was never said by the user.
   if (isRuntimeInjected(await session.getLabel(messageId, TODO_CONTEXT))) return undefined;
   return messageText(entry.message.content);
-}
-
-async function readOriginalQuestion(session: Session<any>, requestMessageId: string, signal?: AbortSignal): Promise<string> {
-  const text = await readUserMessageText(session, requestMessageId, signal);
-  if (!text) throw new Error("ORIGINAL_QUESTION_UNAVAILABLE");
-  return text;
 }
 
 /**
@@ -262,13 +253,6 @@ export async function createDataAgentSessionHost(options: DataAgentSessionRuntim
     semanticQualificationMode: options.semanticSpecMode === "disabled" ? "bypassed" : "required",
     // An open field is decided after its alternatives' outputs are known (ADR-0005).
     fieldProbes: options.semanticSpecMode !== "disabled",
-    // Answering asks the advisor once an open field's probe outputs differ; without a semantic Spec there is nothing to compare (ADR-0005).
-    ...(options.hypothesisChoiceAdvisor && options.semanticSpecMode !== "disabled" ? {
-      fieldAdvice: {
-        advisor: options.hypothesisChoiceAdvisor,
-        getOriginalQuestion: (requestMessageId: string, adviceOptions?: { readonly signal?: AbortSignal }) => readOriginalQuestion(session, requestMessageId, adviceOptions?.signal),
-      },
-    } : {}),
     // ADR-0006: without a clarification tool an unverified population decision is disclosed, not blocked.
     populationDecisions: options.enableClarificationTool === false ? "allow_disclosed" : "require_evidence",
     evidenceSource: createEvidenceSource({

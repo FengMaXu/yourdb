@@ -149,12 +149,8 @@ Output identity that ignores column names, column order and row order and compar
 _Avoid_: Result hash, content hash
 
 **Equivalent Field**:
-An open field whose every alternative produced the same Result Fingerprint. It counts as handled without a decision, advice or disclosure.
+An open field whose every alternative produced the same Result Fingerprint. It counts as handled without a decision or disclosure.
 _Avoid_: Trivial choice, ignored ambiguity
-
-**Field Advice**:
-The Runtime's record, on the Query Task, of the comparison advisor's latest advice per open field. The Runtime asks for it once every alternative's output is known under the current other fields and the outputs differ; it applies only to the alternatives and probe outputs it compared. A decision that departs from the advice's clear lean must carry an override reason and evidence that qualifies for the field (observations never outweigh a lean on a semantic field); the advice itself is never evidence. When the advisor fails, the outage is recorded and asked again after a minute; the field may then be decided without advice, and the publication discloses it. When the advisor answers but favours no alternative, the request does not settle the field: while the user can be asked, the decision must cite the user's answer or a business document (request wording is not enough, the advisor already read it); without a clarification path the decision is recorded as undecided and disclosed. An open field that needs advice cannot be replaced by an assumption, only decided, settled by qualifying evidence, or reopened.
-_Avoid_: Advice cache, recommendation store
 
 **Decision Realization**:
 The requirement that a result does not reproduce the probe output of an alternative the Revision did not adopt. A result that does is rejected as DECISION_NOT_REALIZED.

@@ -2,7 +2,6 @@ import type {
   AnswerRevisionRecord,
   BusinessContext,
   DisclosureItem,
-  FieldRecord,
   ParentSupersession,
   PublicationDisclosure,
   PublicationPermit,
@@ -79,9 +78,8 @@ export function buildReceipt(parts: ReceiptParts, context: BusinessContext, form
 
 /**
  * Everything a Receipt must disclose about the exact published Candidate:
- * unverified fields, decisions made while the advisor was unavailable,
- * deviations, fanout observations, likely Spec realization conflicts,
- * entity identity counts and calendar coverage.
+ * unverified fields, deviations, fanout observations, likely Spec
+ * realization conflicts, entity identity counts and calendar coverage.
  * Disclosure is a record, never an approval.
  */
 export function composeDisclosure(revision: AnswerRevisionRecord, candidate: ResultCandidateRecord, parentSuperseded?: ParentSupersession): PublicationDisclosure | undefined {
@@ -97,19 +95,11 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
   const domain = (candidate.findings ?? []).filter((item) => item.kind === "result_domain");
   const falsified = (candidate.findings ?? []).filter((item) => item.kind === "data_falsification");
   const physical = (candidate.findings ?? []).filter((item) => item.kind === "physical_candidates");
-  const unadvised = (Object.entries(revision.fields) as [string, FieldRecord][])
-    .filter(([, field]) => field.state === "decided" && field.adviceUnavailable)
-    .map(([path]) => path);
-  const undecided = (Object.entries(revision.fields) as [string, FieldRecord][])
-    .filter(([, field]) => field.state === "decided" && field.adviceUndecided)
-    .map(([path]) => path);
   const deviations = revision.deviations ?? [];
   const findings = candidate.findings ?? [];
   const items: DisclosureItem[] = [
     ...(decided.length > 0 ? [{ kind: "decided" as const, paths: decided }] : []),
     ...(assumed.length > 0 ? [{ kind: "assumed" as const, paths: assumed }] : []),
-    ...(unadvised.length > 0 ? [{ kind: "unadvised" as const, paths: unadvised }] : []),
-    ...(undecided.length > 0 ? [{ kind: "undecided" as const, paths: undecided }] : []),
     ...deviations.map((item) => ({ kind: "deviation" as const, paths: [item.path], detail: item.reason })),
     ...(parentSuperseded ? [{ kind: "parent_superseded" as const, paths: [] }] : []),
     ...(fanoutDisclosure && candidate.fanout
@@ -127,15 +117,13 @@ export function composeDisclosure(revision: AnswerRevisionRecord, candidate: Res
     ...falsified.map((item) => ({ kind: "data_falsification" as const, paths: [...(item.paths ?? [])], detail: item.message })),
     ...physical.map((item) => ({ kind: "physical_candidates" as const, paths: [...(item.paths ?? [])], detail: item.message })),
   ];
-  if (unverified.length === 0 && unadvised.length === 0 && undecided.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar && domain.length === 0 && falsified.length === 0 && physical.length === 0) return undefined;
+  if (unverified.length === 0 && deviations.length === 0 && !parentSuperseded && !fanoutDisclosure && !realization && !identity && !calendar && domain.length === 0 && falsified.length === 0 && physical.length === 0) return undefined;
   return {
     required: true,
     unverifiedFields: unverified,
     summary: [
       ...(decided.length > 0 ? [`以下字段在多种解释中按字面选择，未被权威证据唯一确定：${decided.join(", ")}。`] : []),
       ...(assumed.length > 0 ? [`以下字段为假定，未被合格证据证实：${assumed.join(", ")}。`] : []),
-      ...(unadvised.length > 0 ? [`以下字段的候选解释结果不同，但比较建议服务不可用，决定未经比较：${unadvised.join(", ")}。`] : []),
-      ...(undecided.length > 0 ? [`以下字段的候选解释结果不同，比较也无法区分，且无法询问用户，决定未经裁决：${undecided.join(", ")}。`] : []),
       ...(deviations.length > 0 ? [`以下字段偏离报告任务的共享口径：${deviations.map((item) => `${item.path}（${item.reason}）`).join("；")}。`] : []),
       ...(parentSuperseded ? ["本次只刷新了数据；这张图所依据的报告任务口径已被修改，图仍按修改前的口径计算。"] : []),
       ...(fanoutDisclosure ? [fanoutDisclosure] : []),

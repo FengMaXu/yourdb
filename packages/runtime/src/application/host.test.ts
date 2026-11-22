@@ -5,7 +5,6 @@ import { PiJsonlSessionStore } from "../session-store.js";
 import { WorkspaceStore } from "../workspace.js";
 import { DataAgentSessionApplication } from "./host.js";
 import type { DataAgentModelProfile } from "../agent/harness-factory.js";
-import type { HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
 import { TODO_CONTEXT } from "@earendil-works/pi-agent-core";
 
 const profile: DataAgentModelProfile = { provider: "openai", model: "test-model", apiKey: "test" };
@@ -201,8 +200,6 @@ describe("DataAgent Session Application production composition", () => {
       skillRoots: [join(process.cwd(), "..", "..", ".agents", "skills")],
       enableSubagents: true,
       delegationRoot: join(root, "subagents"),
-      // With an advisor configured, no Skill may hide the Answering protocol tools.
-      hypothesisChoiceAdvisor: { compare: async () => { throw new Error("not called"); } } satisfies HypothesisChoiceAdvisor,
       createMissingSessions: false,
       authorizeSession: async () => true,
     });

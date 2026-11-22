@@ -3,7 +3,6 @@ import type { FieldValue, SpecPath } from "./fields.js";
 import type { EntityIdentityReport } from "./entity-identity.js";
 import type { CalendarCoverageReport } from "./calendar-coverage.js";
 import type { ProbeSample } from "./probe-diff.js";
-import type { FieldAdvisory } from "./advice.js";
 import type { TaskId, RevisionId, ReadyRevisionId, EvidenceId, AlternativeId, CandidateId, PrivateResultRef, PublicationId, NonEmpty } from "./ids.js";
 
 /**
@@ -187,12 +186,6 @@ export interface ProbeWaiver {
   readonly reason: string;
 }
 
-/** Why a decision departs from the advice's clear lean, with the evidence that outweighs it. */
-export interface AdviceOverride {
-  readonly reason: string;
-  readonly evidenceIds: NonEmpty<EvidenceId>;
-}
-
 /**
  * What a value rests on. The Runtime, not the model, decides which applies
  * (ADR-0006): cited evidence that qualifies for the field's layer makes it
@@ -219,11 +212,6 @@ export type FieldRecord = (
       readonly value: FieldValue;
       readonly rationale: string;
       readonly basis: FieldBasis;
-      readonly adviceOverride?: AdviceOverride;
-      /** The advisor failed when advice was required; the decision was made without it and is disclosed. */
-      readonly adviceUnavailable?: string;
-      /** The advisor favoured no alternative and no user could be asked; the decision is disclosed (its recommendation kind). */
-      readonly adviceUndecided?: string;
     }
 ) & { readonly inherited?: ParentBinding };
 
@@ -311,8 +299,6 @@ export interface QueryTaskRecord {
   readonly budget?: QueryBudgetState;
   /** Latest probe per field alternative; alternative ids are stable until the field is rewritten. */
   readonly fieldProbes?: readonly FieldProbeRecord[];
-  /** Latest advice per open field, asked by the Runtime once the field's probe outputs differ (ADR-0005). */
-  readonly fieldAdvice?: readonly FieldAdvisory[];
   /** "report": a Report Task that holds shared fields and never publishes (ADR-0009). */
   readonly role?: "report";
   /** A chart query's Report Task and the parent Revision its inherited fields were copied from. */
@@ -385,7 +371,7 @@ export interface UnverifiedField {
 }
 
 export type DisclosureItemKind =
-  | "assumed" | "decided" | "unadvised" | "undecided" | "deviation" | "parent_superseded"
+  | "assumed" | "decided" | "deviation" | "parent_superseded"
   | "join_fanout" | "join_fanout_unknown" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification" | "physical_candidates";
 
 /**

@@ -4,7 +4,7 @@ import type { EntityIdentityReport } from "./entity-identity.js";
 import type { CalendarCoverageReport } from "./calendar-coverage.js";
 import type { WitnessRow } from "./probe-diff.js";
 import type { TaskId, RevisionId, EvidenceId, AlternativeId, CandidateId } from "./ids.js";
-import type { QueryAttemptRecord, CheckCoverage, FanoutReport, AdviceOverride, BoundedResult, QueryArtifact, Finding, QueryTaskRecord, ParentBinding, Deviation, AnswerRevisionRecord, ResultCandidateRecord, PublicationReceipt } from "./records.js";
+import type { QueryAttemptRecord, CheckCoverage, FanoutReport, BoundedResult, QueryArtifact, Finding, QueryTaskRecord, ParentBinding, Deviation, AnswerRevisionRecord, ResultCandidateRecord, PublicationReceipt } from "./records.js";
 
 export interface AnswerTaskView {
   readonly task: QueryTaskRecord;
@@ -16,12 +16,6 @@ export interface AnswerTaskView {
   readonly attempts: readonly QueryAttemptRecord[];
   readonly candidate?: ResultCandidateRecord;
   readonly publication?: PublicationReceipt;
-}
-
-export interface AdviceView {
-  readonly recommendation: "alternative" | "insufficient_evidence" | "multiple_plausible" | "none_supported" | "unavailable";
-  readonly probabilities: readonly { readonly alternativeId: string; readonly probability: number }[];
-  readonly lean?: { readonly alternativeId: string; readonly probability: number };
 }
 
 /** identical: every alternative produced the same output; distinct: at least two differ; incomplete: some output unknown. */
@@ -57,13 +51,6 @@ export interface FieldView {
   readonly outputs?: ProbeOutputs;
   /** Rows that tell differing alternative outputs apart (at most a few, bounded). */
   readonly witnesses?: readonly WitnessRow[];
-  /** Advice the Runtime recorded for this field's alternatives and probe outputs; advisory only. */
-  readonly advice?: AdviceView;
-  readonly adviceOverride?: AdviceOverride;
-  /** decided: the advisor failed and the field was decided without its advice. */
-  readonly adviceUnavailable?: string;
-  /** decided: the advisor favoured no alternative and the field was decided without the user. */
-  readonly adviceUndecided?: string;
   readonly inherited?: ParentBinding;
 }
 
@@ -112,5 +99,5 @@ export interface QueryExecutionView {
   readonly fanout?: FanoutReport;
   readonly attemptId?: string;
   /** Set when the exploration ran as the probe of an open field's alternative. */
-  readonly probe?: ProbeView & { readonly path: SpecPath; readonly advice?: AdviceView; readonly witnesses?: readonly WitnessRow[] };
+  readonly probe?: ProbeView & { readonly path: SpecPath; readonly witnesses?: readonly WitnessRow[] };
 }
