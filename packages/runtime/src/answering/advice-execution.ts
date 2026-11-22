@@ -4,6 +4,7 @@ import { needsAdvice, valueKey, type SpecPath } from "./fields.js";
 import { probeContext, summarizeProbes, type ProbeSummary } from "./probes.js";
 import { adviceBasis, applicableAdvice, latestAdvice, leanOf, type FieldAdvisory } from "./advice.js";
 import { now } from "./support.js";
+import { witnessText } from "./probe-diff.js";
 import type { HypothesisChoiceAdvisor, HypothesisChoiceAssessment, HypothesisChoiceEvidence } from "../judgment/hypothesis-choice.js";
 import type { AnsweringDeps } from "./deps.js";
 
@@ -32,7 +33,9 @@ function probeEvidence(field: OpenField, summary: ProbeSummary): HypothesisChoic
   const groups = new Map<string, string[]>();
   for (const [id, fingerprint] of summary.fingerprints) groups.set(fingerprint, [...(groups.get(fingerprint) ?? []), label(id)]);
   const same = [...groups.values()].filter((group) => group.length > 1).map((group) => `${group.join(" and ")} produce identical output`);
-  return { id: "probe_outputs", kind: "observation", authority: "observation", authorityRank: 5, sourceRef: "field_probes", content: [...lines, ...same].join("\n") };
+  // Concrete rows where the outputs differ, so the comparison can weigh what each reading returns, not only how much.
+  const witnesses = summary.witnesses.map((witness) => `difference: ${witnessText(witness, label)}`);
+  return { id: "probe_outputs", kind: "observation", authority: "observation", authorityRank: 5, sourceRef: "field_probes", content: [...lines, ...same, ...witnesses].join("\n") };
 }
 
 /** Unavailable advice is asked again after this long, so a brief outage need not leave the decision uncompared. */

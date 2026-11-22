@@ -31,6 +31,7 @@ import { refreshPublication } from "./refresh.js";
 import type { AnsweringDeps, EntityIdentityOptions, FanoutAnsweringOptions, SemanticQualificationMode } from "./deps.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { FieldAdviceOptions } from "./advice-execution.js";
+import type { DataFalsificationOptions } from "./data-falsification.js";
 import { assertContext } from "./support.js";
 import { taskViewFromBundle } from "./views.js";
 
@@ -86,6 +87,8 @@ export interface InMemoryAnsweringOptions {
   readonly populationDecisions?: "require_evidence" | "allow_disclosed";
   /** Bounds of the entity identity counts (rows above which DISTINCT is skipped, per-query timeout). */
   readonly entityIdentity?: EntityIdentityOptions;
+  /** Bounds of the data falsification probes after a result query (probe count, per-probe timeout). */
+  readonly dataFalsification?: DataFalsificationOptions;
 }
 
 
@@ -105,6 +108,7 @@ function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
     ...(options.evidenceSource ? { evidenceSource: options.evidenceSource } : {}),
     fanout,
     ...(options.entityIdentity ? { entityIdentity: options.entityIdentity } : {}),
+    ...(options.dataFalsification ? { dataFalsification: options.dataFalsification } : {}),
     loadFanoutSchema: createFanoutSchemaLoader(fanout, options.sqlExecutor),
   };
 }

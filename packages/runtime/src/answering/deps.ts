@@ -1,3 +1,4 @@
+import type { DataFalsificationOptions } from "./data-falsification.js";
 import type { BusinessContext, QueryBudgetPolicy } from "./model.js";
 import type { AnsweringStore } from "./answering-store.js";
 import type { ResultStore } from "./result-store.js";
@@ -40,6 +41,8 @@ export interface AnsweringDeps {
   readonly fanout: FanoutAnsweringOptions;
   /** Bounds of the entity identity counts run after a set call. */
   readonly entityIdentity?: EntityIdentityOptions;
+  /** Bounds of the data falsification probes after a result query (plan T4.3). */
+  readonly dataFalsification?: DataFalsificationOptions;
   /** Cached per Answering instance; loaded lazily from the executor. */
   readonly loadFanoutSchema: (context: BusinessContext) => Promise<FanoutSchema | undefined>;
 }

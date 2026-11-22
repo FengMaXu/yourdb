@@ -53,6 +53,7 @@ function fieldView(path: SpecPath, field: FieldRecord, fields: AnswerRevisionRec
   const shared = {
     alternatives,
     ...(summary ? { outputs: summary.outputs } : {}),
+    ...(summary && summary.witnesses.length > 0 ? { witnesses: summary.witnesses } : {}),
     ...(advice ? { advice: adviceView(advice) } : {}),
     ...inherited,
   };

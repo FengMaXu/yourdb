@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import type { FieldValue, SpecPath } from "./fields.js";
 import type { EntityIdentityReport } from "./entity-identity.js";
 import type { CalendarCoverageReport } from "./calendar-coverage.js";
+import type { ProbeSample, WitnessRow } from "./probe-diff.js";
 import type { FieldAdvisory } from "./advice.js";
 
 /**
@@ -267,6 +268,8 @@ export interface FieldProbeRecord {
   /** probeContext of the other fields when the probe ran; a probe without one is stale. */
   readonly context?: string;
   readonly rowCount: number;
+  /** A bounded normalized sample of the output, for witness rows (plan T4.1). */
+  readonly sample?: ProbeSample;
   readonly outcome:
     | { readonly state: "available"; readonly fingerprint: string }
     | { readonly state: "unavailable"; readonly reason: string };
@@ -305,7 +308,7 @@ export type QueryArtifact =
 
 export interface Finding {
   readonly id: string;
-  readonly kind: "shape_conflict" | "result_incomplete" | "integrity_conflict" | "join_fanout" | "realization_conflict" | "entity_identity" | "calendar_coverage";
+  readonly kind: "shape_conflict" | "result_incomplete" | "integrity_conflict" | "join_fanout" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification";
   readonly message: string;
   readonly blocking: boolean;
   readonly checkId?: string;
@@ -405,7 +408,7 @@ export interface UnverifiedField {
 
 export type DisclosureItemKind =
   | "assumed" | "decided" | "unadvised" | "undecided" | "deviation" | "parent_superseded"
-  | "join_fanout" | "join_fanout_unknown" | "realization_conflict" | "entity_identity" | "calendar_coverage";
+  | "join_fanout" | "join_fanout_unknown" | "realization_conflict" | "entity_identity" | "calendar_coverage" | "result_domain" | "data_falsification";
 
 /**
  * One disclosure, structured so a reader can show it beside the Spec field it concerns.
@@ -555,6 +558,8 @@ export interface FieldView {
   readonly evidenceIds?: readonly EvidenceId[];
   readonly alternatives?: readonly { readonly id: AlternativeId; readonly value: FieldValue; readonly probe?: ProbeView }[];
   readonly outputs?: ProbeOutputs;
+  /** Rows that tell differing alternative outputs apart (at most a few, bounded). */
+  readonly witnesses?: readonly WitnessRow[];
   /** Advice the Runtime recorded for this field's alternatives and probe outputs; advisory only. */
   readonly advice?: AdviceView;
   readonly adviceOverride?: AdviceOverride;
@@ -610,7 +615,7 @@ export interface QueryExecutionView {
   readonly fanout?: FanoutReport;
   readonly attemptId?: string;
   /** Set when the exploration ran as the probe of an open field's alternative. */
-  readonly probe?: ProbeView & { readonly path: SpecPath; readonly advice?: AdviceView };
+  readonly probe?: ProbeView & { readonly path: SpecPath; readonly advice?: AdviceView; readonly witnesses?: readonly WitnessRow[] };
 }
 
 /**
