@@ -1,4 +1,5 @@
 import { readOnlyStatement } from "./sql-lex.js";
+import { AnsweringError } from "./errors.js";
 import { createHash } from "node:crypto";
 import type { FieldValue, SpecPath } from "./fields.js";
 import type { EntityIdentityReport } from "./entity-identity.js";
@@ -594,6 +595,10 @@ export interface AnswerRevisionView {
   readonly measureRef?: string;
   /** For a Report Task: its chart queries still bound to an earlier Revision, which must rebind before querying. */
   readonly staleChartQueries?: readonly TaskId[];
+  /** Set when no write applied: the call returned the current Revision unchanged. */
+  readonly unchanged?: true;
+  /** An unpublished Result Candidate of the previous Revision that this Revision made unpublishable. */
+  readonly supersededCandidateId?: CandidateId;
 }
 
 export interface QueryExecutionView {
@@ -744,7 +749,7 @@ export function isScopedReadOnlySql(sql: string): boolean {
 
 export function normalizeLimit(limit: number | undefined, fallback = 50, maximum = 10_000): number {
   if (limit === undefined) return fallback;
-  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("INVALID_QUERY_LIMIT");
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new AnsweringError("INVALID_REQUEST", "INVALID_QUERY_LIMIT");
   return Math.min(limit, maximum);
 }
 

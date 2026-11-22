@@ -59,7 +59,7 @@ class RollbackFirstCandidateCommit implements AnsweringStore {
     return result;
   }
 
-  inspect(taskId: Parameters<AnsweringStore["inspect"]>[0], context: BusinessContext) { return this.delegate.inspect(taskId, context); }
+  readTaskBundle(taskId: Parameters<AnsweringStore["readTaskBundle"]>[0], context: BusinessContext) { return this.delegate.readTaskBundle(taskId, context); }
   list(context: BusinessContext) { return this.delegate.list(context); }
   listReferencedResultRefs(context: BusinessContext) { return this.delegate.listReferencedResultRefs(context); }
 }

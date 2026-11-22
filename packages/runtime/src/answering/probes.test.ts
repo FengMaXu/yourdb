@@ -260,7 +260,7 @@ describe("Probes of open fields (ADR-0005)", () => {
         if (business.invocationId === "explore" && ++explorationTransactions === 2) await gate;
         return inner.transact(command, business);
       },
-      inspect: (taskId, business) => inner.inspect(taskId, business),
+      readTaskBundle: (taskId, business) => inner.readTaskBundle(taskId, business),
       list: (business) => inner.list(business),
       listReferencedResultRefs: (business) => inner.listReferencedResultRefs(business),
     };

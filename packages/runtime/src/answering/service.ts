@@ -28,10 +28,11 @@ import { executeResult } from "./result-execution.js";
 import { createFanoutSchemaLoader } from "./fanout-execution.js";
 import { publishCandidate } from "./publication.js";
 import { refreshPublication } from "./refresh.js";
-import type { AnsweringDeps, FanoutAnsweringOptions, SemanticQualificationMode } from "./deps.js";
+import type { AnsweringDeps, EntityIdentityOptions, FanoutAnsweringOptions, SemanticQualificationMode } from "./deps.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { FieldAdviceOptions } from "./advice-execution.js";
 import { assertContext } from "./support.js";
+import { taskViewFromBundle } from "./views.js";
 
 export { AnsweringError };
 export { DEFAULT_QUERY_BUDGET_POLICY };
@@ -83,6 +84,8 @@ export interface InMemoryAnsweringOptions {
    * "allow_disclosed" when it cannot, so an unverified population decision is disclosed instead.
    */
   readonly populationDecisions?: "require_evidence" | "allow_disclosed";
+  /** Bounds of the entity identity counts (rows above which DISTINCT is skipped, per-query timeout). */
+  readonly entityIdentity?: EntityIdentityOptions;
 }
 
 
@@ -101,6 +104,7 @@ function resolveDeps(options: InMemoryAnsweringOptions): AnsweringDeps {
     populationDecisions: options.populationDecisions ?? "require_evidence",
     ...(options.evidenceSource ? { evidenceSource: options.evidenceSource } : {}),
     fanout,
+    ...(options.entityIdentity ? { entityIdentity: options.entityIdentity } : {}),
     loadFanoutSchema: createFanoutSchemaLoader(fanout, options.sqlExecutor),
   };
 }
@@ -166,22 +170,25 @@ export class InMemoryAnswering implements Answering {
   private async executeOnce(input: ExecuteQuery, context: BusinessContext): Promise<QueryExecutionView> {
     assertContext(context);
     const taskId = input.taskId as TaskId;
-    const task = await this.deps.store.transact((tx) => tx.getTask(taskId), context);
-    assertTaskAccess(task, context);
-    const revisionId = (input.kind === "result" ? input.revisionId : context.expectedRevisionId ?? task.currentRevisionId) as RevisionId;
+    const revisionOf = (task: { readonly currentRevisionId: RevisionId }) => (input.kind === "result" ? input.revisionId : context.expectedRevisionId ?? task.currentRevisionId) as RevisionId;
+    // The preflight is pure, so a read-only result query reads its task inside its own first transaction.
     if (!isReadOnlySql(input.sql)) {
-      const details = await this.deps.store.transact((tx) => obstacle(tx, task, revisionId, "technical_failure", "Only one read-only SQL statement is allowed", {
-        requiresOuterDecision: false,
-        retryable: false,
-        sqlExecuted: false,
-        executionOutcome: "not_started",
-      }), context);
+      const details = await this.deps.store.transact((tx) => {
+        const task = tx.getTask(taskId);
+        assertTaskAccess(task, context);
+        return obstacle(tx, task, revisionOf(task), "technical_failure", "Only one read-only SQL statement is allowed", {
+          requiresOuterDecision: false,
+          retryable: false,
+          sqlExecuted: false,
+          executionOutcome: "not_started",
+        });
+      }, context);
       throw new AnsweringError("INVALID_QUERY", details.message, obstacleDetails(undefined, details));
     }
-    if (input.kind === "exploration") {
-      return executeExploration(this.deps, input, revisionId, context.expectedRevisionId !== undefined, normalizeLimit(input.limit, 50, 10_000), context);
-    }
-    return executeResult(this.deps, input, revisionId, this.deps.maxResultRows, context);
+    if (input.kind === "result") return executeResult(this.deps, input, input.revisionId as RevisionId, this.deps.maxResultRows, context);
+    const task = await this.deps.store.transact((tx) => tx.getTask(taskId), context);
+    assertTaskAccess(task, context);
+    return executeExploration(this.deps, input, revisionOf(task), context.expectedRevisionId !== undefined, normalizeLimit(input.limit, 50, 10_000), context);
   }
 
   async publish(input: PublishCandidate, context: BusinessContext): Promise<PublicationReceipt> {
@@ -203,9 +210,9 @@ export class InMemoryAnswering implements Answering {
 
   async inspect(input: InspectAnswer, context: BusinessContext): Promise<AnswerTaskView> {
     assertContext(context);
-    const view = await this.deps.store.inspect(input.taskId as unknown as TaskId, context);
-    if (!view) throw new AnsweringError("TASK_NOT_FOUND", `Task ${input.taskId} was not found`);
-    return view;
+    const bundle = await this.deps.store.readTaskBundle(input.taskId as unknown as TaskId, context);
+    if (!bundle) throw new AnsweringError("TASK_NOT_FOUND", `Task ${input.taskId} was not found`);
+    return taskViewFromBundle(bundle);
   }
 }
 

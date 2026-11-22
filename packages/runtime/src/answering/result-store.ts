@@ -6,7 +6,7 @@ import {
   type PublicationReceipt,
 } from "./model.js";
 import { makeInternalId } from "./internal-ids.js";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { assertContext, inferType } from "./support.js";
 
@@ -27,13 +27,18 @@ export interface PrivateResultObject {
   readonly contentHash: string;
 }
 
+export interface ReconcileOptions {
+  /** Keep an unreferenced object younger than this: its Candidate may not be committed yet. */
+  readonly olderThanMs?: number;
+}
+
 export interface ResultStore {
   createPrivate(input: ResultStream, context: BusinessContext): Promise<PrivateResultObject>;
   openPrivate(ref: PrivateResultRef, context: BusinessContext): Promise<PrivateResultObject | undefined>;
   openAuthorized(ref: PrivateResultRef, receipt: PublicationReceipt, context: BusinessContext): Promise<PrivateResultObject>;
   discard(ref: PrivateResultRef, context: BusinessContext): Promise<void>;
   /** Remove only private objects not referenced by durable Candidate records. */
-  reconcile(referenced: readonly PrivateResultRef[], context: BusinessContext): Promise<readonly PrivateResultRef[]>;
+  reconcile(referenced: readonly PrivateResultRef[], context: BusinessContext, options?: ReconcileOptions): Promise<readonly PrivateResultRef[]>;
   encodeCsv(ref: PrivateResultRef, context: BusinessContext): Promise<{ readonly content: string; readonly contentHash: string }>;
 }
 
@@ -114,11 +119,13 @@ function validateStoredResult(value: unknown, expectedRef: PrivateResultRef): Pr
 /** Immutable private result objects; it never executes SQL and has no policy authority. */
 export class InMemoryResultStore implements ResultStore {
   private readonly objects = new Map<PrivateResultRef, PrivateResultObject>();
+  private readonly createdAt = new Map<PrivateResultRef, number>();
 
   async createPrivate(input: ResultStream, context: BusinessContext): Promise<PrivateResultObject> {
     assertContext(context);
     const result = resultForStream(input, makeInternalId("result") as unknown as PrivateResultRef);
     this.objects.set(result.resultRef, clone(result));
+    this.createdAt.set(result.resultRef, Date.now());
     return clone(result);
   }
 
@@ -140,13 +147,16 @@ export class InMemoryResultStore implements ResultStore {
     this.objects.delete(ref);
   }
 
-  async reconcile(referenced: readonly PrivateResultRef[], context: BusinessContext): Promise<readonly PrivateResultRef[]> {
+  async reconcile(referenced: readonly PrivateResultRef[], context: BusinessContext, options: ReconcileOptions = {}): Promise<readonly PrivateResultRef[]> {
     assertContext(context);
     const keep = new Set(referenced);
+    const cutoff = Date.now() - (options.olderThanMs ?? 0);
     const removed: PrivateResultRef[] = [];
     for (const ref of [...this.objects.keys()]) {
       if (keep.has(ref)) continue;
+      if (options.olderThanMs !== undefined && (this.createdAt.get(ref) ?? 0) > cutoff) continue;
       this.objects.delete(ref);
+      this.createdAt.delete(ref);
       removed.push(ref);
     }
     return removed;
@@ -205,16 +215,22 @@ export class FileResultStore implements ResultStore {
     await rm(this.file(ref), { force: true });
   }
 
-  async reconcile(referenced: readonly PrivateResultRef[], context: BusinessContext): Promise<readonly PrivateResultRef[]> {
+  async reconcile(referenced: readonly PrivateResultRef[], context: BusinessContext, options: ReconcileOptions = {}): Promise<readonly PrivateResultRef[]> {
     assertContext(context);
     await mkdir(path.resolve(this.root), { recursive: true });
     const keep = new Set(referenced.map(String));
+    const cutoff = Date.now() - (options.olderThanMs ?? 0);
     const removed: PrivateResultRef[] = [];
     for (const name of await readdir(path.resolve(this.root))) {
       if (!/^result_[A-Za-z0-9-]+\.json$/.test(name)) continue;
       const ref = name.slice(0, -5) as PrivateResultRef;
       if (keep.has(String(ref))) continue;
-      await rm(path.join(path.resolve(this.root), name), { force: true });
+      const file = path.join(path.resolve(this.root), name);
+      if (options.olderThanMs !== undefined) {
+        const modified = await stat(file).then((entry) => entry.mtimeMs, () => undefined);
+        if (modified === undefined || modified > cutoff) continue;
+      }
+      await rm(file, { force: true });
       removed.push(ref);
     }
     return removed;

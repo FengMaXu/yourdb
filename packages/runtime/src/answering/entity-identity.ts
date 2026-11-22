@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { CheckCoverage, Finding, SpecFields } from "./model.js";
 import { layersOf, type EntityValue, type MeasureExpression, type SourceValue } from "./fields.js";
 import { settled } from "./support.js";
+import type { FanoutDialect } from "./fanout-check.js";
 
 /**
  * Entity identity: does one row of a declared source stand for one entity?
@@ -15,8 +16,10 @@ export const ENTITY_IDENTITY_CHECK_ID = "entity_identity";
 export const ENTITY_IDENTITY_RULE_VERSION = "entity-identity-v2";
 /** Source tables checked per Revision. */
 export const ENTITY_IDENTITY_MAX_TABLES = 3;
-/** Above this many rows the DISTINCT counts are skipped and reported as not determinable. */
-export const ENTITY_IDENTITY_MAX_ROWS = 2_000_000;
+/** Above this many rows the DISTINCT counts are skipped and reported as not determinable (configurable). */
+export const ENTITY_IDENTITY_MAX_ROWS = 200_000;
+/** Each counting query is abandoned after this long and reported as a limitation (configurable). */
+export const ENTITY_IDENTITY_TIMEOUT_MS = 5_000;
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -81,12 +84,35 @@ export function identityTargets(fields: SpecFields): { readonly targets: readonl
   return { targets: named.slice(0, ENTITY_IDENTITY_MAX_TABLES).map((table) => ({ table, ...(keyColumns ? { keyColumns } : {}) })), limitations };
 }
 
-/** Read-only counting queries for one target; identifiers are validated plain names. */
-export function identityQueries(target: IdentityTarget): { readonly rows: string; readonly distinctRows: string; readonly distinctKeys?: string } {
+/** Words a plain identifier cannot be without quoting in at least one supported dialect. */
+const RESERVED = new Set([
+  "all", "alter", "and", "as", "asc", "between", "by", "case", "cast", "check", "column", "constraint", "create", "cross", "current",
+  "default", "delete", "desc", "distinct", "drop", "else", "end", "except", "exists", "fetch", "for", "foreign", "from", "full", "grant",
+  "group", "having", "in", "index", "inner", "insert", "intersect", "interval", "into", "is", "join", "key", "left", "like", "limit",
+  "natural", "not", "null", "offset", "on", "or", "order", "outer", "over", "partition", "primary", "range", "references", "right",
+  "row", "rows", "select", "set", "table", "then", "to", "top", "union", "unique", "update", "user", "using", "values", "when",
+  "where", "window", "with",
+]);
+
+/**
+ * A validated plain name as SQL. A reserved word is quoted for the dialect
+ * (backticks for MySQL and BigQuery, double quotes otherwise); any other name
+ * stays bare, so a case-folding dialect reads it exactly as the model wrote it.
+ */
+export function quoteIdentifier(name: string, dialect?: FanoutDialect): string {
+  return name.split(".").map((part) => {
+    if (!RESERVED.has(part.toLowerCase())) return part;
+    return dialect === "mysql" || dialect === "bigquery" ? `\`${part}\`` : `"${part}"`;
+  }).join(".");
+}
+
+/** Read-only counting queries for one target; identifiers are validated plain names, quoted when reserved. */
+export function identityQueries(target: IdentityTarget, dialect?: FanoutDialect): { readonly rows: string; readonly distinctRows: string; readonly distinctKeys?: string } {
+  const table = quoteIdentifier(target.table, dialect);
   return {
-    rows: `SELECT COUNT(*) AS n FROM ${target.table}`,
-    distinctRows: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT * FROM ${target.table}) AS d`,
-    ...(target.keyColumns ? { distinctKeys: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT ${target.keyColumns.join(", ")} FROM ${target.table}) AS d` } : {}),
+    rows: `SELECT COUNT(*) AS n FROM ${table}`,
+    distinctRows: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT * FROM ${table}) AS d`,
+    ...(target.keyColumns ? { distinctKeys: `SELECT COUNT(*) AS n FROM (SELECT DISTINCT ${target.keyColumns.map((column) => quoteIdentifier(column, dialect)).join(", ")} FROM ${table}) AS d` } : {}),
   };
 }
 

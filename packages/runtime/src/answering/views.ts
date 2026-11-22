@@ -6,9 +6,11 @@ import {
   type FieldProbeRecord,
   type FieldRecord,
   type FieldView,
+  type AnswerTaskView,
   type QueryTaskRecord,
   type TaskId,
 } from "./model.js";
+import type { TaskBundle } from "./answering-store.js";
 import { FIELD_PATHS, type SpecPath } from "./fields.js";
 import { openPaths, undeclaredPaths, unverifiedFields } from "./qualification.js";
 import { calendarRequiredPaths } from "./calendar-coverage.js";
@@ -100,5 +102,15 @@ export function viewFromRevision(taskId: TaskId, revision: AnswerRevisionRecord,
     ...(revision.calendarCoverage ? { calendarCoverage: clone(revision.calendarCoverage) } : {}),
     ...(revision.deviations && revision.deviations.length > 0 ? { deviations: clone(revision.deviations) } : {}),
     ...(revision.measureRef ? { measureRef: revision.measureRef } : {}),
+  };
+}
+
+/** Host-facing task projection: the stored records plus what still blocks the result. */
+export function taskViewFromBundle(bundle: TaskBundle): AnswerTaskView {
+  const { task, currentRevision } = bundle;
+  return {
+    ...bundle,
+    undeclared: undeclaredPaths(currentRevision.fields, task.role === "report", calendarRequiredPaths(currentRevision.calendarCoverage)),
+    open: openPaths(currentRevision.fields, equivalentPaths(currentRevision.fields, task.fieldProbes ?? [])),
   };
 }

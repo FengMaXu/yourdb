@@ -14,7 +14,7 @@ import {
   type RevisionId,
   type TaskId,
 } from "./model.js";
-import { assertTaskAccess } from "./answering-store.js";
+import { assertTaskAccess, type AnsweringTransaction } from "./answering-store.js";
 import { AnsweringError } from "./errors.js";
 import { makeInternalId } from "./internal-ids.js";
 import { blockedAttempt, obstacle, obstacleDetails, reserveAttempt, settleAttempt, taskBudget, throwExecutionFailure } from "./budget.js";
@@ -26,7 +26,7 @@ import { evaluateFanout, fanoutCoverage, fanoutFindings } from "./fanout-executi
 import type { PrivateResultObject } from "./result-store.js";
 import { boundedResult } from "./sql-execution.js";
 import { resultFingerprint } from "./result-fingerprint.js";
-import { evaluateSpecRealization } from "./realization-check.js";
+import { evaluateSpecRealization, type RealizationReport } from "./realization-check.js";
 import { entityIdentityCoverage, entityIdentityFindings } from "./entity-identity.js";
 import { calendarCoverageCoverage, calendarCoverageFindings } from "./calendar-coverage.js";
 import { recordDataChecks } from "./data-checks-execution.js";
@@ -104,8 +104,19 @@ async function resultView(deps: AnsweringDeps, candidate: ResultCandidateRecord,
   }
 }
 
-/** Seal the current Revision, or record a blocked result attempt while anything is unresolved. */
-async function sealRevision(deps: AnsweringDeps, input: ResultInput, taskId: TaskId, revisionId: RevisionId, queryHash: string, context: BusinessContext): Promise<AnswerRevisionRecord> {
+interface SealedExecution {
+  readonly revision: AnswerRevisionRecord;
+  readonly realization: RealizationReport;
+  /** Present when the call reserved its attempt in the same transaction (no memo to replay). */
+  readonly preflight?: ResultPreflight;
+}
+
+/**
+ * One transaction before the SQL runs: seal the current Revision (or record a
+ * blocked attempt while anything is unresolved), refuse SQL that cannot realize
+ * the sealed fields, and, for a fresh invocation, reserve the result attempt.
+ */
+async function sealAndReserve(deps: AnsweringDeps, input: ResultInput, taskId: TaskId, revisionId: RevisionId, queryHash: string, reserve: boolean, context: BusinessContext): Promise<SealedExecution> {
   const sealedOutcome = await deps.store.transact((tx) => {
     const currentTask = tx.getTask(taskId);
     assertTaskAccess(currentTask, context);
@@ -142,12 +153,31 @@ async function sealRevision(deps: AnsweringDeps, input: ResultInput, taskId: Tas
     }
     const readyRevision: AnswerRevisionRecord = { ...revision, state: result.revision };
     tx.putRevision(readyRevision);
-    return { revision: readyRevision } as const;
+    const realization = evaluateSpecRealization(readyRevision.fields, input.sql);
+    const unrealized = realization.findings.filter((item) => item.blocking);
+    if (unrealized.length > 0) {
+      // The SQL cannot implement the sealed fields, so it is not run: fix the SQL, or rewrite the field with a reason.
+      tx.putAttempt(blockedAttempt({ taskId, kind: "result", revisionId, invocationId: context.invocationId, queryHash }, "technical_failure"));
+      const message = "The final SQL does not implement the sealed Answer Spec: " + unrealized.map((item) => item.message).join("; ");
+      const details = obstacle(tx, tx.getTask(taskId)!, revisionId, "technical_failure", message, {
+        requiresOuterDecision: false,
+        retryable: true,
+        sqlExecuted: false,
+        executionOutcome: "not_started",
+        queryHash,
+        coverage: [realization.coverage],
+      });
+      return { unrealized: details, realization } as const;
+    }
+    return { revision: readyRevision, realization, ...(reserve ? { preflight: preflightIn(tx, deps, taskId, revisionId, queryHash, context) } : {}) } as const;
   }, context);
   if ("obstacle" in sealedOutcome) {
     throw new AnsweringError("UNRESOLVED_ASSUMPTIONS", sealedOutcome.obstacle.message, obstacleDetails({ undeclared: sealedOutcome.undeclared, open: sealedOutcome.open }, sealedOutcome.obstacle));
   }
-  return sealedOutcome.revision;
+  if ("unrealized" in sealedOutcome) {
+    throw new AnsweringError("SPEC_NOT_REALIZED", sealedOutcome.unrealized.message, obstacleDetails({ findings: sealedOutcome.realization.findings, verdicts: sealedOutcome.realization.verdicts }, sealedOutcome.unrealized));
+  }
+  return sealedOutcome;
 }
 
 type ResultPreflight =
@@ -156,14 +186,15 @@ type ResultPreflight =
   | { readonly state: "blocked"; readonly obstacle: ImplementationObstacle }
   | { readonly state: "reserved"; readonly attempt: QueryAttemptRecord };
 
-async function prepareResultExecution(
+function preflightIn(
+  tx: AnsweringTransaction,
   deps: AnsweringDeps,
   taskId: TaskId,
   revisionId: RevisionId,
   queryHash: string,
   context: BusinessContext,
-): Promise<ResultPreflight> {
-  return deps.store.transact((tx) => {
+): ResultPreflight {
+  {
     const existing = tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash);
     if (existing) return { state: "existing", candidate: existing };
     const current = tx.getTask(taskId);
@@ -185,32 +216,57 @@ async function prepareResultExecution(
     if (reservation.obstacle) return { state: "blocked", obstacle: reservation.obstacle };
     if (!reservation.attempt) throw new Error("RESULT_ATTEMPT_RESERVATION_INVALID");
     return { state: "reserved", attempt: reservation.attempt };
-  }, context);
+  }
 }
 
 type CandidateCommitOutcome =
   | { readonly state: "created"; readonly candidate: ResultCandidateRecord }
   | { readonly state: "existing"; readonly candidate: ResultCandidateRecord }
-  | { readonly state: "recovered"; readonly candidate: ResultCandidateRecord };
+  | { readonly state: "recovered"; readonly candidate: ResultCandidateRecord }
+  | { readonly state: "budget_exhausted"; readonly obstacle: ImplementationObstacle };
 
-async function commitCandidate(
+/**
+ * One transaction after the SQL ran: charge the observed rows, settle the
+ * attempt and freeze the Candidate on the still-current Revision. The charge
+ * and the settlement stand even when the Revision moved on meanwhile.
+ */
+async function chargeAndCommitCandidate(
   deps: AnsweringDeps,
   candidate: ResultCandidateRecord,
-  taskId: TaskId,
-  revisionId: RevisionId,
-  queryHash: string,
+  attempt: QueryAttemptRecord | undefined,
+  coverage: readonly CheckCoverage[],
   context: BusinessContext,
 ): Promise<CandidateCommitOutcome> {
+  const { taskId, revisionId, queryHash, rowCount } = candidate;
+  let outcome: CandidateCommitOutcome | { readonly state: "stale" };
   try {
-    return await deps.store.transact((tx) => {
-      const currentTask = tx.getTask(taskId);
-      assertTaskAccess(currentTask, context);
-      if (currentTask.currentRevisionId !== revisionId) throw new AnsweringError("REVISION_STALE", "Revision changed while the result was executing");
+    outcome = await deps.store.transact((tx): CandidateCommitOutcome | { readonly state: "stale" } => {
+      const current = tx.getTask(taskId);
+      assertTaskAccess(current, context);
+      const budget = taskBudget(current, deps.budgetPolicy);
+      const chargedTask = { ...current, budget: { ...budget, observedRows: budget.observedRows + rowCount }, updatedAt: now() };
+      tx.putTask(chargedTask);
+      if (budget.observedRows + rowCount > budget.policy.maxObservedRows) {
+        if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "budget_exhausted" });
+        return {
+          state: "budget_exhausted",
+          obstacle: obstacle(tx, chargedTask, revisionId, "budget_exhausted", "Observed-row budget exhausted after result execution", {
+            requiresOuterDecision: true,
+            retryable: false,
+            sqlExecuted: true,
+            executionOutcome: "succeeded",
+            queryHash,
+            coverage,
+          }),
+        };
+      }
+      if (attempt) settleAttempt(tx, attempt, { state: "succeeded", outcome: "succeeded", sqlExecuted: true });
+      if (chargedTask.currentRevisionId !== revisionId) return { state: "stale" };
       const prior = tx.findCandidateByInvocation(taskId, context.invocationId) ?? tx.findCandidateByQuery(taskId, revisionId, queryHash);
-      if (prior) return { state: "existing", candidate: prior } as const;
+      if (prior) return { state: "existing", candidate: prior };
       tx.putCandidate(candidate);
-      tx.putTask({ ...currentTask, latestCandidateId: candidate.candidateId, updatedAt: candidate.createdAt });
-      return { state: "created", candidate } as const;
+      tx.putTask({ ...tx.getTask(taskId)!, latestCandidateId: candidate.candidateId, updatedAt: candidate.createdAt });
+      return { state: "created", candidate };
     }, context);
   } catch (error) {
     // A commit response may be lost after the Candidate became durable. Look
@@ -221,6 +277,8 @@ async function commitCandidate(
     if (recovered) return { state: "recovered", candidate: recovered };
     throw error;
   }
+  if (outcome.state === "stale") throw new AnsweringError("REVISION_STALE", "Revision changed while the result was executing");
+  return outcome;
 }
 
 /**
@@ -240,31 +298,12 @@ export async function executeResult(
   // The set call reads the data checks after its Revision commits; a result query that
   // reaches the Revision first reads them here, so calendar coverage cannot miss the seal.
   if (deps.semanticQualificationMode === "required") await recordDataChecks(deps, taskId, revisionId, context);
-  const sealed = await sealRevision(deps, input, taskId, revisionId, queryHash, context);
-  const realization = evaluateSpecRealization(sealed.fields, input.sql);
-  const unrealized = realization.findings.filter((item) => item.blocking);
-  if (unrealized.length > 0) {
-    // The SQL cannot implement the sealed fields, so it is not run: fix the SQL, or rewrite the field with a reason.
-    const details = await deps.store.transact((tx) => {
-      const current = tx.getTask(taskId);
-      assertTaskAccess(current, context);
-      tx.putAttempt(blockedAttempt({ taskId, kind: "result", revisionId, invocationId: context.invocationId, queryHash }, "technical_failure"));
-      return obstacle(tx, current, revisionId, "technical_failure", `The final SQL does not implement the sealed Answer Spec: ${unrealized.map((item) => item.message).join("; ")}`, {
-        requiresOuterDecision: false,
-        retryable: true,
-        sqlExecuted: false,
-        executionOutcome: "not_started",
-        queryHash,
-        coverage: [realization.coverage],
-      });
-    }, context);
-    throw new AnsweringError("SPEC_NOT_REALIZED", details.message, obstacleDetails({ findings: realization.findings, verdicts: realization.verdicts }, details));
-  }
-
   const memo = resultExecutionMemo(await context.memo?.get("answering.result-execution"));
   if (memo && (memo.taskId !== input.taskId || memo.revisionId !== input.revisionId || memo.queryHash !== queryHash)) {
     throw new AnsweringError("INVALID_REQUEST", "RESULT_INVOCATION_IDEMPOTENCY_CONFLICT");
   }
+  const { revision: sealed, realization, preflight } = await sealAndReserve(deps, input, taskId, revisionId, queryHash, !memo, context);
+
   let attempt: QueryAttemptRecord | undefined;
   if (memo?.state === "started") {
     const details = await deps.store.transact((tx) => {
@@ -283,7 +322,7 @@ export async function executeResult(
     throw new AnsweringError("RESULT_EXECUTION_OUTCOME_UNKNOWN", details.message, obstacleDetails(undefined, details));
   }
   if (!memo) {
-    const preflight = await prepareResultExecution(deps, taskId, revisionId, queryHash, context);
+    if (!preflight) throw new Error("RESULT_ATTEMPT_RESERVATION_INVALID");
     if (preflight.state === "existing") {
       if (preflight.candidate.queryHash !== queryHash) throw new AnsweringError("INVALID_REQUEST", "RESULT_INVOCATION_IDEMPOTENCY_CONFLICT");
       return resultView(deps, preflight.candidate, context);
@@ -402,32 +441,6 @@ export async function executeResult(
   const combinedCoverage: readonly CheckCoverage[] = [...checkReport.coverage, realization.coverage, fanoutCoverage(fanout), entityIdentityCoverage(sealed.entityIdentity), calendarCoverageCoverage(sealed.calendarCoverage)];
   const combinedFindings = [...checkReport.findings, ...realization.findings, ...fanoutFindings(fanout), ...entityIdentityFindings(sealed.entityIdentity), ...calendarCoverageFindings(sealed.calendarCoverage)];
 
-  const budgetAfterResult = await deps.store.transact((tx) => {
-    const current = tx.getTask(taskId);
-    assertTaskAccess(current, context);
-    const budget = taskBudget(current, deps.budgetPolicy);
-    if (budget.observedRows + privateResult.rowCount > budget.policy.maxObservedRows) {
-      const chargedTask = { ...current, budget: { ...budget, observedRows: budget.observedRows + privateResult.rowCount }, updatedAt: now() };
-      tx.putTask(chargedTask);
-      if (attempt) settleAttempt(tx, attempt, { state: "failed", outcome: "succeeded", sqlExecuted: true, obstacleKind: "budget_exhausted" });
-      return obstacle(tx, chargedTask, revisionId, "budget_exhausted", "Observed-row budget exhausted after result execution", {
-        requiresOuterDecision: true,
-        retryable: false,
-        sqlExecuted: true,
-        executionOutcome: "succeeded",
-        queryHash,
-        coverage: combinedCoverage,
-      });
-    }
-    tx.putTask({ ...current, budget: { ...budget, observedRows: budget.observedRows + privateResult.rowCount }, updatedAt: now() });
-    if (attempt) settleAttempt(tx, attempt, { state: "succeeded", outcome: "succeeded", sqlExecuted: true });
-    return undefined;
-  }, context);
-  if (budgetAfterResult) {
-    await deps.resultStore.discard(privateResult.resultRef, context);
-    throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", budgetAfterResult.message, obstacleDetails(undefined, budgetAfterResult));
-  }
-
   const baseCandidate: ResultCandidateRecord = {
     candidateId: makeInternalId("candidate") as unknown as ResultCandidateRecord["candidateId"],
     taskId,
@@ -447,7 +460,11 @@ export async function executeResult(
     status: "ready",
     publishable: true,
   };
-  const commit = await commitCandidate(deps, baseCandidate, taskId, revisionId, queryHash, context);
+  const commit = await chargeAndCommitCandidate(deps, baseCandidate, attempt, combinedCoverage, context);
+  if (commit.state === "budget_exhausted") {
+    await deps.resultStore.discard(privateResult.resultRef, context);
+    throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", commit.obstacle.message, obstacleDetails(undefined, commit.obstacle));
+  }
   if (commit.candidate.candidateId !== baseCandidate.candidateId) await deps.resultStore.discard(privateResult.resultRef, context);
   return resultView(deps, commit.candidate, context);
 }

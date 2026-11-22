@@ -33,7 +33,7 @@ async function answeringWrites(root: string): Promise<string[]> {
         for (const line of (await readFile(path, "utf8")).split("\n").filter(Boolean)) {
           const parsed = JSON.parse(line) as unknown;
           for (const op of (Array.isArray(parsed) ? parsed : [parsed]) as Array<{ kind?: string; op?: string; namespace?: string; key?: string }>) {
-            if (op.kind === "value" && op.namespace?.startsWith("data-agent.answering")) writes.push(`${op.op} ${op.namespace}/${op.key}`);
+            if (op.kind === "value" && op.namespace === "data-agent.answering.records") writes.push(`${op.op} ${op.namespace}/${op.key}`);
           }
         }
       }
