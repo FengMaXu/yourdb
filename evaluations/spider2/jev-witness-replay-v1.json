@@ -1,0 +1,437 @@
+{
+  "run": "answering-plan-ab-treatment-jev-002",
+  "advisedFields": 43,
+  "labelledFields": 19,
+  "scoredFields": 19,
+  "unlabelledReason": {
+    "noAlternativeMatchesGold": 13,
+    "severalMatchGold": 11
+  },
+  "accuracy": {
+    "withWitness": 0.7368421052631579,
+    "withoutWitness": 0.7368421052631579,
+    "deltaPoints": 0
+  },
+  "meanProbabilityOnCorrect": {
+    "withWitness": 0.3068421052631579,
+    "withoutWitness": 0.3299999999999999
+  },
+  "pairedChanges": {
+    "fixedByWitness": [],
+    "brokenByWitness": []
+  },
+  "results": [
+    {
+      "instanceId": "local002",
+      "path": "measure.formula",
+      "alternatives": 4,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_a8d27a9e-6928-42fc-8331-6238510446a6",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.08
+      },
+      "withoutWitness": {
+        "pick": "alternative_a8d27a9e-6928-42fc-8331-6238510446a6",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.06
+      },
+      "recordedInRun": {
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local004",
+      "path": "population.entity",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_0f28b975-6633-428a-9336-25046fee210b",
+        "lean": "insufficient_evidence",
+        "correct": false,
+        "probability": 0
+      },
+      "withoutWitness": {
+        "pick": "alternative_0f28b975-6633-428a-9336-25046fee210b",
+        "lean": "insufficient_evidence",
+        "correct": false,
+        "probability": 0
+      },
+      "recordedInRun": {
+        "pick": "alternative_0f28b975-6633-428a-9336-25046fee210b",
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local007",
+      "path": "measure.formula",
+      "alternatives": 2,
+      "witnessRows": 2,
+      "withWitness": {
+        "pick": "alternative_4359f050-2795-4e5e-84f4-3ed7923ce29f",
+        "lean": "hypothesis",
+        "correct": false,
+        "probability": 0.15
+      },
+      "withoutWitness": {
+        "pick": "alternative_4359f050-2795-4e5e-84f4-3ed7923ce29f",
+        "lean": "hypothesis",
+        "correct": false,
+        "probability": 0.15
+      },
+      "recordedInRun": {
+        "pick": "alternative_4359f050-2795-4e5e-84f4-3ed7923ce29f",
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local021",
+      "path": "measure.formula",
+      "alternatives": 2,
+      "witnessRows": 2,
+      "withWitness": {
+        "pick": "alternative_1e6816a0-1b4e-4016-a81f-19a271928be0",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.52
+      },
+      "withoutWitness": {
+        "pick": "alternative_1e6816a0-1b4e-4016-a81f-19a271928be0",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.61
+      },
+      "recordedInRun": {
+        "pick": "alternative_1e6816a0-1b4e-4016-a81f-19a271928be0",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local028",
+      "path": "population.timeField",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_3664f080-50f7-467f-9b75-5982075dec56",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.83
+      },
+      "withoutWitness": {
+        "pick": "alternative_3664f080-50f7-467f-9b75-5982075dec56",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.89
+      },
+      "recordedInRun": {
+        "pick": "alternative_3664f080-50f7-467f-9b75-5982075dec56",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local030",
+      "path": "grouping",
+      "alternatives": 2,
+      "witnessRows": 2,
+      "withWitness": {
+        "pick": "alternative_9ea337dd-c046-4ae3-bb7c-1e40e71dd91a",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.18
+      },
+      "withoutWitness": {
+        "pick": "alternative_9ea337dd-c046-4ae3-bb7c-1e40e71dd91a",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.22
+      },
+      "recordedInRun": {
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local031",
+      "path": "population.timeField",
+      "alternatives": 2,
+      "witnessRows": 2,
+      "withWitness": {
+        "pick": "alternative_eaf3e68b-e203-4dc2-a264-a2099cfc51f7",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.64
+      },
+      "withoutWitness": {
+        "pick": "alternative_eaf3e68b-e203-4dc2-a264-a2099cfc51f7",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.84
+      },
+      "recordedInRun": {
+        "pick": "alternative_eaf3e68b-e203-4dc2-a264-a2099cfc51f7",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local034",
+      "path": "measure.countGrain",
+      "alternatives": 2,
+      "witnessRows": 2,
+      "withWitness": {
+        "pick": "alternative_d05c4ad3-dace-4723-89cc-5f4cc753733e",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.19
+      },
+      "withoutWitness": {
+        "pick": "alternative_d05c4ad3-dace-4723-89cc-5f4cc753733e",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.29
+      },
+      "recordedInRun": {
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local037",
+      "path": "population.joinMultiplicity",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_ec102eae-5608-4747-bf8e-0b97531c072d",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.02
+      },
+      "withoutWitness": {
+        "pick": "alternative_ec102eae-5608-4747-bf8e-0b97531c072d",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.05
+      },
+      "recordedInRun": {
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local039",
+      "path": "population.source",
+      "alternatives": 2,
+      "witnessRows": 1,
+      "withWitness": {
+        "pick": "alternative_f2eac0aa-be70-438c-9952-b81741d2e339",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.11
+      },
+      "withoutWitness": {
+        "pick": "alternative_f2eac0aa-be70-438c-9952-b81741d2e339",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.09
+      },
+      "recordedInRun": {
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local040",
+      "path": "measure.formula",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_b8694a1b-6bfd-43e8-a281-d537c3ccf207",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.42
+      },
+      "withoutWitness": {
+        "pick": "alternative_b8694a1b-6bfd-43e8-a281-d537c3ccf207",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.43
+      },
+      "recordedInRun": {
+        "pick": "alternative_b8694a1b-6bfd-43e8-a281-d537c3ccf207",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local049",
+      "path": "population.timeField",
+      "alternatives": 2,
+      "witnessRows": 1,
+      "withWitness": {
+        "pick": "alternative_e4d473db-3ce7-4e4f-960e-d6ae1fae7dec",
+        "lean": "hypothesis",
+        "correct": false,
+        "probability": 0.05
+      },
+      "withoutWitness": {
+        "pick": "alternative_e4d473db-3ce7-4e4f-960e-d6ae1fae7dec",
+        "lean": "hypothesis",
+        "correct": false,
+        "probability": 0.03
+      },
+      "recordedInRun": {
+        "pick": "alternative_e4d473db-3ce7-4e4f-960e-d6ae1fae7dec",
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local049",
+      "path": "measure.countGrain",
+      "alternatives": 2,
+      "witnessRows": 1,
+      "withWitness": {
+        "pick": "alternative_3591896b-7245-4d9c-982c-5bbe6b8e0a81",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.48
+      },
+      "withoutWitness": {
+        "pick": "alternative_3591896b-7245-4d9c-982c-5bbe6b8e0a81",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.53
+      },
+      "recordedInRun": {
+        "pick": "alternative_3591896b-7245-4d9c-982c-5bbe6b8e0a81",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local056",
+      "path": "measure.formula",
+      "alternatives": 3,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_39943bdb-331b-4082-a1f0-873320dd5e35",
+        "lean": "insufficient_evidence",
+        "correct": false,
+        "probability": 0.05
+      },
+      "withoutWitness": {
+        "pick": "alternative_39943bdb-331b-4082-a1f0-873320dd5e35",
+        "lean": "insufficient_evidence",
+        "correct": false,
+        "probability": 0.06
+      },
+      "recordedInRun": {
+        "pick": "alternative_39943bdb-331b-4082-a1f0-873320dd5e35",
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local058",
+      "path": "population.entity",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_8e91953b-b1a7-4c8e-8716-58cd89420786",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.18
+      },
+      "withoutWitness": {
+        "pick": "alternative_8e91953b-b1a7-4c8e-8716-58cd89420786",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.22
+      },
+      "recordedInRun": {
+        "pick": "alternative_8e91953b-b1a7-4c8e-8716-58cd89420786",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local058",
+      "path": "population.timeField",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_c107167f-940b-43f9-99ac-91641ef6c985",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.53
+      },
+      "withoutWitness": {
+        "pick": "alternative_c107167f-940b-43f9-99ac-91641ef6c985",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.43
+      },
+      "recordedInRun": {
+        "pick": "alternative_c107167f-940b-43f9-99ac-91641ef6c985",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local073",
+      "path": "measure.formula",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_84934105-6fbb-476e-968d-0bfa813e5178",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.36
+      },
+      "withoutWitness": {
+        "pick": "alternative_84934105-6fbb-476e-968d-0bfa813e5178",
+        "lean": "insufficient_evidence",
+        "correct": true,
+        "probability": 0.31
+      },
+      "recordedInRun": {
+        "correct": false
+      }
+    },
+    {
+      "instanceId": "local193",
+      "path": "measure.formula",
+      "alternatives": 2,
+      "witnessRows": 2,
+      "withWitness": {
+        "pick": "alternative_cc06d9fa-8a31-497e-8da8-f12d7a4bfc25",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.88
+      },
+      "withoutWitness": {
+        "pick": "alternative_cc06d9fa-8a31-497e-8da8-f12d7a4bfc25",
+        "lean": "hypothesis",
+        "correct": true,
+        "probability": 0.83
+      },
+      "recordedInRun": {
+        "pick": "alternative_cc06d9fa-8a31-497e-8da8-f12d7a4bfc25",
+        "correct": true
+      }
+    },
+    {
+      "instanceId": "local201",
+      "path": "measure.formula",
+      "alternatives": 2,
+      "witnessRows": 3,
+      "withWitness": {
+        "pick": "alternative_a0a924fb-f5be-40ba-862b-787850bd5462",
+        "lean": "hypothesis",
+        "correct": false,
+        "probability": 0.16
+      },
+      "withoutWitness": {
+        "pick": "alternative_a0a924fb-f5be-40ba-862b-787850bd5462",
+        "lean": "hypothesis",
+        "correct": false,
+        "probability": 0.23
+      },
+      "recordedInRun": {
+        "pick": "alternative_a0a924fb-f5be-40ba-862b-787850bd5462",
+        "correct": false
+      }
+    }
+  ]
+}
