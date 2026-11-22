@@ -1,0 +1,1320 @@
+{
+  "generatedAt": "2026-11-22T11:24:42.930Z",
+  "model": "deepseek-flash (profile deepseek)",
+  "ids": "C:/data-agent-eval/inputs/answering-plan-ab-50-ids.txt",
+  "control": {
+    "code": "master 4e23aa2",
+    "runs": [
+      "answering-plan-ab-control-001",
+      "answering-plan-ab-control-002"
+    ]
+  },
+  "treatment": {
+    "code": "develop 6a3ea2e",
+    "runs": [
+      "answering-plan-ab-treatment-001"
+    ]
+  },
+  "metric": "Spider2-lite exec_result (published CSV vs gold); SQL re-execution mode unavailable in this checkout",
+  "summary": {
+    "arms": {
+      "control": {
+        "execCorrect": 31,
+        "total": 50,
+        "statuses": {
+          "completed": 49,
+          "timeout": 1
+        },
+        "specCalls": 173,
+        "specToolErrors": 1,
+        "specCallsWithRejection": 59,
+        "rejectedPaths": 103,
+        "toolCalls": 789,
+        "toolErrors": 22
+      },
+      "treatment": {
+        "execCorrect": 36,
+        "total": 50,
+        "statuses": {
+          "completed": 50
+        },
+        "specCalls": 170,
+        "specToolErrors": 2,
+        "specCallsWithRejection": 67,
+        "rejectedPaths": 86,
+        "toolCalls": 793,
+        "toolErrors": 14
+      }
+    },
+    "flips": [
+      {
+        "id": "local008",
+        "change": "fixed",
+        "errorLayer": "口径错"
+      },
+      {
+        "id": "local023",
+        "change": "fixed",
+        "errorLayer": "口径错"
+      },
+      {
+        "id": "local073",
+        "change": "fixed",
+        "errorLayer": "口径错"
+      },
+      {
+        "id": "local157",
+        "change": "fixed",
+        "errorLayer": "口径错"
+      },
+      {
+        "id": "local258",
+        "change": "fixed",
+        "errorLayer": "口径错"
+      }
+    ],
+    "byHistoricalErrorLayer": {
+      "标准答案有问题": {
+        "cases": 10,
+        "controlCorrect": 6,
+        "treatmentCorrect": 6
+      },
+      "口径错": {
+        "cases": 32,
+        "controlCorrect": 17,
+        "treatmentCorrect": 22
+      },
+      "实现错": {
+        "cases": 2,
+        "controlCorrect": 2,
+        "treatmentCorrect": 2
+      }
+    }
+  },
+  "rejections": {
+    "control": {
+      "byPath": {
+        "measure.formula": 20,
+        "population.conditions": 11,
+        "reason": 6,
+        "population": 6,
+        "output": 6,
+        "population.timeField": 5,
+        "grouping": 5,
+        "measure": 5,
+        "population.entity": 5,
+        "measure.denominator": 4,
+        "population.source": 4,
+        "population.eligibility": 4,
+        "selection": 4,
+        "measure.countGrain": 3,
+        "selection.ties": 3,
+        "evidenceIds": 2,
+        "rationale": 2,
+        "value": 2,
+        "population.missing": 2,
+        "population.time": 2,
+        "population.joinMultiplicity": 1,
+        "taskId": 1
+      },
+      "byReason": {
+        "population/evidence rule": 27,
+        "other": 26,
+        "rewrite without reason": 24,
+        "probe required before decision": 15,
+        "value shape": 9,
+        "request quote rejected": 2
+      }
+    },
+    "treatment": {
+      "byPath": {
+        "measure.formula": 24,
+        "population.conditions": 12,
+        "output": 9,
+        "reason": 6,
+        "population.entity": 5,
+        "measure.countGrain": 4,
+        "population.time": 4,
+        "population.source": 4,
+        "population.eligibility": 3,
+        "selection": 3,
+        "population.timeField": 3,
+        "population.joinMultiplicity": 2,
+        "grouping": 2,
+        "selection.ties": 1,
+        "population.eligibility_note_only": 1,
+        "population": 1,
+        "measure": 1,
+        "evidenceIds": 1
+      },
+      "byReason": {
+        "rewrite without reason": 28,
+        "other": 17,
+        "probe required before decision": 15,
+        "value shape": 13,
+        "population/evidence rule": 13
+      }
+    },
+    "fixed": [
+      {
+        "id": "local008",
+        "errorLayer": "口径错",
+        "visibility": "未声明",
+        "bifurcation": "measure.formula"
+      },
+      {
+        "id": "local023",
+        "errorLayer": "口径错",
+        "visibility": "未声明",
+        "bifurcation": "output"
+      },
+      {
+        "id": "local073",
+        "errorLayer": "口径错",
+        "visibility": "假定错",
+        "bifurcation": "output"
+      },
+      {
+        "id": "local157",
+        "errorLayer": "口径错",
+        "visibility": "未声明",
+        "bifurcation": "output"
+      },
+      {
+        "id": "local258",
+        "errorLayer": "口径错",
+        "visibility": "未声明",
+        "bifurcation": "selection"
+      }
+    ]
+  },
+  "arms": {
+    "control": {
+      "total": 50,
+      "statuses": {
+        "completed": 49,
+        "timeout": 1
+      },
+      "unscored": [],
+      "execCorrect": 31,
+      "sqlCorrect": 0,
+      "toolErrors": 22,
+      "toolCalls": 789,
+      "cases": [
+        {
+          "id": "local002",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 19,
+          "toolErrors": 0,
+          "durationMs": 333435
+        },
+        {
+          "id": "local003",
+          "status": "timeout",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 0,
+          "durationMs": 482023
+        },
+        {
+          "id": "local004",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 11,
+          "toolErrors": 2,
+          "durationMs": 127509
+        },
+        {
+          "id": "local007",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 9,
+          "toolErrors": 0,
+          "durationMs": 74123
+        },
+        {
+          "id": "local008",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "durationMs": 123030
+        },
+        {
+          "id": "local009",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 10,
+          "toolErrors": 1,
+          "durationMs": 79391
+        },
+        {
+          "id": "local010",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 115600
+        },
+        {
+          "id": "local015",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 32,
+          "toolErrors": 0,
+          "durationMs": 388782
+        },
+        {
+          "id": "local017",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 26,
+          "toolErrors": 0,
+          "durationMs": 235614
+        },
+        {
+          "id": "local018",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 0,
+          "durationMs": 272394
+        },
+        {
+          "id": "local019",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 22,
+          "toolErrors": 1,
+          "durationMs": 144279
+        },
+        {
+          "id": "local020",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 26,
+          "toolErrors": 1,
+          "durationMs": 178780
+        },
+        {
+          "id": "local021",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "durationMs": 110817
+        },
+        {
+          "id": "local022",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 75288
+        },
+        {
+          "id": "local023",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 150201
+        },
+        {
+          "id": "local024",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 124846
+        },
+        {
+          "id": "local025",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 15,
+          "toolErrors": 0,
+          "durationMs": 173198
+        },
+        {
+          "id": "local026",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "durationMs": 130331
+        },
+        {
+          "id": "local028",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 2,
+          "durationMs": 160525
+        },
+        {
+          "id": "local029",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 0,
+          "durationMs": 274923
+        },
+        {
+          "id": "local030",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 19,
+          "toolErrors": 0,
+          "durationMs": 293532
+        },
+        {
+          "id": "local031",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 98143
+        },
+        {
+          "id": "local032",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 266596
+        },
+        {
+          "id": "local034",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 284727
+        },
+        {
+          "id": "local035",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "durationMs": 163688
+        },
+        {
+          "id": "local037",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 7,
+          "toolErrors": 0,
+          "durationMs": 127505
+        },
+        {
+          "id": "local038",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 99060
+        },
+        {
+          "id": "local039",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 11,
+          "toolErrors": 1,
+          "durationMs": 85557
+        },
+        {
+          "id": "local040",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "durationMs": 137907
+        },
+        {
+          "id": "local041",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "durationMs": 65307
+        },
+        {
+          "id": "local049",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 1,
+          "durationMs": 155618
+        },
+        {
+          "id": "local050",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 218863
+        },
+        {
+          "id": "local054",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 74267
+        },
+        {
+          "id": "local055",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 0,
+          "durationMs": 156208
+        },
+        {
+          "id": "local056",
+          "status": "completed",
+          "run": "answering-plan-ab-control-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 0,
+          "durationMs": 127686
+        },
+        {
+          "id": "local058",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 2,
+          "durationMs": 215276
+        },
+        {
+          "id": "local065",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 0,
+          "durationMs": 121453
+        },
+        {
+          "id": "local073",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 18,
+          "toolErrors": 2,
+          "durationMs": 143452
+        },
+        {
+          "id": "local096",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 1,
+          "durationMs": 463625
+        },
+        {
+          "id": "local130",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "durationMs": 94519
+        },
+        {
+          "id": "local157",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 40,
+          "toolErrors": 4,
+          "durationMs": 147674
+        },
+        {
+          "id": "local193",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 0,
+          "durationMs": 124661
+        },
+        {
+          "id": "local201",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 159493
+        },
+        {
+          "id": "local220",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 184134
+        },
+        {
+          "id": "local258",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 1,
+          "durationMs": 144185
+        },
+        {
+          "id": "local272",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 1,
+          "durationMs": 95803
+        },
+        {
+          "id": "local284",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 18,
+          "toolErrors": 0,
+          "durationMs": 104740
+        },
+        {
+          "id": "local301",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-20261122-111048Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 1,
+          "durationMs": 180836
+        },
+        {
+          "id": "local331",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-20261122-111048Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 31,
+          "toolErrors": 1,
+          "durationMs": 293305
+        },
+        {
+          "id": "local358",
+          "status": "completed",
+          "run": "answering-plan-ab-control-002",
+          "attempt": "attempt-20261122-111048Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 0,
+          "durationMs": 164770
+        }
+      ]
+    },
+    "treatment": {
+      "total": 50,
+      "statuses": {
+        "completed": 50
+      },
+      "unscored": [],
+      "execCorrect": 36,
+      "sqlCorrect": 0,
+      "toolErrors": 14,
+      "toolCalls": 793,
+      "cases": [
+        {
+          "id": "local002",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-001",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 19,
+          "toolErrors": 0,
+          "durationMs": 244383
+        },
+        {
+          "id": "local003",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-001",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 294423
+        },
+        {
+          "id": "local004",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "durationMs": 154505
+        },
+        {
+          "id": "local007",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-104145Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 19,
+          "toolErrors": 2,
+          "durationMs": 105502
+        },
+        {
+          "id": "local008",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 99307
+        },
+        {
+          "id": "local009",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "durationMs": 72676
+        },
+        {
+          "id": "local010",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 22,
+          "toolErrors": 0,
+          "durationMs": 177388
+        },
+        {
+          "id": "local015",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 24,
+          "toolErrors": 0,
+          "durationMs": 402574
+        },
+        {
+          "id": "local017",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 1,
+          "durationMs": 178944
+        },
+        {
+          "id": "local018",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 9,
+          "toolErrors": 0,
+          "durationMs": 115860
+        },
+        {
+          "id": "local019",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 38,
+          "toolErrors": 1,
+          "durationMs": 293332
+        },
+        {
+          "id": "local020",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 1,
+          "durationMs": 165717
+        },
+        {
+          "id": "local021",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 118499
+        },
+        {
+          "id": "local022",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 104668
+        },
+        {
+          "id": "local023",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 143941
+        },
+        {
+          "id": "local024",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 6,
+          "toolErrors": 0,
+          "durationMs": 89174
+        },
+        {
+          "id": "local025",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 1,
+          "durationMs": 198447
+        },
+        {
+          "id": "local026",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 23,
+          "toolErrors": 0,
+          "durationMs": 179326
+        },
+        {
+          "id": "local028",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-090111Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 16,
+          "toolErrors": 0,
+          "durationMs": 98245
+        },
+        {
+          "id": "local029",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-104145Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 0,
+          "durationMs": 390920
+        },
+        {
+          "id": "local030",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 23,
+          "toolErrors": 0,
+          "durationMs": 338932
+        },
+        {
+          "id": "local031",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 1,
+          "durationMs": 111559
+        },
+        {
+          "id": "local032",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 19,
+          "toolErrors": 2,
+          "durationMs": 317324
+        },
+        {
+          "id": "local034",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 15,
+          "toolErrors": 0,
+          "durationMs": 112559
+        },
+        {
+          "id": "local035",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "durationMs": 114431
+        },
+        {
+          "id": "local037",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 329644
+        },
+        {
+          "id": "local038",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 15,
+          "toolErrors": 0,
+          "durationMs": 89157
+        },
+        {
+          "id": "local039",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 22,
+          "toolErrors": 0,
+          "durationMs": 128831
+        },
+        {
+          "id": "local040",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 99357
+        },
+        {
+          "id": "local041",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 8,
+          "toolErrors": 0,
+          "durationMs": 62760
+        },
+        {
+          "id": "local049",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "durationMs": 78521
+        },
+        {
+          "id": "local050",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 22,
+          "toolErrors": 0,
+          "durationMs": 271301
+        },
+        {
+          "id": "local054",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 21,
+          "toolErrors": 1,
+          "durationMs": 142695
+        },
+        {
+          "id": "local055",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 14,
+          "toolErrors": 0,
+          "durationMs": 131741
+        },
+        {
+          "id": "local056",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 22,
+          "toolErrors": 0,
+          "durationMs": 121726
+        },
+        {
+          "id": "local058",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 132615
+        },
+        {
+          "id": "local065",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 106107
+        },
+        {
+          "id": "local073",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 3,
+          "durationMs": 123013
+        },
+        {
+          "id": "local096",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 29,
+          "toolErrors": 0,
+          "durationMs": 425564
+        },
+        {
+          "id": "local130",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 7,
+          "toolErrors": 0,
+          "durationMs": 66583
+        },
+        {
+          "id": "local157",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 0,
+          "durationMs": 114220
+        },
+        {
+          "id": "local193",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 105153
+        },
+        {
+          "id": "local201",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 0,
+          "durationMs": 280317
+        },
+        {
+          "id": "local220",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 13,
+          "toolErrors": 0,
+          "durationMs": 212439
+        },
+        {
+          "id": "local258",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 17,
+          "toolErrors": 0,
+          "durationMs": 183624
+        },
+        {
+          "id": "local272",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 12,
+          "toolErrors": 0,
+          "durationMs": 89680
+        },
+        {
+          "id": "local284",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 10,
+          "toolErrors": 0,
+          "durationMs": 161178
+        },
+        {
+          "id": "local301",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 1,
+          "sql": 0,
+          "toolCalls": 11,
+          "toolErrors": 0,
+          "durationMs": 141175
+        },
+        {
+          "id": "local331",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 20,
+          "toolErrors": 0,
+          "durationMs": 194397
+        },
+        {
+          "id": "local358",
+          "status": "completed",
+          "run": "answering-plan-ab-treatment-001",
+          "attempt": "attempt-20261122-100557Z",
+          "exec": 0,
+          "sql": 0,
+          "toolCalls": 15,
+          "toolErrors": 1,
+          "durationMs": 112102
+        }
+      ]
+    }
+  }
+}
