@@ -4,8 +4,7 @@ import { AnsweringError } from "./errors.js";
 import { makeInternalId } from "./internal-ids.js";
 import { candidateCheckFailure, evaluateCandidateCheckReport } from "./candidate-checks.js";
 import { evaluateFanout, fanoutCoverage, fanoutFindings } from "./fanout-execution.js";
-import { composeDisclosure } from "./publication.js";
-import { buildPhysicalProfile } from "./physical-profile.js";
+import { buildReceipt, composeDisclosure, INLINE_ROW_LIMIT, ROW_INDEPENDENT_CHECK_IDS } from "./publication.js";
 import { boundedResult } from "./sql-execution.js";
 import { now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
@@ -50,63 +49,51 @@ export async function refreshPublication(deps: AnsweringDeps, input: RefreshPubl
   }));
   if (result.truncated) throw new AnsweringError("RESULT_INCOMPLETE", "The refreshed result exceeds the row limit and cannot be published");
   const privateResult = await deps.resultStore.createPrivate(result, context);
-  const checkReport = evaluateCandidateCheckReport({ fields: revision.fields, result: privateResult, queryHash: candidate.queryHash });
-  const failure = candidateCheckFailure(checkReport.findings);
-  if (failure) {
-    await deps.resultStore.discard(privateResult.resultRef, context);
-    throw new AnsweringError("CANDIDATE_CHECK_FAILED", `The refreshed result failed an online CandidateCheck: ${failure.message}`);
+  let committed = false;
+  try {
+    const checkReport = evaluateCandidateCheckReport({ fields: revision.fields, result: privateResult, queryHash: candidate.queryHash });
+    const failure = candidateCheckFailure(checkReport.findings);
+    if (failure) throw new AnsweringError("CANDIDATE_CHECK_FAILED", `The refreshed result failed an online CandidateCheck: ${failure.message}`);
+    const fanout = await evaluateFanout(deps, candidate.taskId, candidate.revisionId, candidate.queryHash, candidate.sql, context);
+    // Spec realization, entity identity and calendar coverage read the sealed fields, the SQL and the
+    // Revision's data checks, none of which a refresh changes: carry the original's verdicts unchanged.
+    const carried = (candidate.findings ?? []).filter((item) => item.checkId !== undefined && ROW_INDEPENDENT_CHECK_IDS.has(item.checkId) && !item.blocking);
+    const carriedCoverage = (candidate.coverage ?? []).filter((item) => ROW_INDEPENDENT_CHECK_IDS.has(item.checkId));
+    const refreshed: ResultCandidateRecord = {
+      candidateId: makeInternalId("candidate") as unknown as ResultCandidateRecord["candidateId"],
+      taskId: candidate.taskId,
+      revisionId: candidate.revisionId,
+      resultRef: privateResult.resultRef,
+      resultSchema: [...privateResult.columns],
+      rowCount: privateResult.rowCount,
+      contentHash: privateResult.contentHash,
+      sql: candidate.sql,
+      queryHash: candidate.queryHash,
+      findings: [...checkReport.findings, ...carried, ...fanoutFindings(fanout)],
+      coverage: [...checkReport.coverage, ...carriedCoverage, fanoutCoverage(fanout)],
+      fanout,
+      createdByInvocationId: context.invocationId,
+      createdAt: now(),
+      status: "ready",
+      publishable: true,
+    };
+    const disclosure = composeDisclosure(revision, refreshed, parentSuperseded);
+    const encoded = await deps.resultStore.encodeCsv(privateResult.resultRef, context);
+    const format = original.format === "inline" && privateResult.rowCount > INLINE_ROW_LIMIT ? "csv" : original.format;
+    const receipt = buildReceipt({ candidate: refreshed, result: privateResult, format, presentationContentHash: encoded.contentHash, ...(disclosure ? { disclosure } : {}), refreshes: original.receiptId, requestId: input.requestId }, context);
+    const stored = await deps.store.transact((tx) => {
+      const task = tx.getTask(receipt.taskId);
+      assertTaskAccess(task, context);
+      const existing = tx.findReceiptByRequest(receipt.taskId, receipt.requestId);
+      if (existing) return existing;
+      tx.putCandidate(refreshed);
+      tx.putReceipt(receipt);
+      return receipt;
+    }, context);
+    committed = stored.receiptId === receipt.receiptId;
+    return stored;
+  } finally {
+    // A failed check, a lost race to an equal request, or any error leaves the new object unreferenced.
+    if (!committed) await deps.resultStore.discard(privateResult.resultRef, context).catch(() => undefined);
   }
-  const fanout = await evaluateFanout(deps, candidate.taskId, candidate.revisionId, candidate.queryHash, candidate.sql, context);
-  const refreshed: ResultCandidateRecord = {
-    candidateId: makeInternalId("candidate") as unknown as ResultCandidateRecord["candidateId"],
-    taskId: candidate.taskId,
-    revisionId: candidate.revisionId,
-    resultRef: privateResult.resultRef,
-    resultSchema: [...privateResult.columns],
-    rowCount: privateResult.rowCount,
-    contentHash: privateResult.contentHash,
-    sql: candidate.sql,
-    queryHash: candidate.queryHash,
-    findings: [...checkReport.findings, ...fanoutFindings(fanout)],
-    coverage: [...checkReport.coverage, fanoutCoverage(fanout)],
-    fanout,
-    createdByInvocationId: context.invocationId,
-    createdAt: now(),
-    status: "ready",
-    publishable: true,
-  };
-  const disclosure = composeDisclosure(revision, refreshed, parentSuperseded);
-  const encoded = await deps.resultStore.encodeCsv(privateResult.resultRef, context);
-  const receiptId = makeInternalId("publication") as unknown as PublicationReceipt["receiptId"];
-  const receipt: PublicationReceipt = {
-    receiptId,
-    taskId: refreshed.taskId,
-    principalId: context.principal.id,
-    sessionId: context.sessionId,
-    candidateId: refreshed.candidateId,
-    revisionId: refreshed.revisionId,
-    resultRef: refreshed.resultRef,
-    format: original.format === "inline" && privateResult.rowCount > 10 ? "csv" : original.format,
-    publicRef: `/api/runtime/publications/${receiptId}?session_id=${encodeURIComponent(context.sessionId)}`,
-    contentHash: refreshed.contentHash,
-    presentationContentHash: encoded.contentHash,
-    ...(refreshed.coverage ? { coverage: refreshed.coverage } : {}),
-    fanout,
-    ...(disclosure ? { disclosure } : {}),
-    physicalProfile: buildPhysicalProfile(privateResult),
-    refreshes: original.receiptId,
-    policyVersion: "answering-publication-v1",
-    createdByInvocationId: context.invocationId,
-    requestId: input.requestId,
-    createdAt: refreshed.createdAt,
-  };
-  return deps.store.transact((tx) => {
-    const task = tx.getTask(receipt.taskId);
-    assertTaskAccess(task, context);
-    const existing = tx.findReceiptByRequest(receipt.taskId, receipt.requestId);
-    if (existing) return existing;
-    tx.putCandidate(refreshed);
-    tx.putReceipt(receipt);
-    return receipt;
-  }, context);
 }

@@ -7,7 +7,9 @@ import { createHash } from "node:crypto";
  * strings compare after trimming.
  */
 export function resultFingerprint(columns: readonly string[], rows: readonly (readonly unknown[])[]): string {
-  const width = Math.max(columns.length, ...rows.map((row) => row.length));
+  // A loop, not Math.max(...spread): 100,000 rows overflow the argument stack.
+  let width = columns.length;
+  for (const row of rows) if (row.length > width) width = row.length;
   const normalized = rows.map((row) => Array.from({ length: width }, (_, index) => normalizeValue(row[index])));
   // Canonical column order: by each column's sorted value multiset, then original position.
   const signatures = Array.from({ length: width }, (_, index) => JSON.stringify(normalized.map((row) => row[index]).sort()));

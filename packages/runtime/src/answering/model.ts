@@ -1,3 +1,4 @@
+import { readOnlyStatement } from "./sql-lex.js";
 import { createHash } from "node:crypto";
 import type { FieldValue, SpecPath } from "./fields.js";
 import type { EntityIdentityReport } from "./entity-identity.js";
@@ -726,11 +727,10 @@ export function isEvidenceKind(value: unknown): value is EvidenceKind {
 }
 
 export function isReadOnlySql(sql: string): boolean {
-  const normalized = sql.trim().replace(/;+$|\s+/g, (match) => match.includes(";") ? "" : " ").trim();
-  if (!normalized || normalized.includes(";")) return false;
-  return /^(?:select|with|explain|show|describe|pragma)\b/i.test(normalized)
-    && !/\b(?:insert|update|delete|drop|alter|create|truncate|replace|merge|grant|revoke|call|vacuum)\b/i.test(normalized);
+  return readOnlyStatement(sql) !== undefined;
 }
+
+const SCOPED_FORBIDDEN = /\b(?:copy|attach|detach|load_file|pg_read_file|pg_ls_dir|dblink|pg_sleep|set_config|lo_import|lo_export|benchmark|sleep|sys_exec|into\s+(?:out|dump)file)\b/i;
 
 /**
  * Conservative preflight for the delegated path. This is not a database
@@ -738,10 +738,8 @@ export function isReadOnlySql(sql: string): boolean {
  * read-only connection and relation policy.
  */
 export function isScopedReadOnlySql(sql: string): boolean {
-  if (!isReadOnlySql(sql)) return false;
-  const normalized = sql.trim();
-  if (!/^(?:select|with)\b/i.test(normalized)) return false;
-  return !/\b(?:insert|update|delete|drop|alter|create|truncate|replace|merge|grant|revoke|call|copy|attach|detach|vacuum|load_file|pg_read_file|pg_ls_dir|dblink|pg_sleep|set_config|lo_import|lo_export|benchmark|sleep|sys_exec|into\s+(?:out|dump)file)\b/i.test(normalized);
+  const statement = readOnlyStatement(sql, SCOPED_FORBIDDEN);
+  return statement !== undefined && /^(?:select|with)\b/i.test(statement);
 }
 
 export function normalizeLimit(limit: number | undefined, fallback = 50, maximum = 10_000): number {
