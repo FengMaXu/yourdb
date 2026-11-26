@@ -15,6 +15,13 @@ export const PROBE_SAMPLE_MAX_BYTES = 16_384;
 export const WITNESS_MAX = 3;
 /** Characters kept per witness cell. */
 export const WITNESS_CELL_CHARS = 80;
+/** Maximum non-zero NULL columns shown in a compact probe summary. */
+export const PROBE_NULL_SUMMARY_MAX_COLUMNS = 10;
+
+export interface ProbeColumnNullCount {
+  readonly column: string;
+  readonly count: number;
+}
 
 export interface ProbeSample {
   readonly columns: readonly string[];
@@ -24,6 +31,8 @@ export interface ProbeSample {
   readonly totalRows: number;
   /** False when the sample holds fewer rows than the output. */
   readonly complete: boolean;
+  /** Full-output NULL/undefined cell counts aligned 1-to-1 with columns. */
+  readonly nullCounts?: readonly number[];
 }
 
 export interface WitnessRow {
@@ -65,10 +74,15 @@ function truncate(cell: string): string {
 
 /** A bounded, canonical sample of one probe's output. */
 export function sampleProbeOutput(columns: readonly string[], rows: readonly (readonly unknown[])[]): ProbeSample {
-  const normalized = rows.map((row) => columns.map((_, index) => truncate(normalizeCell(row[index]))));
+  const nullCounts = columns.map(() => 0);
+  const normalized = rows.map((row) => columns.map((_, index) => {
+    const cell = row[index];
+    if (cell === null || cell === undefined) nullCounts[index] = (nullCounts[index] ?? 0) + 1;
+    return truncate(normalizeCell(cell));
+  }));
   normalized.sort((left, right) => compareRows(left, right));
   const kept: string[][] = [];
-  let bytes = JSON.stringify(columns).length;
+  let bytes = JSON.stringify(columns).length + JSON.stringify(nullCounts).length;
   for (const row of normalized) {
     if (kept.length >= PROBE_SAMPLE_MAX_ROWS) break;
     const size = JSON.stringify(row).length + 1;
@@ -76,7 +90,25 @@ export function sampleProbeOutput(columns: readonly string[], rows: readonly (re
     kept.push(row);
     bytes += size;
   }
-  return { columns: [...columns], rows: kept, totalRows: rows.length, complete: kept.length === rows.length };
+  return { columns: [...columns], rows: kept, totalRows: rows.length, complete: kept.length === rows.length, nullCounts };
+}
+
+/** Per-column NULL counts derived from a full-output ProbeSample. */
+export function probeNullCounts(sample: ProbeSample | undefined): readonly ProbeColumnNullCount[] | undefined {
+  if (!sample?.nullCounts || sample.nullCounts.length !== sample.columns.length) return undefined;
+  return sample.columns.map((column, index) => ({ column, count: sample.nullCounts![index] ?? 0 }));
+}
+
+/** Neutral one-line summary of full-output per-column NULL counts, without recommendations. */
+export function formatProbeNullCounts(nullCounts: readonly ProbeColumnNullCount[] | undefined, maxColumns = PROBE_NULL_SUMMARY_MAX_COLUMNS): string | undefined {
+  if (!nullCounts || nullCounts.length === 0) return undefined;
+  const nonZero = nullCounts.filter((item) => item.count > 0);
+  if (nonZero.length === 0) return "nulls=none";
+  const limit = Math.max(0, maxColumns);
+  const shown = nonZero.slice(0, limit).map((item) => `${item.column}:${item.count}`);
+  const hidden = nonZero.length - shown.length;
+  if (hidden > 0) shown.push(`+${hidden} more`);
+  return `nulls=[${shown.join(", ")}]`;
 }
 
 function compareRows(left: readonly string[], right: readonly string[]): number {

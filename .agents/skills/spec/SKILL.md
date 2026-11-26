@@ -122,7 +122,9 @@ requires-tools:
 - **只写要变的路径。** 未写的路径保持不变。每个路径独立校验、独立生效，失败的路径不影响其他路径；按返回的 `✗` 原因只重发失败的路径。
 - **无法单独执行的候选**：写 `{ "notProbeable": { "<alternativeId>": "理由" } }` 代替探针。
 - **改写已设置的字段**须附 `"reason"`，系统记录改写理由。
-- **实体身份计数**：写了 `population.entity` 和 `population.source` 后，返回中的 `[ENTITY_IDENTITY]` 给出每张来源表的行数、去重行数和 `keyColumns` 去重数。计数的键不唯一时，按键去重计数，或在 `population.entity` / `measure.countGrain` 写明每行为何是独立实体。完全重复行只是数据质量事实，不是去重的理由：除非题面或业务文档说明重复行是同一实体，否则按表中原有行计数。这些计数会随结果披露。
+- **实体身份计数**：写了 `population.entity` 和 `population.source` 后，返回中的 `[ENTITY_IDENTITY]` 给出每张来源表的行数（`rows`）、整行去重数（`distinct_rows`）和 `keyColumns` 去重数（`distinct(keyColumns)`），这些计数会随结果披露。计数按客观结构区分两种情形：
+  - **同键异值**（`distinct_rows > distinct(keyColumns)`）：同一键对应多条不同明细或版本行；按键去重计数，或在 `population.entity` / `measure.countGrain` 写明每行为何是独立实体。
+  - **完全重复行**（`rows > distinct_rows` 且 `distinct_rows = distinct(keyColumns)`）：整行所有列完全一致；若题面或业务文档未说明重复行究竟是同一实体还是独立记录，属于未决数据质量歧义，不默认去重也不默认按原行计数，按常规流程对 `measure.countGrain` 设 `open` 探针、澄清或披露。
 - 写入任何字段都会产生新的 Revision，上一版未发布的结果候选随之失效；先把字段写完，再执行最终查询。
 
 ## 7. 探索、探针与最终查询

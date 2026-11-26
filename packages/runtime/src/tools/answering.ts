@@ -7,7 +7,7 @@ import type {
   AgentToolResult,
   Context,
 } from "@earendil-works/pi-agent-core";
-import { AnsweringError, FIELD_FORMS, FIELD_PATHS, renderActions, renderCalendarCoverage, renderEntityIdentity, witnessText, type WitnessRow } from "../answering/public.js";
+import { AnsweringError, FIELD_FORMS, FIELD_PATHS, formatProbeNullCounts, renderActions, renderCalendarCoverage, renderEntityIdentity, witnessText, type WitnessRow } from "../answering/public.js";
 import type {
   Answering,
   AnswerRevisionView,
@@ -211,8 +211,9 @@ function queryText(view: Awaited<ReturnType<Answering["execute"]>>): string {
     : `[RESULT_CANDIDATE] candidateId=${view.artifact.candidateId} revisionId=${view.artifact.revisionId}`;
   const preview = `${view.preview.columns.join(" | ")}\n${view.preview.rows.map((row) => row.map((cell) => cell === null || cell === undefined ? "NULL" : String(cell)).join(" | ")).join("\n")}${view.preview.truncated ? "\n(truncated preview)" : ""}`;
   const fanout = fanoutText(view);
+  const probeNulls = view.probe?.state === "available" ? formatProbeNullCounts(view.probe.nullCounts) : undefined;
   const probe = view.probe
-    ? `[PROBE] path=${view.probe.path} alternativeId=${view.probe.alternativeId} rows=${view.probe.rowCount} ${view.probe.state === "available" ? `output=${view.probe.output}` : `output unavailable: ${view.probe.reason}`}\nAlternatives of the same field with equal output ids produce the same answer.${witnessLines(view.probe.witnesses)}`
+    ? `[PROBE] path=${view.probe.path} alternativeId=${view.probe.alternativeId} rows=${view.probe.rowCount} ${view.probe.state === "available" ? `output=${view.probe.output}${probeNulls ? ` ${probeNulls}` : ""}` : `output unavailable: ${view.probe.reason}`}\nAlternatives of the same field with equal output ids produce the same answer.${witnessLines(view.probe.witnesses)}`
     : "";
   return `${artifact}${probe ? `\n${probe}` : ""}${fanout ? `\n${fanout}` : ""}\n${preview}`;
 }
@@ -250,8 +251,11 @@ function valueText(value: unknown): string {
 function alternativesText(field: FieldView): string {
   return (field.alternatives ?? []).map((alternative) => {
     const probe = alternative.probe;
-    const output = probe?.state === "available" ? ` output=${probe.output}` : probe ? ` ${probe.state}` : "";
-    return `${alternative.id}=${valueText(alternative.value)}${output}`;
+    if (!probe) return `${alternative.id}=${valueText(alternative.value)}`;
+    if (probe.state !== "available") return `${alternative.id}=${valueText(alternative.value)} ${probe.state}`;
+    const rows = probe.rowCount !== undefined ? ` rows=${probe.rowCount}` : "";
+    const nulls = formatProbeNullCounts(probe.nullCounts);
+    return `${alternative.id}=${valueText(alternative.value)}${rows} output=${probe.output}${nulls ? ` ${nulls}` : ""}`;
   }).join("; ");
 }
 
