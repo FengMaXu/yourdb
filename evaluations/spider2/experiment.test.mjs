@@ -76,6 +76,27 @@ test("invalid and deprecated config is rejected instead of silently ignored", ()
   assert.throws(() => validateExperimentConfig({ answering: { semanticSpecMode: "sometimes" } }), /INVALID_SEMANTIC_SPEC_MODE/);
   assert.throws(() => validateExperimentConfig({ localDatabasePackSha256: "not-a-sha256" }), /INVALID_CONFIG_VALUE:localDatabasePackSha256/);
   assert.throws(() => validateExperimentConfig({ enableClarificationTool: "false" }), /INVALID_CONFIG_VALUE:enableClarificationTool/);
+  assert.throws(() => validateExperimentConfig({ oracleClarifier: "true" }), /INVALID_CONFIG_VALUE:oracleClarifier/);
+  assert.throws(() => validateExperimentConfig({ oracleClarifier: true, enableClarificationTool: false }), /CONFLICTING_CLARIFICATION_FLAGS/);
+});
+
+test("oracleClarifier records clarification metadata and alters experiment identity", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "spider-experiment-oracle-"));
+  try {
+    const current = config(root);
+    const baseline = await resolveExperiment({ config: current, instanceIds: ["local001"], inputs: { systemPrompt: "p" } });
+    const oracle = await resolveExperiment({ config: { ...current, oracleClarifier: true }, instanceIds: ["local001"], inputs: { systemPrompt: "p" } });
+    assert.equal(baseline.capabilities.clarification.resolved, true);
+    assert.equal(baseline.capabilities.clarification.oracleClarifier, false);
+    assert.equal(baseline.capabilities.clarification.mode, "interactive");
+    assert.equal(oracle.capabilities.clarification.resolved, true);
+    assert.equal(oracle.capabilities.clarification.oracleClarifier, true);
+    assert.equal(oracle.capabilities.clarification.mode, "oracle_clarifier");
+    assert.notEqual(oracle.experimentId, baseline.experimentId);
+    assert.equal(assertComparableExperiments(baseline, oracle).comparable, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("comparison identity rejects differences outside the declared fixed factors", async () => {

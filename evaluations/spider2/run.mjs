@@ -32,6 +32,12 @@ import {
   validateOfficialEvaluatorSource,
 } from "./lib.mjs";
 import { manifestFromExperiment, resolveExperiment, resolveSemanticSpecMode, validateExperimentConfig } from "./experiment.mjs";
+import {
+  attachOracleClarifier,
+  createOracleClarifier,
+  extractSchemaIdentifiersFromDdlCsv,
+  summarizeProbeOutcomesFromCalls,
+} from "./oracle-clarifier.mjs";
 import { buildEvaluationReport, loadEpisodeRecord, persistScoreRecord } from "./evaluation.mjs";
 import { attemptDirectory, createAttemptDescriptor, createAttemptLayout, writeAttemptStatus } from "./episode.mjs";
 import { openAttemptRecorder, publicationFromReceipt, spanIdForIdentity, summarizeUsage } from "./record.mjs";
@@ -591,6 +597,111 @@ function knowledgeMetrics(calls, startedAt) {
   };
 }
 
+function buildClarifierCallModel(profile, timeoutMs = 60_000) {
+  return async ({ messages }) => {
+    if (!profile?.model) throw new Error("ORACLE_CLARIFIER_MODEL_REQUIRED");
+    if (!profile?.apiKey) throw new Error("ORACLE_CLARIFIER_API_KEY_REQUIRED");
+    const baseUrl = (profile.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, "");
+    const endpoint = `${baseUrl}/chat/completions`;
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${profile.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: profile.model,
+        messages,
+        max_tokens: 2048,
+        temperature: 0,
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    const body = await response.text();
+    if (!response.ok) throw new Error(`ORACLE_CLARIFIER_HTTP_${response.status}:${body.slice(0, 300)}`);
+    const parsed = JSON.parse(body);
+    const content = parsed?.choices?.[0]?.message?.content;
+    if (typeof content === "string") return content;
+    if (Array.isArray(content)) {
+      return content.filter((part) => part && typeof part.text === "string").map((part) => part.text).join("");
+    }
+    throw new Error("ORACLE_CLARIFIER_EMPTY_COMPLETION");
+  };
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+async function loadOracleGoldAndSchema(config, instance, prepared) {
+  const goldParts = [];
+  if (config.evaluationSuite) {
+    const execResultDir = path.join(config.evaluationSuite, "gold", "exec_result");
+    if (await exists(execResultDir)) {
+      const exactCsv = path.join(execResultDir, `${instance.instance_id}.csv`);
+      let csvFiles = [];
+      if (await exists(exactCsv)) {
+        csvFiles = [exactCsv];
+      } else {
+        const pattern = new RegExp(`^${escapeRegExp(instance.instance_id)}(?:_[a-z0-9]+)?\\.csv$`);
+        const entries = await readdir(execResultDir).catch(() => []);
+        csvFiles = entries.filter((name) => pattern.test(name)).sort().slice(0, 2).map((name) => path.join(execResultDir, name));
+      }
+      for (const csvFile of csvFiles) {
+        const text = await readFile(csvFile, "utf8").catch(() => "");
+        if (!text.trim()) continue;
+        const preview = text.split(/\r?\n/).slice(0, 12).join("\n").slice(0, 4000);
+        goldParts.push(`Authoritative Gold CSV Preview (${path.basename(csvFile)}):\n${preview}`);
+      }
+    }
+    const goldSqlPath = path.join(config.evaluationSuite, "gold", "sql", `${instance.instance_id}.sql`);
+    if (await exists(goldSqlPath)) {
+      const goldSql = (await readFile(goldSqlPath, "utf8")).trim().slice(0, 8000);
+      if (goldSql) goldParts.push(`Optional Gold SQL Reference (secondary — defer to Authoritative Gold CSV if they conflict):\n${goldSql}`);
+    }
+  }
+
+  let ddlCsvText = "";
+  if (prepared?.metadataDir) {
+    const ddlPath = path.join(prepared.metadataDir, "DDL.csv");
+    if (await exists(ddlPath)) ddlCsvText = await readFile(ddlPath, "utf8").catch(() => "");
+  }
+  const schemaIdentifiers = extractSchemaIdentifiersFromDdlCsv(ddlCsvText);
+
+  if (schemaIdentifiers.length === 0 && prepared?.knowledge) {
+    const dbSchemaDoc = prepared.knowledge.read?.("doc/db_schema.md");
+    if (typeof dbSchemaDoc === "string" && dbSchemaDoc) {
+      for (const match of dbSchemaDoc.matchAll(/^##\s+Table:\s+([^\r\n]+)/gm)) {
+        schemaIdentifiers.push(match[1].trim());
+      }
+    }
+  }
+
+  return {
+    goldContext: goldParts.join("\n\n") || "No gold reference files were found for this case.",
+    schemaIdentifiers,
+  };
+}
+
+async function isBlindRedactionActive(manifest, options, fallbackResults = []) {
+  if (options?.blind === true) return true;
+  const manifestIds = Array.isArray(manifest?.instanceIds) ? manifest.instanceIds : [];
+  const candidateIds = manifestIds.length > 0
+    ? manifestIds
+    : fallbackResults.map((item) => item?.instanceId).filter(Boolean);
+  if (candidateIds.length === 0) return false;
+  const holdoutPath = path.join(here, "blind-holdout-ids.txt");
+  if (!(await exists(holdoutPath))) return false;
+  const holdoutIds = new Set(
+    (await readFile(holdoutPath, "utf8"))
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  return candidateIds.some((id) => holdoutIds.has(id));
+}
+
 async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attempt-001", experimentId = "legacy", attemptMode = "run", queryBudgetPolicy, retryOfAttemptId, fanoutEnabled = true, semanticSpecMode = "required") {
   const protocol = await import("@data-agent/runtime/testing");
   const { createMcpQueryExecutor } = await import("../../packages/database/dist/mcp-query-executor.js");
@@ -626,6 +737,10 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
     let harness;
     let recorder;
     let prepared;
+    let clarificationManager;
+    let oracleClarifier;
+    let detachClarifier;
+    let currentSessionId;
     let status = "completed";
     let error;
     let artifacts = {};
@@ -650,6 +765,19 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         ? { state: "known", backend: backendForCase(instance), path: backend.databasePath, sha256: await sha256File(backend.databasePath) }
         : { state: "unknown", backend: backendForCase(instance), reason: "external_backend_snapshot_not_exposed" };
       const sessionId = `${path.basename(runDir)}-${instance.instance_id}-${attemptId}`;
+      currentSessionId = sessionId;
+      if (config.oracleClarifier === true) {
+        clarificationManager = new protocol.ClarificationManager();
+        const { goldContext, schemaIdentifiers } = await loadOracleGoldAndSchema(config, instance, prepared);
+        oracleClarifier = createOracleClarifier({
+          callModel: buildClarifierCallModel(profile, Number(config.limits?.providerTimeoutMs ?? 60_000)),
+          originalQuestion: instance.question,
+          goldContext,
+          getProbeContext: () => summarizeProbeOutcomesFromCalls(recorder?.calls ?? []),
+          schemaIdentifiers,
+        });
+        detachClarifier = attachOracleClarifier({ clarificationManager, clarifier: oracleClarifier, sessionId });
+      }
       application = new protocol.DataAgentSessionApplication({
         sessionRoot: path.join(caseRoot, "session"),
         workspace: prepared.workspace,
@@ -661,6 +789,7 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         profile,
         ...(queryBudgetPolicy ? { answeringBudgetPolicy: queryBudgetPolicy } : {}),
         semanticSpecMode,
+        ...(clarificationManager ? { clarifications: clarificationManager } : {}),
         enableClarificationTool: config.enableClarificationTool !== false,
         answeringFanout: { enabled: fanoutEnabled },
         // Spider2 external knowledge is task-supplied, not a reviewed business definition.
@@ -755,6 +884,8 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
       await harness?.waitForIdle?.().catch(() => undefined);
       if (prepared && recorder && adapter) artifacts = await collectArtifacts(instance, caseRoot, adapter, recorder).catch((caught) => ({ ...artifacts, csvError: caught instanceof Error ? caught.message : String(caught) }));
       await attemptRecorder?.flush?.();
+      detachClarifier?.();
+      if (clarificationManager && currentSessionId) clarificationManager.cancel(currentSessionId, "cancelled");
       stopObservations?.();
       recorder?.unsubscribe();
       try { await application?.close(); } catch (caught) { cleanupErrors.push(caught instanceof Error ? { name: caught.name, message: caught.message } : { message: String(caught) }); }
@@ -781,6 +912,7 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
     }
     const recordedKnowledgeMetrics = knowledgeMetrics(recorder?.calls ?? [], startedAt);
     const recordedFanoutMetrics = fanoutMetrics(recorder?.calls ?? []);
+    const clarificationAudit = oracleClarifier ? oracleClarifier.getAuditLog() : undefined;
     const result = {
       instanceId: instance.instance_id,
       db: instance.db,
@@ -793,6 +925,14 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
       toolCalls: recorder?.calls.length ?? 0,
       toolErrors: recorder?.calls.filter((call) => call.isError).length ?? 0,
       knowledgeMetrics: recordedKnowledgeMetrics,
+      ...(clarificationAudit ? {
+        oracleClarifier: {
+          enabled: true,
+          clarificationCount: clarificationAudit.length,
+          answeredCount: clarificationAudit.filter((entry) => entry.status === "answered").length,
+          blockedCount: clarificationAudit.filter((entry) => entry.status !== "answered").length,
+        },
+      } : {}),
       finalSql: artifacts.finalSql ?? null,
       csvGenerated: Boolean(artifacts.finalCsv),
       csvError: artifacts.csvError ?? null,
@@ -883,19 +1023,36 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
           resultQueries: (recorder?.calls ?? []).filter((call) => call.toolName === "query_database" && (call.args?.kind ?? call.args?.mode) === "result").length,
           fanoutProbes: recordedFanoutMetrics.targetCount,
           revisions: (recorder?.calls ?? []).filter((call) => call.toolName === "set_answer_spec" && call.args?.taskId).length,
+          ...(clarificationAudit ? { clarifications: clarificationAudit.length } : {}),
         },
         capabilities: {
           semanticSpec: { configured: true, executed: (recorder?.calls ?? []).some((call) => (semanticSpecMode === "required" ? ["set_answer_spec"] : ["begin_query_task"]).includes(call.toolName)), coverage: semanticSpecMode },
           fanout: { configured: fanoutEnabled, executed: recordedFanoutMetrics.reportCount > 0, coverage: recordedFanoutMetrics.reportCount > 0 ? "observed" : fanoutEnabled ? "not_observed" : "disabled" },
+          ...(clarificationAudit ? {
+            clarification: {
+              configured: true,
+              executed: clarificationAudit.length > 0,
+              coverage: "oracle_clarifier",
+              count: clarificationAudit.length,
+            },
+          } : {}),
         },
       });
       result.episodeRecord = sealed.episode;
       result.usage = summarizeUsage(sealed.projection.spans);
     }
-    const trace = { events: recorder?.events ?? [], toolCalls: recorder?.calls ?? [], nativeEventTypes: nativeObservations.types, knowledgeMetrics: recordedKnowledgeMetrics, fanoutMetrics: recordedFanoutMetrics, assuranceAuditRecords: [], anomalies: result.anomalies, episodeRecord: result.episodeRecord ?? null };
+    const trace = { events: recorder?.events ?? [], toolCalls: recorder?.calls ?? [], nativeEventTypes: nativeObservations.types, knowledgeMetrics: recordedKnowledgeMetrics, fanoutMetrics: recordedFanoutMetrics, assuranceAuditRecords: [], anomalies: result.anomalies, episodeRecord: result.episodeRecord ?? null, ...(clarificationAudit ? { clarificationAudit } : {}) };
     const writes = [
       writeFile(path.join(caseRoot, "result.json"), JSON.stringify(result, null, 2), "utf8"),
       writeFile(path.join(caseRoot, "trace.json"), JSON.stringify(trace, null, 2), "utf8"),
+      ...(clarificationAudit ? [
+        writeFile(path.join(caseRoot, "clarification-audit.json"), JSON.stringify({
+          instanceId: instance.instance_id,
+          sessionId: currentSessionId,
+          clarificationCount: clarificationAudit.length,
+          entries: clarificationAudit,
+        }, null, 2), "utf8"),
+      ] : []),
     ];
     // Compatibility projections are read-only views for the existing report
     // scripts; never overwrite the first projection when a Retry is appended.
@@ -932,7 +1089,7 @@ function endpointIdentity(value) {
   }
 }
 
-const EVALUATION_ADAPTER_FILES = ["run.mjs", "lib.mjs", "experiment.mjs", "episode.mjs", "record.mjs", "evaluation.mjs", "adapters/legacy-record.mjs", "baseline-report.mjs", "phase5-ab.mjs", "phase6-evaluate.mjs"];
+const EVALUATION_ADAPTER_FILES = ["run.mjs", "lib.mjs", "experiment.mjs", "oracle-clarifier.mjs", "episode.mjs", "record.mjs", "evaluation.mjs", "adapters/legacy-record.mjs", "baseline-report.mjs", "phase5-ab.mjs", "phase6-evaluate.mjs"];
 
 async function evaluationAdapterSha256() {
   const hash = createHash("sha256");
@@ -1109,6 +1266,7 @@ async function runCommand(config, options) {
     answering: {
       semanticSpecMode: experiment.capabilities.semanticSpec.resolved,
       enableClarificationTool: experiment.capabilities.clarification.resolved,
+      oracleClarifier: experiment.capabilities.clarification.oracleClarifier === true,
       promptProfile: `semantic-spec-${experiment.capabilities.semanticSpec.resolved}`,
       interface: ["begin", "revise", "execute", "publish", "inspect"],
       policyVersion: "answering-publication-v1",
@@ -1211,7 +1369,7 @@ async function runCommand(config, options) {
     throw new Error(`RUN_INCOMPLETE:${reason}`);
   }
   console.log(`Run completed: ${runDir}`);
-  if (options.score) await scoreCommand(config, { run: runId, attempt: manifest.attemptPolicy.selectedAttemptId });
+  if (options.score) await scoreCommand(config, { run: runId, attempt: manifest.attemptPolicy.selectedAttemptId, ...(options.blind ? { blind: true } : {}) });
   return runDir;
 }
 
@@ -1341,12 +1499,21 @@ async function scoreCommand(config, options) {
     },
     createdAt: scoreFinishedAt,
   };
+  const blind = await isBlindRedactionActive(manifest, options);
   const result = { sql, execResult, attemptId, episodeCount: episodes.length, scoredAt: new Date().toISOString() };
   await writeFile(path.join(outputDir, "summary.json"), JSON.stringify(result, null, 2), "utf8");
   await writeFile(path.join(outputDir, "evaluation.json"), JSON.stringify(evaluation, null, 2), "utf8");
   await persistScoreRecord(scoreRecord, path.join(outputDir, "score-record.json"));
-  console.log(JSON.stringify(result, null, 2));
-  await reportCommand(config, options);
+  const redactMode = (modeResult) => {
+    if (!blind || !modeResult || typeof modeResult !== "object") return modeResult;
+    const { caseScores: _omitted, ...rest } = modeResult;
+    return rest;
+  };
+  const stdoutResult = blind
+    ? { blind: true, sql: redactMode(sql), execResult: redactMode(execResult), attemptId, episodeCount: episodes.length, scoredAt: result.scoredAt }
+    : result;
+  console.log(JSON.stringify(stdoutResult, null, 2));
+  await reportCommand(config, { ...options, blind });
   return result;
 }
 
@@ -1415,6 +1582,7 @@ async function reportCommand(config, options) {
   const official = await exists(officialPath) ? JSON.parse(await readFile(officialPath, "utf8")) : null;
   const evaluationPath = path.join(runDir, "official_score", "evaluation.json");
   const evaluation = await exists(evaluationPath) ? JSON.parse(await readFile(evaluationPath, "utf8")) : null;
+  const blind = await isBlindRedactionActive(manifest, options, results);
   const sqlCaseScores = official?.sql?.caseScores ?? {};
   const csvCaseScores = official?.execResult?.caseScores ?? {};
   const failures = results.filter((item) => item.status !== "completed" || !item.finalSql || !item.csvGenerated || sqlCaseScores[item.instanceId] === 0 || csvCaseScores[item.instanceId] === 0);
@@ -1441,10 +1609,15 @@ async function reportCommand(config, options) {
       `- End-to-End EX (fixed run denominator): ${official.execResult?.fixedDenominator?.score ?? "not available"} (${official.execResult?.fixedDenominator?.correct ?? 0}/${official.execResult?.fixedDenominator?.total ?? summary.total})`,
     ] : []),
     "",
-    "## Cases needing review",
-    "",
-    ...(failures.length ? failures.map((item) => `- ${item.instanceId}: status=${item.status}${item.stopPosition ? `, stop=${item.stopPosition}` : ""}, sql=${Boolean(item.finalSql)}, csv=${item.csvGenerated}, sqlEX=${sqlCaseScores[item.instanceId] ?? "n/a"}, csvEX=${csvCaseScores[item.instanceId] ?? "n/a"}${item.csvError ? `, csvError=${item.csvError}` : ""}${item.error?.message ? `, error=${item.error.message}` : ""}`) : ["None."]),
-    "",
+    ...(blind ? [
+      "- Blind holdout redaction: active (per-case IDs, SQL, CSV snippets, and review lists omitted).",
+      "",
+    ] : [
+      "## Cases needing review",
+      "",
+      ...(failures.length ? failures.map((item) => `- ${item.instanceId}: status=${item.status}${item.stopPosition ? `, stop=${item.stopPosition}` : ""}, sql=${Boolean(item.finalSql)}, csv=${item.csvGenerated}, sqlEX=${sqlCaseScores[item.instanceId] ?? "n/a"}, csvEX=${csvCaseScores[item.instanceId] ?? "n/a"}${item.csvError ? `, csvError=${item.csvError}` : ""}${item.error?.message ? `, error=${item.error.message}` : ""}`) : ["None."]),
+      "",
+    ]),
   ].join("\n");
   await writeFile(path.join(runDir, "report.md"), report, "utf8");
   console.log(`Report: ${path.join(runDir, "report.md")}`);
@@ -1557,6 +1730,8 @@ function usage() {
     "`run --continue` keeps an existing attempt; `run --retry` appends a new attempt without replacing canonical evidence.",
     "Use `--semantic-spec-mode required|disabled` only for a pre-registered semantic-spec ablation; disabled keeps Query Task/Candidate/Receipt semantics.",
     "Use `--disable-clarification` for both headless A/B arms to remove the blocking clarification tool without changing product defaults.",
+    "Use `--oracle-clarifier` to answer clarifications via an isolated gold-context oracle clarifier (mutually exclusive with `--disable-clarification`).",
+    "Use `--blind` on `score`/`report` to redact per-case IDs, SQL, CSV snippets, and review lists (auto-enabled when manifest intersects blind-holdout-ids.txt).",
   ].join("\n");
 }
 
@@ -1566,6 +1741,9 @@ async function main() {
     console.log(usage());
     return;
   }
+  if (options.oracleClarifier && options.disableClarification) {
+    throw new Error("CONFLICTING_CLARIFICATION_FLAGS:--oracle-clarifier cannot be combined with --disable-clarification");
+  }
   if (options.envFile) await loadEnvironmentFile(path.resolve(options.envFile));
   else {
     await loadEnvironmentFile(path.join(projectRoot, ".env"));
@@ -1574,6 +1752,7 @@ async function main() {
   let config = selectModelProfile(await loadConfig(options.config), options.modelProfile);
   if (options.semanticSpecMode) config = { ...config, answering: { ...(config.answering ?? {}), semanticSpecMode: String(options.semanticSpecMode) } };
   if (options.disableClarification) config = { ...config, enableClarificationTool: false };
+  if (options.oracleClarifier) config = { ...config, oracleClarifier: true };
   validateExperimentConfig(config);
   if (command === "preflight") await preflightCommand(config, options);
   else if (command === "freeze") await freezeCommand(config);
