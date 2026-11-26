@@ -8,7 +8,6 @@ import type { BusinessContext } from "../answering/model.js";
 import { KnowledgeIndex } from "../knowledge.js";
 import { ClarificationManager } from "../clarification.js";
 import { InMemoryAnsweringStore } from "../answering/storage.js";
-import type { CompareHypothesesInput, HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
 
 const profile: DataAgentModelProfile = { provider: "openai", model: "test-model", apiKey: "test" };
 const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
@@ -220,22 +219,9 @@ describe("Session Runtime scoped query composition", () => {
     }
   });
 
-  it("asks the configured Jev advisor with the exact Session request once an open field's probes differ", async () => {
-    const root = await mkdtemp(path.join(process.cwd(), ".tmp-session-runtime-jev-"));
-    const observed: CompareHypothesesInput[] = [];
-    const advisor: HypothesisChoiceAdvisor = {
-      compare: async (input) => {
-        observed.push(input);
-        return {
-          model: "jev-test",
-          recommendation: { kind: "insufficient_evidence" },
-          probabilities: input.hypotheses.map((item) => ({ hypothesisId: item.id, probability: 0.1 })),
-          abstentionProbabilities: { insufficientEvidence: 0.6, multiplePlausible: 0.1, noneSupported: 0.1 },
-          confidence: 0.5,
-        };
-      },
-    };
-    const session = await new MemorySessionRepo().create({ id: "session-jev" }, TODO_CONTEXT);
+  it("returns differential witness rows when an open field's probes differ", async () => {
+    const root = await mkdtemp(path.join(process.cwd(), ".tmp-session-runtime-witnesses-"));
+    const session = await new MemorySessionRepo().create({ id: "session-witnesses" }, TODO_CONTEXT);
     const branch = await session.createBranch("main", null, TODO_CONTEXT);
     const requestMessageId = await branch.appendMessage({ role: "user", content: "年度月均收入如何计算？", timestamp: Date.now() }, TODO_CONTEXT);
     const host = await createDataAgentSessionHost({
@@ -245,29 +231,20 @@ describe("Session Runtime scoped query composition", () => {
       workspace: new WorkspaceStore(path.join(root, "workspace")),
       profile,
       systemPrompt: "You are Data Agent.",
-      hypothesisChoiceAdvisor: advisor,
       queryExecutor: { run: async (sql) => ({ columns: ["n"], rows: [[sql.includes("twelve") ? 12 : 9]], truncated: false }) },
     });
     try {
-      // The comparison is the Runtime's own step, not a model tool.
       expect(host.tools.some((item) => item.name === "compare_hypotheses")).toBe(false);
       const begun = await host.answering.set({
         requestMessageId,
-        requestId: "begin-jev",
+        requestId: "begin-witnesses",
         fields: { ...spec, "measure.denominator": { open: ["按十二个月计算", "按有记录月份计算"] } },
-      }, business("begin-jev"));
+      }, business("begin-witnesses"));
       const [twelve, recorded] = begun.fields.find((item) => item.path === "measure.denominator")!.alternatives!.map((item) => item.id as string);
       await host.answering.execute({ kind: "exploration", taskId: begun.taskId, sql: "SELECT twelve", probe: { path: "measure.denominator", alternativeId: twelve! } }, business("probe-twelve"));
-      expect(observed).toHaveLength(0);
       const last = await host.answering.execute({ kind: "exploration", taskId: begun.taskId, sql: "SELECT recorded", probe: { path: "measure.denominator", alternativeId: recorded! } }, business("probe-recorded"));
-      expect(observed).toHaveLength(1);
-      expect(last.probe).toMatchObject({ advice: { recommendation: "insufficient_evidence" } });
-      expect(observed[0]).toMatchObject({
-        originalQuestion: "年度月均收入如何计算？",
-        hypotheses: [{ statement: "measure.denominator: 按十二个月计算" }, { statement: "measure.denominator: 按有记录月份计算" }],
-        evidence: [{ kind: "request_wording", content: "年度月均收入如何计算？" }, { id: "probe_outputs" }],
-      });
-      const unchanged = await host.answering.inspect({ taskId: begun.taskId }, business("inspect-after-jev"));
+      expect(last.probe?.witnesses).toHaveLength(2);
+      const unchanged = await host.answering.inspect({ taskId: begun.taskId }, business("inspect-after-probes"));
       expect(unchanged.currentRevision.fields["measure.denominator"]).toMatchObject({ state: "open" });
       expect(unchanged.task.currentRevisionId).toBe(begun.revisionId);
     } finally {

@@ -52,3 +52,16 @@ ADR-0003 的三类硬阻断保持不变，新增两类，二者都属于"处置�
 **建议由运行时请求。** 决策 2 的 `compare_hypotheses` 工具移除。待定字段的每个候选都有探针或豁免、且输出不全相同时，需要建议是确定的状态，不该再让模型多调一次工具：运行时在补齐输出的那次探针返回时（或豁免补齐时）调用建议服务，把建议记在 Query Task 上，随探针结果和状态表返回；决定前若仍缺建议，`set_answer_spec` 先补问再校验。建议只对它比较过的候选与探针输出有效，输出变化后重新请求。服务故障记为 `unavailable`，一分钟后才重问，决定照常进行并披露。原工具允许模型附带的自由文本 `evidence` 不经准入就交给建议服务，随工具一并取消。决策 2、3 的其余规则（建议不是证据、偏离倾向须附理由与合格证据）不变。Advisory Ledger 不再存在，建议进入 AnsweringStore，随会话持久化。
 
 **探针绑定其他字段的状态。** 后果一节已指出“其他 Choice 的处置变化会让旧探针过时”，但运行时此前仍按旧探针判定等价与决定前提：字段 A 在字段 B 的某个临时取值下各候选输出恰好相同，A 被视为等价；B 改正后 A 的候选可能已不等价，却逃过了决定。现在每个探针记录运行时其他字段的状态与取值（不含依据、理由与候选 ID），其他字段改变后旧探针记为 `stale`：等价判定失效、字段重新待定，决定前须重跑探针。决策 4 的兑现检查仍使用各候选最近一次探针，不论上下文。
+
+## 修订（2026-11-22）：移除 Jev 比较建议与 FieldAdvice
+
+Spider2 同配置对照评测与逐字段回放证明，外部独立模型 Jev 对端到端正确率没有正向贡献，反而增加了一套外部 LLM 配置与运行时状态机复杂度：
+
+- **端到端 A/B（50 道 SQLite 题，`deepseek-flash`）**：实验组不开 Jev 为 **36/50（72%）**（相对控制组 31/50 修复 5 题、回退 0 题）；同一代码的开启 Jev 组（`answering-plan-ab-treatment-jev-002`）为 **34/50（68%）**。在两组均完成的 49 题上，开启 Jev 修复 3 题、弄错 5 题。
+- **T4.1 逐字段回放（`evaluations/spider2/jev-witness-replay-v1.json`）**：在 `answering-plan-ab-treatment-jev-002` 产生 Jev 建议的 43 个字段中，仅 19 个能由唯一候选复现 Gold；注入探针差异见证行前后，Jev 选择准确率均为 **14/19（73.7%）**（0 题变对、0 题变错，正确候选平均概率由 0.330 降至 0.307）；在给出明确倾向（`lean: "hypothesis"`）的 10 个字段里，Jev 选错 3 个（`local007`、`local049`、`local201`），当模型缺少推翻倾向的合格证据时反而会锁定错解。
+
+因此彻底移除 Jev 比较建议器及其全部配套机制：
+
+- 删除 `HypothesisChoiceAdvisor`、`JevHypothesisChoiceAdvisor`、`FieldAdvice`（`advice.ts`、`advice-execution.ts`）、`fieldAdvice`、`adviceOverride`、`adviceUnavailable`、`adviceUndecided`、`unadvised`/`undecided` 披露项及 `TYPESAFE_API_KEY` 运行时接线。决策 2 与决策 3 中围绕比较建议与 `adviceOverride` 的约束不再适用。
+- **保留全部确定性探针资产**：决策 1 的探针执行、Result Fingerprint、基于当前其他字段上下文的 `stale` 判定与自动 `equivalent` 推导；决策 4 的 `DECISION_NOT_REALIZED` 决定兑现检查；以及探针差异见证行（`[WITNESS]`）在工具视图中的展示。
+- 决定待定字段时保留理由要求（`rationale`）与 ADR-0006 统计总体证据约束；能询问用户时统计总体字段仍先取证或澄清，其余无合格证据的决定按未证实记录并在发布时披露。

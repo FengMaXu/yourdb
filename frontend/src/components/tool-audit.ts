@@ -784,10 +784,6 @@ export function disclosureNoteText(note: DisclosureNote, isEn: boolean, withFiel
             return withFields ? on(isEn ? 'assumed by the model, not confirmed by a document' : '模型假设，没有文档证实') : undefined;
         case 'decided':
             return on(isEn ? 'several readings were possible; the literal one was taken' : '存在多种理解，按字面选了一种');
-        case 'unadvised':
-            return on(isEn ? 'readings give different results; chosen without comparison' : '不同理解结果不同，未经比较就做了选择');
-        case 'undecided':
-            return on(isEn ? 'readings give different results; no way to tell which is right' : '不同理解结果不同，无法判断哪种正确');
         case 'deviation':
             return on(isEn
                 ? `differs from the report's shared definition${note.detail ? ` (${note.detail})` : ''}`

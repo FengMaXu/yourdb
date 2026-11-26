@@ -7,7 +7,6 @@ import type { WorkspaceStore } from "../workspace.js";
 import type { RuntimeExecutionSnapshot, RuntimeObservation, TranscriptMessage } from "../facets/transcript.js";
 import type { AuthorizedArtifact, AuthorizedPublicationSql } from "../facets/artifact-directory.js";
 import type { DashboardRefreshRequest, DashboardRefreshResult } from "../facets/dashboard-refresh.js";
-import type { HypothesisChoiceAdvisor } from "../judgment/hypothesis-choice.js";
 import type { FanoutAnsweringOptions, QueryBudgetPolicy } from "../answering/public.js";
 import type { SemanticSpecMode } from "../tools/answering.js";
 import type { McpPluginTool } from "../tools/mcp-plugins.js";
@@ -41,7 +40,6 @@ export interface DataAgentSessionApplicationOptions {
   readonly pythonExecutable?: string | (() => string | undefined);
   readonly queryExecutor?: SessionQueryExecutor | (() => SessionQueryExecutor | Promise<SessionQueryExecutor>);
   readonly resultRoot?: string;
-  readonly hypothesisChoiceAdvisor?: HypothesisChoiceAdvisor;
   /** Tools of the enabled MCP plugins; read for each session it opens. */
   readonly mcpPluginTools?: () => Promise<readonly McpPluginTool[]>;
   /** Evaluation-only; ordinary product sessions use the required semantic Spec. */
@@ -298,7 +296,6 @@ export class DataAgentSessionApplication {
       ...(queryExecutor ? { queryExecutor } : {}),
       ...(mcpPluginTools.length > 0 ? { mcpPluginTools } : {}),
       ...(this.options.resultRoot ? { resultRoot: (await import("node:path")).join(this.options.resultRoot, context.sessionId) } : {}),
-      ...(this.options.hypothesisChoiceAdvisor ? { hypothesisChoiceAdvisor: this.options.hypothesisChoiceAdvisor } : {}),
       ...(this.options.semanticSpecMode ? { semanticSpecMode: this.options.semanticSpecMode } : {}),
       ...(this.options.answeringBudgetPolicy ? { answeringBudgetPolicy: this.options.answeringBudgetPolicy } : {}),
       ...(this.options.answeringFanout ? { answeringFanout: this.options.answeringFanout } : {}),

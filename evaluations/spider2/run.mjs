@@ -621,7 +621,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         if (observation.event?.status === "failed") this.lastFailedRunEnd = observation;
       },
     };
-    const jevObservations = [];
     let activeTools = [];
     let databaseIdentity = { state: "unknown", backend: backendForCase(instance) };
     let harness;
@@ -651,14 +650,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         ? { state: "known", backend: backendForCase(instance), path: backend.databasePath, sha256: await sha256File(backend.databasePath) }
         : { state: "unknown", backend: backendForCase(instance), reason: "external_backend_snapshot_not_exposed" };
       const sessionId = `${path.basename(runDir)}-${instance.instance_id}-${attemptId}`;
-      const hypothesisChoiceAdvisor = process.env.TYPESAFE_API_KEY?.trim() && protocol.JevHypothesisChoiceAdvisor
-        ? new protocol.JevHypothesisChoiceAdvisor({
-            apiKey: process.env.TYPESAFE_API_KEY.trim(),
-            model: process.env.TYPESAFE_MODEL?.trim() || "jev-1.13.0",
-            ...(process.env.TYPESAFE_ENDPOINT?.trim() ? { endpoint: process.env.TYPESAFE_ENDPOINT.trim() } : {}),
-            onObservation: (observation) => jevObservations.push(observation),
-          })
-        : undefined;
       application = new protocol.DataAgentSessionApplication({
         sessionRoot: path.join(caseRoot, "session"),
         workspace: prepared.workspace,
@@ -668,7 +659,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
         queryExecutor: executor,
         resultRoot: path.join(caseRoot, "results"),
         profile,
-        ...(hypothesisChoiceAdvisor ? { hypothesisChoiceAdvisor } : {}),
         ...(queryBudgetPolicy ? { answeringBudgetPolicy: queryBudgetPolicy } : {}),
         semanticSpecMode,
         enableClarificationTool: config.enableClarificationTool !== false,
@@ -819,7 +809,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
       nativeObservationCount: nativeObservations.count,
       activeTools,
       databaseIdentity,
-      jevObservationCount: jevObservations.length,
       ...(cleanupErrors.length ? { cleanupErrors, cleanupFailed: true } : {}),
       nativeTerminalStatus: nativeObservations.lastRunEnd?.event?.status ?? "unknown",
     };
@@ -863,16 +852,6 @@ async function createCaseRunner(config, runDir, systemPrompt, attemptId = "attem
             payload: { runId: outcome.runId, key: outcome.key, operationId: outcome.operationId, status: outcome.status, usage: outcome.usage },
           });
         }
-      }
-      const traceId = `${path.basename(runDir)}:${instance.instance_id}:${attemptId}`;
-      for (const [index, observation] of jevObservations.entries()) {
-        await attemptRecorder.recordEvent({
-          eventId: `jev-${index + 1}-${observation.kind}`,
-          type: "jev_request",
-          occurredAt: observation.startedAt,
-          traceId,
-          payload: observation,
-        });
       }
       const sealedAt = Date.now();
       const sealed = await attemptRecorder.seal({

@@ -15,15 +15,13 @@ import { FIELD_PATHS, type SpecPath } from "./fields.js";
 import { openPaths, undeclaredPaths, unverifiedFields } from "./qualification.js";
 import { calendarRequiredPaths } from "./calendar-coverage.js";
 import { equivalentPaths, probeContext, summarizeProbes } from "./probes.js";
-import { adviceView, applicableAdvice, latestAdvice, type FieldAdvisory } from "./advice.js";
 import type { AnsweringDeps } from "./deps.js";
 
-/** What the Runtime knows about open fields beyond the Revision: probes and advice. */
+/** What the Runtime knows about open fields beyond the Revision: probes and registered evidence. */
 export interface ProbeContext {
   /** Probes are tracked: views show per-alternative probe state and decisions need every output. */
   readonly tracked: boolean;
   readonly probes: readonly FieldProbeRecord[];
-  readonly advice?: (path: string) => FieldAdvisory | undefined;
   /** Registered evidence, to tell a request quote from other evidence. */
   readonly evidence?: (id: string) => Evidence | undefined;
 }
@@ -49,12 +47,10 @@ function fieldView(path: SpecPath, field: FieldRecord, fields: AnswerRevisionRec
   const summary = context?.tracked ? summarizeProbes(path, field.alternatives, context.probes, field.waivers ?? [], probeContext(fields, path)) : undefined;
   const probes = new Map((summary?.probes ?? []).map((probe) => [probe.alternativeId as string, probe]));
   const alternatives = field.alternatives.map((alternative) => ({ id: alternative.id, value: alternative.value, ...(probes.has(alternative.id) ? { probe: probes.get(alternative.id)! } : {}) }));
-  const advice = summary ? applicableAdvice(context?.advice?.(path), field.alternatives, summary) : undefined;
   const shared = {
     alternatives,
     ...(summary ? { outputs: summary.outputs } : {}),
     ...(summary && summary.witnesses.length > 0 ? { witnesses: summary.witnesses } : {}),
-    ...(advice ? { advice: adviceView(advice) } : {}),
     ...inherited,
   };
   if (field.state === "open") return { path, status: equivalent.has(path) ? "equivalent" : "open", ...shared };
@@ -65,20 +61,16 @@ function fieldView(path: SpecPath, field: FieldRecord, fields: AnswerRevisionRec
     verified: field.basis.kind === "evidence",
     rationale: field.rationale,
     ...(field.basis.kind === "evidence" ? { evidenceIds: field.basis.evidenceIds } : {}),
-    ...(field.adviceOverride ? { adviceOverride: field.adviceOverride } : {}),
-    ...(field.adviceUnavailable ? { adviceUnavailable: field.adviceUnavailable } : {}),
-    ...(field.adviceUndecided ? { adviceUndecided: field.adviceUndecided } : {}),
     ...shared,
   };
 }
 
-/** Probes and advice the Runtime holds for a task; probes are tracked only when Choice governance is on. */
-export function probeContextFor(deps: AnsweringDeps, task: Pick<QueryTaskRecord, "taskId" | "fieldProbes" | "fieldAdvice">, evidence?: readonly Evidence[]): ProbeContext | undefined {
+/** Probes the Runtime holds for a task; probes are tracked only when Choice governance is on. */
+export function probeContextFor(deps: AnsweringDeps, task: Pick<QueryTaskRecord, "taskId" | "fieldProbes">, evidence?: readonly Evidence[]): ProbeContext | undefined {
   if (!deps.fieldProbes) return evidence ? { tracked: false, probes: [], evidence: lookup(evidence) } : undefined;
   return {
     tracked: true,
     probes: task.fieldProbes ?? [],
-    ...(deps.fieldAdvice ? { advice: (path: string) => latestAdvice(task, path) } : {}),
     ...(evidence ? { evidence: lookup(evidence) } : {}),
   };
 }

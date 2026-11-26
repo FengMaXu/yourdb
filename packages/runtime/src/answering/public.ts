@@ -1,7 +1,5 @@
 export { AnsweringError, InMemoryAnswering, SqlExecutionError, DEFAULT_QUERY_BUDGET_POLICY } from "./service.js";
 export { DATABASE_UNAVAILABLE, isDatabaseUnavailable } from "./errors.js";
-export { leanOf, type FieldAdvisory } from "./advice.js";
-export type { FieldAdviceOptions } from "./advice-execution.js";
 export type { Answering, AnsweringSqlExecutor, FanoutAnsweringOptions, InMemoryAnsweringOptions, SemanticQualificationMode, SqlQueryResult } from "./service.js";
 export {
   checkFanout,
@@ -37,7 +35,6 @@ export { FIELD_FORMS } from "./field-transition.js";
 export { quoteAppearsIn, type AuthorizedEvidenceDocument, type EvidenceSource } from "./evidence-admission.js";
 export type { ResultStore } from "./result-store.js";
 export {
-  type AdviceView,
   type AnswerRevisionView,
   type AnswerTaskView,
   type BusinessContext,

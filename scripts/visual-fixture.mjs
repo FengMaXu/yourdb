@@ -155,7 +155,7 @@ async function pinSessionFiles(sessionsRoot, sessionTimes) {
 /** Start the Web Host on a built fixture. Resolves once it listens; `stop()` ends it. */
 export async function startVisualHost({ dataDir, knowledgeRoot }, port = Number(process.env.DATA_AGENT_PORT ?? 8790)) {
   const child = spawn(process.execPath, [path.join(root, "scripts", "start-web-host.mjs")], {
-    env: { ...process.env, DATA_AGENT_DATA_DIR: dataDir, DATA_AGENT_KNOWLEDGE_DIR: knowledgeRoot, DATA_AGENT_PORT: String(port), DATA_AGENT_HOST: "127.0.0.1", DATA_AGENT_CHANNEL_IDLE_MINUTES: "0", FEISHU_APP_ID: "", FEISHU_APP_SECRET: "", TYPESAFE_API_KEY: "" },
+    env: { ...process.env, DATA_AGENT_DATA_DIR: dataDir, DATA_AGENT_KNOWLEDGE_DIR: knowledgeRoot, DATA_AGENT_PORT: String(port), DATA_AGENT_HOST: "127.0.0.1", DATA_AGENT_CHANNEL_IDLE_MINUTES: "0", FEISHU_APP_ID: "", FEISHU_APP_SECRET: "" },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let output = "";
