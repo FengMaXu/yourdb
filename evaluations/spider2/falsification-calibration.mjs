@@ -20,7 +20,7 @@ import { DatabaseSync } from "node:sqlite";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "../..");
 const dist = (file) => pathToFileURL(path.join(root, "packages/runtime/dist/answering", file)).href;
-const { evaluateDataFalsification } = await import(dist("data-falsification.js"));
+const { evaluateDataFalsification, DATA_FALSIFICATION_RULE_VERSION } = await import(dist("data-falsification.js"));
 const { evaluateResultDomain } = await import(dist("result-domain.js"));
 const { maskSql } = await import(dist("sql-lex.js"));
 
@@ -89,6 +89,20 @@ function sqliteExecutor(file) {
   const db = new DatabaseSync(file, { readOnly: true });
   return {
     dialect: "sqlite",
+    getSchema: async () => {
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY type, rowid").all();
+      const rawTables = tables.map((table) => {
+        const columns = db.prepare("SELECT * FROM pragma_table_info(?)").all(table.name);
+        const primaryKey = columns.filter((col) => Number(col.pk) > 0).sort((a, b) => Number(a.pk) - Number(b.pk)).map((col) => col.name);
+        return {
+          name: table.name,
+          columns: columns.map((col) => col.name),
+          columnTypes: Object.fromEntries(columns.flatMap((col) => typeof col.type === "string" && col.type.trim() ? [[col.name, col.type.trim()]] : [])),
+          ...(primaryKey.length > 0 ? { primaryKey } : {}),
+        };
+      });
+      return { dialect: "sqlite", tables: rawTables };
+    },
     run: async (sql, limit) => {
       const statement = db.prepare(sql);
       const columns = statement.columns().map((column) => column.name);
@@ -209,7 +223,7 @@ async function main() {
   const holdout = options.holdout ? await evaluate(holdoutCases(options.holdout), databases) : [];
   const report = {
     generatedAt: new Date().toISOString(),
-    ruleVersions: { resultDomain: "result-domain-v1", dataFalsification: "data-falsification-v1" },
+    ruleVersions: { resultDomain: "result-domain-v1", dataFalsification: DATA_FALSIFICATION_RULE_VERSION },
     sources: { dev: options.dev, holdout: options.holdout ?? null, databases },
     dev: { ...tally(dev, labels), cases: dev },
     holdout: { ...tally(holdout, labels), cases: holdout },

@@ -78,6 +78,7 @@ describe("SQLite MCP server", () => {
     const seed = new DatabaseSync(dbPath);
     seed.exec(`CREATE TABLE "Db-IMDB__Movie" (id INTEGER PRIMARY KEY, title TEXT UNIQUE);
       CREATE TABLE "it's" (movie_id INTEGER REFERENCES "Db-IMDB__Movie"(id));
+      CREATE TABLE "implicit_ref" (movie_id INTEGER REFERENCES "Db-IMDB__Movie");
       CREATE TABLE "sqlite-sakila__actor" (actor_id INTEGER);
       CREATE VIEW titles AS SELECT title FROM "Db-IMDB__Movie";
       ANALYZE;`);
@@ -91,6 +92,7 @@ describe("SQLite MCP server", () => {
     expect(schema).toEqual([
       { table: "Db-IMDB__Movie", columns: expect.any(Array), primaryKey: ["id"], uniqueKeys: [["title"]] },
       { table: "it's", columns: expect.any(Array), foreignKeys: [{ columns: ["movie_id"], references: { table: "Db-IMDB__Movie", columns: ["id"] } }] },
+      { table: "implicit_ref", columns: expect.any(Array), foreignKeys: [{ columns: ["movie_id"], references: { table: "Db-IMDB__Movie", columns: ["id"] } }] },
       { table: "sqlite-sakila__actor", columns: expect.any(Array) },
       { table: "titles", columns: [expect.objectContaining({ name: "title" })] },
     ]);

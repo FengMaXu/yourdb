@@ -23,6 +23,21 @@ export const SCHEMA_PROFILE_TIMEOUT_MS = 5_000;
 /** Text columns sampled for low-cardinality values per table, and values kept per column. */
 export const SCHEMA_PROFILE_ENUM_COLUMNS = 5;
 export const SCHEMA_PROFILE_ENUM_VALUES = 20;
+/** Maximum inferred shared-key join candidates included in one SchemaTopology summary. */
+export const SCHEMA_TOPOLOGY_MAX_CANDIDATES = 40;
+
+export interface SchemaJoinEdge {
+  readonly source: "foreign_key" | "shared_key";
+  readonly fromTable: string;
+  readonly fromColumns: readonly string[];
+  readonly toTable: string;
+  readonly toColumns: readonly string[];
+}
+
+export interface SchemaTopology {
+  readonly foreignKeys: readonly SchemaJoinEdge[];
+  readonly sharedKeyCandidates: readonly SchemaJoinEdge[];
+}
 
 export type TimeFormat = "iso_date" | "iso_timestamp" | "integer" | "other";
 
@@ -126,8 +141,13 @@ export class SchemaProfile {
 
   async schemaTable(table: string, context: BusinessContext): Promise<FanoutSchemaTable | undefined> {
     const schema = await this.loadSchema(context).catch(() => undefined);
-    const wanted = table.toLowerCase();
-    return schema?.tables.find((item) => item.name.toLowerCase() === wanted || item.name.toLowerCase().split(".").at(-1) === wanted.split(".").at(-1));
+    return findSchemaTable(schema, table);
+  }
+
+  /** Native foreign-key and candidate shared-key join topology across the database schema. */
+  async topology(context: BusinessContext): Promise<SchemaTopology | undefined> {
+    const schema = await this.loadSchema(context).catch(() => undefined);
+    return schema ? extractSchemaTopology(schema) : undefined;
   }
 
   /** The profile of one table, read once per session. */
@@ -189,6 +209,139 @@ function timeLike(schema: FanoutSchemaTable | undefined): readonly string[] {
 
 function moneyLike(schema: FanoutSchemaTable | undefined): readonly string[] {
   return (schema?.columns ?? []).filter((name) => MONEY_NAME.test(name) && (!schema?.columnTypes?.[name] || NUMERIC_TYPE.test(schema.columnTypes[name]!)));
+}
+
+const GENERIC_KEY_NAMES = new Set(["id", "code", "name", "key", "type", "status", "date", "value", "index"]);
+const SPECIFIC_KEY_COLUMN = /^[a-z][a-z0-9_]*_(id|key|code)$/i;
+
+function findSchemaTable(schema: FanoutSchema | undefined, table: string): FanoutSchemaTable | undefined {
+  const wanted = table.toLowerCase();
+  return schema?.tables.find((item) => item.name.toLowerCase() === wanted || item.name.toLowerCase().split(".").at(-1) === wanted.split(".").at(-1));
+}
+
+function edgePairKey(tableA: string, colsA: readonly string[], tableB: string, colsB: readonly string[]): string {
+  const sideA = `${tableA.toLowerCase()}:${colsA.map((col) => col.toLowerCase()).join(",")}`;
+  const sideB = `${tableB.toLowerCase()}:${colsB.map((col) => col.toLowerCase()).join(",")}`;
+  return [sideA, sideB].sort().join("<>");
+}
+
+function matchColumns(columns: readonly string[], targetColumns: readonly string[]): readonly string[] | undefined {
+  const matched: string[] = [];
+  for (const target of targetColumns) {
+    const found = columns.find((col) => col.toLowerCase() === target.toLowerCase());
+    if (!found) return undefined;
+    matched.push(found);
+  }
+  return matched;
+}
+
+function compareEdges(left: SchemaJoinEdge, right: SchemaJoinEdge): number {
+  const a = `${left.fromTable.toLowerCase()}:${left.fromColumns.join(",").toLowerCase()}->${left.toTable.toLowerCase()}:${left.toColumns.join(",").toLowerCase()}`;
+  const b = `${right.fromTable.toLowerCase()}:${right.fromColumns.join(",").toLowerCase()}->${right.toTable.toLowerCase()}:${right.toColumns.join(",").toLowerCase()}`;
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * Physical join topology derived strictly from database metadata (ADR-0007):
+ * declared foreign keys plus exact shared-key candidates (declared keys first,
+ * then specific `*_id` / `*_key` / `*_code` fallback for PK-less schemas).
+ */
+export function extractSchemaTopology(schema: FanoutSchema | undefined): SchemaTopology {
+  if (!schema || schema.tables.length === 0) return { foreignKeys: [], sharedKeyCandidates: [] };
+  const foreignKeys: SchemaJoinEdge[] = [];
+  const seenPairs = new Set<string>();
+  const fkExactSeen = new Set<string>();
+
+  for (const table of schema.tables) {
+    for (const fk of table.foreignKeys ?? []) {
+      const targetTable = findSchemaTable(schema, fk.references.table);
+      const toTable = targetTable?.name ?? fk.references.table;
+      const explicitTo = fk.references.columns;
+      const toColumns = explicitTo.length > 0
+        ? explicitTo
+        : targetTable?.primaryKey && targetTable.primaryKey.length === fk.columns.length
+          ? targetTable.primaryKey
+          : [];
+      const exactKey = `${table.name.toLowerCase()}:${fk.columns.join(",").toLowerCase()}->${toTable.toLowerCase()}:${toColumns.join(",").toLowerCase()}`;
+      if (fkExactSeen.has(exactKey)) continue;
+      fkExactSeen.add(exactKey);
+      foreignKeys.push({
+        source: "foreign_key",
+        fromTable: table.name,
+        fromColumns: [...fk.columns],
+        toTable,
+        toColumns: [...toColumns],
+      });
+      seenPairs.add(edgePairKey(table.name, fk.columns, toTable, toColumns));
+    }
+  }
+
+  const pkCandidates: SchemaJoinEdge[] = [];
+  for (const target of schema.tables) {
+    const keySets = [...(target.primaryKey?.length ? [target.primaryKey] : []), ...(target.uniqueKeys ?? [])];
+    for (const keyColumns of keySets) {
+      if (keyColumns.length === 0) continue;
+      if (keyColumns.length === 1 && GENERIC_KEY_NAMES.has(keyColumns[0]!.toLowerCase())) continue;
+      const targetCols = matchColumns(target.columns, keyColumns) ?? keyColumns;
+      for (const other of schema.tables) {
+        if (other.name.toLowerCase() === target.name.toLowerCase()) continue;
+        const otherCols = matchColumns(other.columns, keyColumns);
+        if (!otherCols) continue;
+        const pair = edgePairKey(other.name, otherCols, target.name, targetCols);
+        if (seenPairs.has(pair)) continue;
+        seenPairs.add(pair);
+        pkCandidates.push({
+          source: "shared_key",
+          fromTable: other.name,
+          fromColumns: otherCols,
+          toTable: target.name,
+          toColumns: [...targetCols],
+        });
+      }
+    }
+  }
+
+  const bySpecificColumn = new Map<string, { readonly table: FanoutSchemaTable; readonly column: string }[]>();
+  for (const table of schema.tables) {
+    const seenInTable = new Set<string>();
+    for (const column of table.columns) {
+      const lower = column.toLowerCase();
+      if (!SPECIFIC_KEY_COLUMN.test(lower) || seenInTable.has(lower)) continue;
+      seenInTable.add(lower);
+      bySpecificColumn.set(lower, [...(bySpecificColumn.get(lower) ?? []), { table, column }]);
+    }
+  }
+
+  const fallbackCandidates: SchemaJoinEdge[] = [];
+  for (const column of [...bySpecificColumn.keys()].sort()) {
+    const entries = bySpecificColumn.get(column)!;
+    if (entries.length < 2 || entries.length > 6) continue;
+    const sorted = [...entries].sort((left, right) => left.table.name.toLowerCase().localeCompare(right.table.name.toLowerCase()));
+    for (let leftIndex = 0; leftIndex < sorted.length; leftIndex += 1) {
+      for (let rightIndex = leftIndex + 1; rightIndex < sorted.length; rightIndex += 1) {
+        const left = sorted[leftIndex]!;
+        const right = sorted[rightIndex]!;
+        const pair = edgePairKey(left.table.name, [left.column], right.table.name, [right.column]);
+        if (seenPairs.has(pair)) continue;
+        seenPairs.add(pair);
+        fallbackCandidates.push({
+          source: "shared_key",
+          fromTable: left.table.name,
+          fromColumns: [left.column],
+          toTable: right.table.name,
+          toColumns: [right.column],
+        });
+      }
+    }
+  }
+
+  foreignKeys.sort(compareEdges);
+  pkCandidates.sort(compareEdges);
+  fallbackCandidates.sort(compareEdges);
+  return {
+    foreignKeys,
+    sharedKeyCandidates: [...pkCandidates, ...fallbackCandidates].slice(0, SCHEMA_TOPOLOGY_MAX_CANDIDATES),
+  };
 }
 
 // --- physical multi-candidate reminder ---------------------------------------

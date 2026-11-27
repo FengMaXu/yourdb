@@ -73,6 +73,8 @@ export interface QueryDigest {
   readonly grammar: string;
   readonly tables: readonly string[];
   readonly blocks: readonly DigestBlock[];
+  /** Multi-dialect system clock calls or bare keywords (e.g. CURRENT_DATE, NOW(), DATE('now')). */
+  readonly currentTimeExpressions: readonly string[];
 }
 
 export type DigestResult = QueryDigest | { readonly status: "unsupported"; readonly reason: string };
@@ -137,9 +139,41 @@ function selectOf(value: unknown): Node | undefined {
   return undefined;
 }
 
+const CURRENT_TIME_FUNCTIONS = new Set([
+  "now", "current_date", "current_timestamp", "current_time", "curdate", "curtime",
+  "utc_date", "utc_timestamp", "utc_time", "sysdate", "getdate", "current_datetime",
+  "localtimestamp", "localtime", "clock_timestamp", "statement_timestamp", "transaction_timestamp",
+]);
+const BARE_CURRENT_TIME = new Set(["current_date", "current_timestamp", "current_time", "localtimestamp", "localtime", "sysdate"]);
+const SQLITE_NOW_FUNCTIONS = new Set(["date", "datetime", "time", "julianday", "unixepoch"]);
+
+function stringLiteral(value: unknown): string | undefined {
+  if (!isNode(value) || typeof value.type !== "string" || typeof value.value !== "string") return undefined;
+  return value.type.endsWith("_string") ? value.value.trim().toLowerCase() : undefined;
+}
+
+function functionName(node: Node): string | undefined {
+  const direct = name(node.name);
+  const schema = !direct && isNode(node.name) ? name(node.name.schema) : undefined;
+  const resolved = direct || schema;
+  return resolved ? resolved.toLowerCase() : undefined;
+}
+
+function currentTimeCall(node: Node): string | undefined {
+  if (node.type !== "function") return undefined;
+  const fn = functionName(node);
+  if (!fn) return undefined;
+  if (CURRENT_TIME_FUNCTIONS.has(fn)) return fn.toUpperCase();
+  const args = isNode(node.args) && Array.isArray(node.args.value) ? node.args.value : [];
+  if (SQLITE_NOW_FUNCTIONS.has(fn) && stringLiteral(args[0]) === "now") return `${fn.toUpperCase()}('now')`;
+  if (fn === "strftime" && stringLiteral(args[1]) === "now") return "STRFTIME('now')";
+  return undefined;
+}
+
 class Builder {
   readonly blocks: DigestBlock[] = [];
   readonly tables = new Set<string>();
+  readonly currentTimeExpressions = new Set<string>();
   private readonly ctes = new Map<string, number>();
 
   block(select: Node, kind: DigestBlock["kind"], depth: number, parent: number | undefined, blockName?: string): number {
@@ -248,14 +282,21 @@ class Builder {
       }
       if (node.type === "column_ref") {
         const column = columnOf(node);
+        if (column && !column.table && BARE_CURRENT_TIME.has(column.column)) {
+          this.currentTimeExpressions.add(column.column.toUpperCase());
+          return;
+        }
         if (column) out.columns.push(column);
         return;
       }
+      const clock = currentTimeCall(node);
+      if (clock) this.currentTimeExpressions.add(clock);
       if (node.type === "aggr_func" || (node.type === "function" && /^(count|sum|avg|min|max|median|total|group_concat|string_agg|array_agg)$/i.test(name(node.name) ?? ""))) {
         const windowed = Boolean(node.over);
         const args = isNode(node.args) ? node.args : {};
         const before = out.columns.length;
         visit(args.expr ?? args.value, true);
+        if (node.filter) visit(node.filter, inAggregate);
         out.aggregates.push({ fn: (name(node.name) ?? "").toLowerCase(), distinct: typeof args.distinct === "string" && /distinct/i.test(args.distinct), columns: out.columns.slice(before), windowed });
         if (windowed) out.windows += 1;
         return;
@@ -329,7 +370,13 @@ export function digestSql(sql: string, dialect: FanoutDialect = "sqlite"): Diges
       if (!select) { reason = "the statement is not a SELECT"; break; }
       const builder = new Builder();
       builder.block(select, "outer", 0, undefined);
-      result = { status: "parsed", grammar, tables: [...builder.tables], blocks: builder.blocks };
+      result = {
+        status: "parsed",
+        grammar,
+        tables: [...builder.tables],
+        blocks: builder.blocks,
+        currentTimeExpressions: [...builder.currentTimeExpressions].sort(),
+      };
       break;
     } catch (error) {
       reason = `the ${grammar} grammar could not read the statement: ${error instanceof Error ? error.message.slice(0, 160) : String(error)}`;

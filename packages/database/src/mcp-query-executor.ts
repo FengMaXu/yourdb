@@ -68,12 +68,15 @@ export interface McpQueryExecutionOptions {
   readonly scope?: { readonly scopeId: string; readonly connectionId: string };
 }
 
-/** Keep the declared column types that get_schema reports (e.g. PRAGMA table_info.type). */
+/** Keep the declared column types that get_schema reports (SQLite `type` or PG/MySQL `dataType`). */
 function columnTypesOf(columns: unknown): Record<string, string> | undefined {
   if (!Array.isArray(columns)) return undefined;
   const entries = columns.flatMap((column) => {
-    const record = column && typeof column === "object" ? column as { name?: unknown; type?: unknown } : undefined;
-    return typeof record?.name === "string" && typeof record.type === "string" && record.type.trim() ? [[record.name, record.type.trim()] as const] : [];
+    const record = column && typeof column === "object" ? column as { name?: unknown; type?: unknown; dataType?: unknown } : undefined;
+    const rawType = typeof record?.type === "string" && record.type.trim() ? record.type.trim()
+      : typeof record?.dataType === "string" && record.dataType.trim() ? record.dataType.trim()
+        : undefined;
+    return typeof record?.name === "string" && rawType ? [[record.name, rawType] as const] : [];
   });
   return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }

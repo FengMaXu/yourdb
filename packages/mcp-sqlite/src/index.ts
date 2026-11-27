@@ -145,7 +145,7 @@ export function createSqliteServer(options: SqliteServerOptions) {
     {},
     async () => {
       const tables = listTables.all();
-      const schema = tables.map((t: any) => {
+      const rawTables = tables.map((t: any) => {
         const columns = tableInfo.all(t.name) as Array<{ name: string; type?: string; pk?: number }>;
         const primaryKey = columns.filter((column) => Number(column.pk) > 0).sort((left, right) => Number(left.pk) - Number(right.pk)).map((column) => column.name);
         const indexes = indexList.all(t.name) as Array<{ name: string; unique?: number }>;
@@ -153,14 +153,32 @@ export function createSqliteServer(options: SqliteServerOptions) {
           const entries = indexInfo.all(index.name) as Array<{ name?: string; seqno?: number }>;
           return [entries.sort((left, right) => Number(left.seqno) - Number(right.seqno)).flatMap((entry) => entry.name ? [entry.name] : [])];
         }).filter((key) => key.length > 0);
-        const foreignRows = foreignKeyList.all(t.name) as Array<{ id?: number; seq?: number; from?: string; table?: string; to?: string }>;
-        const foreignKeys = [...new Set(foreignRows.map((row) => row.id).filter((id): id is number => id !== undefined))].flatMap((id) => {
-          const rows = foreignRows.filter((row) => row.id === id).sort((left, right) => Number(left.seq) - Number(right.seq));
+        const foreignRows = foreignKeyList.all(t.name) as Array<{ id?: number; seq?: number; from?: string; table?: string; to?: string | null }>;
+        return { name: t.name as string, columns, primaryKey, uniqueKeys, foreignRows };
+      });
+      const primaryKeyByTable = new Map(rawTables.map((item) => [item.name.toLowerCase(), item.primaryKey]));
+      const schema = rawTables.map((item) => {
+        const foreignKeys = [...new Set(item.foreignRows.map((row) => row.id).filter((id): id is number => id !== undefined))].flatMap((id) => {
+          const rows = item.foreignRows.filter((row) => row.id === id).sort((left, right) => Number(left.seq) - Number(right.seq));
           const first = rows[0];
           if (!first?.table) return [];
-          return [{ columns: rows.flatMap((row) => row.from ? [row.from] : []), references: { table: first.table, columns: rows.flatMap((row) => row.to ? [row.to] : []) } }];
+          const fromColumns = rows.flatMap((row) => row.from ? [row.from] : []);
+          const explicitTargetColumns = rows.flatMap((row) => row.to ? [row.to] : []);
+          const parentPk = explicitTargetColumns.length === 0 ? primaryKeyByTable.get(first.table.toLowerCase()) : undefined;
+          const targetColumns = explicitTargetColumns.length > 0
+            ? explicitTargetColumns
+            : parentPk && parentPk.length === fromColumns.length
+              ? parentPk
+              : [];
+          return [{ columns: fromColumns, references: { table: first.table, columns: targetColumns } }];
         });
-        return { table: t.name, columns, ...(primaryKey.length ? { primaryKey } : {}), ...(uniqueKeys.length ? { uniqueKeys } : {}), ...(foreignKeys.length ? { foreignKeys } : {}) };
+        return {
+          table: item.name,
+          columns: item.columns,
+          ...(item.primaryKey.length ? { primaryKey: item.primaryKey } : {}),
+          ...(item.uniqueKeys.length ? { uniqueKeys: item.uniqueKeys } : {}),
+          ...(foreignKeys.length ? { foreignKeys } : {}),
+        };
       });
       return { content: [{ type: "text", text: JSON.stringify({ schema, contractVersion: DATABASE_MCP_CONTRACT_VERSION }) }] };
     },

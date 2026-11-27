@@ -96,3 +96,29 @@ node evaluations/spider2/falsification-calibration.mjs \
   --labels evaluations/spider2/wrong118-classification-adjudicated.jsonl \
   --out evaluations/spider2/falsification-calibration-v1.json
 ```
+
+---
+
+## 6. `data-falsification-v2` 增量校准（`temporal_anchor_drift`，Stage 2 / T2.2）
+
+> 规则版本：`result-domain-v1`、`data-falsification-v2`
+> 校准明细：[`evaluations/spider2/falsification-calibration-v2.json`](../evaluations/spider2/falsification-calibration-v2.json)
+
+### 6.1 改动说明
+
+- 在 `sql-digest.ts` 识别多方言当前系统时钟表达式（`CURRENT_DATE`、`CURRENT_TIMESTAMP`、`CURRENT_TIME`、`NOW()`、`CURDATE()`、`SYSDATE()`、`GETDATE()`、`LOCALTIMESTAMP`、`CLOCK_TIMESTAMP()`、`DATE('now')`、`DATETIME('now')`、`STRFTIME(..., 'now')` 等）；
+- 在 `data-falsification.ts` 新增纯物理事实规则 `temporal_anchor_drift`：当 SQL 读取系统当前时间且 `SchemaProfile` 测得所读表全部可解析日历时间列最大值早于系统当前日期超过 **365 天**时，产出非阻断提示（列出系统日期与表内最大日期）；缺失 Schema、超 `SchemaProfile.maxRows`（200,000 行）或存在无法解析的时间列且无近期表兜底时一律记为 `unknown`，绝不静默标 `clear`；
+- 在 [`evaluations/spider2/falsification-calibration.mjs`](../evaluations/spider2/falsification-calibration.mjs) 的 SQLite 只读执行器中接入 `getSchema()`，使离线回放能驱动 `SchemaProfile`。
+
+### 6.2 `v2` 回放结果
+
+| 集合 | 可用题数（错 / 对） | `data_falsification` 四态覆盖（finding / clear / not_applicable / unknown） | `temporal_anchor_drift` 错题召回 | `temporal_anchor_drift` 正确题误报 |
+| --- | --- | --- | --- | --- |
+| 开发集（`fewshot135`） | 129（82 / 47） | 1 / 20 / 105 / 3 | 0/82（0.0%） | **0/47（0.0%）** |
+| 独立留出集（`paired040`） | 34（23 / 11） | 0 / 9 / 25 / 0 | 0/23（0.0%） | **0/11（0.0%）** |
+
+其余 7 条 `v1` 子规则与覆盖统计同第 2 节完全一致，`left_join_degenerated` 保持开发集错题 `1/82`、正确题 `0/47`。
+
+### 6.3 结论
+
+- `temporal_anchor_drift` 在独立留出集正确题上的误报率为 **0.0%（≤ 1%）**，满足 [ADR-0003](./adr/0003-detect-inform-never-block.md) 校准门槛；按既有约定保持**仅非阻断告知与披露**（`blocking: false`）。

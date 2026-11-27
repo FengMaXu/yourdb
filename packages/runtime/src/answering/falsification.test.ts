@@ -7,7 +7,9 @@ import { evaluateCandidateCheckReport } from "./candidate-checks.js";
 import { InMemoryAnswering } from "./service.js";
 import { InMemoryAnsweringStore } from "./answering-store.js";
 import { InMemoryResultStore } from "./result-store.js";
+import { SchemaProfile } from "./schema-profile.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
+import type { FanoutSchema } from "./fanout-check.js";
 import type { BusinessContext, SpecFields } from "./model.js";
 
 const context = (invocationId = "invocation"): BusinessContext => ({ principal: { id: "user-1" }, sessionId: "session-1", lane: "main", operationId: "operation-1", invocationId });
@@ -229,9 +231,89 @@ describe("T4.3 data falsification", () => {
     const broken: AnsweringSqlExecutor = { run: async () => { throw new Error("no such table"); } };
     const unknown = await evaluateDataFalsification(broken, "SELECT SUM(amount) FROM orders WHERE created_at <= '2018-12-31'", { rows: [[1]] }, context());
     expect(unknown.status).toBe("unknown");
-    expect(dataFalsificationCoverage(unknown)).toMatchObject({ checkId: "data_falsification", ruleVersion: "data-falsification-v1", outcome: "unknown" });
+    expect(dataFalsificationCoverage(unknown)).toMatchObject({ checkId: "data_falsification", ruleVersion: "data-falsification-v2", outcome: "unknown" });
     const none = await evaluateDataFalsification(broken, "SELECT 1", { rows: [[1]] }, context());
     expect(dataFalsificationCoverage(none)).toMatchObject({ outcome: "not_applicable" });
+  });
+
+  it("detects temporal_anchor_drift objectively across historical vs fresh tables and keeps unknown when range cannot be proven", async () => {
+    const schemaOf = (tables: FanoutSchema["tables"]): FanoutSchema => ({ dialect: "sqlite", tables });
+    const withSchema = (exec: AnsweringSqlExecutor, tables: FanoutSchema["tables"]): AnsweringSqlExecutor => ({
+      ...exec,
+      getSchema: async () => schemaOf(tables),
+    });
+
+    const historical = withSchema(db(), [
+      { name: "orders", columns: ["id", "customer_id", "created_at", "amount"], columnTypes: { id: "INTEGER", customer_id: "INTEGER", created_at: "TEXT", amount: "INTEGER" } },
+    ]);
+    const refNow = () => new Date("2026-11-26T12:00:00Z");
+
+    const drift = await evaluateDataFalsification(historical, "SELECT COUNT(*) FROM orders WHERE created_at >= DATE('now', '-30 day')", { rows: [[0]] }, context(), { now: refNow });
+    expect(drift.status).toBe("finding");
+    expect(drift.applied).toContain("temporal_anchor_drift");
+    expect(drift.findings).toEqual([expect.objectContaining({
+      rule: "temporal_anchor_drift",
+      message: expect.stringContaining("2026-11-26"),
+    })]);
+    expect(drift.findings[0]!.message).toContain("2018-12-31");
+    expect(drift.findings[0]!.message).toContain("orders.created_at");
+
+    // Near-real-time table and exact 365-day boundary remain clear; 366 days drifts.
+    const recentDb = withSchema(sqlite([
+      "CREATE TABLE events (id INTEGER, occurred_on TEXT);",
+      "INSERT INTO events VALUES (1, '2025-11-26');",
+    ].join("\n")), [{ name: "events", columns: ["id", "occurred_on"], columnTypes: { id: "INTEGER", occurred_on: "TEXT" } }]);
+    const exact365 = await evaluateDataFalsification(recentDb, "SELECT COUNT(*) FROM events WHERE occurred_on <= CURRENT_DATE", { rows: [[1]] }, context(), { now: refNow });
+    expect(exact365.status).toBe("clear");
+    expect(exact365.findings).toEqual([]);
+
+    const day366 = await evaluateDataFalsification(recentDb, "SELECT COUNT(*) FROM events WHERE occurred_on <= CURRENT_DATE", { rows: [[1]] }, context(), { now: () => new Date("2026-11-27T00:00:00Z") });
+    expect(day366.status).toBe("finding");
+    expect(day366.findings[0]?.rule).toBe("temporal_anchor_drift");
+
+    // Missing schema -> unknown (never clear).
+    const noSchema = await evaluateDataFalsification(db(), "SELECT COUNT(*) FROM orders WHERE created_at >= DATE('now')", { rows: [[0]] }, context(), { now: refNow });
+    expect(noSchema.status).toBe("unknown");
+
+    // Large table skipped by SchemaProfile.maxRows -> unknown (never clear or false finding).
+    const smallProfile = new SchemaProfile(historical, async () => schemaOf([{ name: "orders", columns: ["id", "created_at"], columnTypes: { created_at: "TEXT" } }]), { maxRows: 1 });
+    const tooLarge = await evaluateDataFalsification(historical, "SELECT COUNT(*) FROM orders WHERE created_at >= CURRENT_DATE", { rows: [[0]] }, context(), { now: refNow, schemaProfile: smallProfile });
+    expect(tooLarge.status).toBe("unknown");
+
+    // Unparseable time value -> unknown.
+    const badDateDb = withSchema(sqlite([
+      "CREATE TABLE logs (id INTEGER, created_at TEXT);",
+      "INSERT INTO logs VALUES (1, 'Q4-2018');",
+    ].join("\n")), [{ name: "logs", columns: ["id", "created_at"], columnTypes: { id: "INTEGER", created_at: "TEXT" } }]);
+    const unparseable = await evaluateDataFalsification(badDateDb, "SELECT COUNT(*) FROM logs WHERE created_at >= CURRENT_DATE", { rows: [[0]] }, context(), { now: refNow });
+    expect(unparseable.status).toBe("unknown");
+
+    // Table without time columns -> unknown.
+    const dimDb = withSchema(db(), [{ name: "customers", columns: ["id", "name", "status"], columnTypes: { id: "INTEGER", name: "TEXT", status: "TEXT" } }]);
+    const noTimeCol = await evaluateDataFalsification(dimDb, "SELECT COUNT(*), CURRENT_DATE FROM customers", { rows: [[2, "2026-11-26"]] }, context(), { now: refNow });
+    expect(noTimeCol.status).toBe("unknown");
+
+    // Query without clock references -> not_applicable for temporal_anchor_drift.
+    const noClock = await evaluateDataFalsification(historical, "SELECT COUNT(*) FROM orders", { rows: [[3]] }, context(), { now: refNow });
+    expect(noClock.status).toBe("not_applicable");
+  });
+
+  it("wires schemaProfile into result execution so temporal_anchor_drift discloses non-blockingly", async () => {
+    const executor: AnsweringSqlExecutor = {
+      ...db(),
+      getSchema: async () => ({
+        dialect: "sqlite",
+        tables: [{ name: "orders", columns: ["id", "customer_id", "created_at", "amount"], columnTypes: { created_at: "TEXT" } }],
+      }),
+    };
+    const answering = new InMemoryAnswering({ store: new InMemoryAnsweringStore(), resultStore: new InMemoryResultStore(), sqlExecutor: executor });
+    const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row" }, grouping: "n/a", selection: "n/a", output: { rowMode: "scalar", rowCount: 1 } };
+    const begun = await answering.set({ requestMessageId: "m", requestId: "begin", fields: spec }, context("begin"));
+    const execution = await answering.execute({ kind: "result", taskId: begun.taskId, revisionId: begun.revisionId, sql: "SELECT COUNT(*) FROM orders WHERE created_at >= DATE('now')" }, context("result"));
+    if (execution.artifact.kind !== "candidate") throw new Error("expected a candidate");
+    expect(execution.coverage).toContainEqual(expect.objectContaining({ checkId: "data_falsification", outcome: "finding", ruleVersion: "data-falsification-v2" }));
+    const receipt = await answering.publish({ candidateId: execution.artifact.candidateId, format: "auto", requestId: "publish" }, context("publish"));
+    expect(receipt.disclosure?.summary).toContain("SQL 与数据核对发现可能的偏差");
   });
 
   it("discloses a finding with the published Receipt and never blocks", async () => {
