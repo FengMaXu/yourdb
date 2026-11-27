@@ -17,7 +17,7 @@ const TOP_LEVEL_KEYS = new Set([
   "__path", "spider2Repo", "runsRoot", "spider2LiteRoot", "datasetPath", "evaluationSuite", "pythonExecutable",
   "localDatabasePackSha256", "concurrency", "scoreWorkers", "assurance", "llm", "modelProfiles", "selectedModelProfile",
   "limits", "backends", "answering", "queryTask", "delegation", "attemptPolicy", "comparisonPolicy", "scoring", "inputs",
-  "enableSubagents", "enableWidgets", "enableDashboards", "enableClarificationTool",
+  "enableSubagents", "enableWidgets", "enableDashboards", "enableClarificationTool", "oracleClarifier",
 ]);
 const LIMIT_KEYS = new Set(["timeoutMs", "providerTimeoutMs", "maxTurns", "maxToolCalls", "maxExploratoryQueries"]);
 const INLINE_SECRET_KEYS = /(?:api[_-]?key|password|secret|authorization|credential|token)/i;
@@ -128,6 +128,10 @@ export function validateExperimentConfig(config) {
   // ADR-0007: set_answer_spec is the only Answer Spec interface; the phase-1 switch is gone.
   if (config.answering?.specInterface !== undefined) throw new Error("DEPRECATED_CONFIG_FIELD:answering.specInterface");
   if (config.enableClarificationTool !== undefined && typeof config.enableClarificationTool !== "boolean") throw new Error("INVALID_CONFIG_VALUE:enableClarificationTool");
+  if (config.oracleClarifier !== undefined && typeof config.oracleClarifier !== "boolean") throw new Error("INVALID_CONFIG_VALUE:oracleClarifier");
+  if (config.oracleClarifier === true && config.enableClarificationTool === false) {
+    throw new Error("CONFLICTING_CLARIFICATION_FLAGS:oracleClarifier_requires_enableClarificationTool");
+  }
   return config;
 }
 
@@ -171,12 +175,18 @@ function capability(config, configured, resolved = configured) {
 
 function configuredCapabilities(config, activeTools, semanticSpecMode) {
   const fanoutEnabled = config.answering?.fanout?.enabled !== false;
+  const clarificationEnabled = config.enableClarificationTool !== false;
+  const oracleClarifierEnabled = config.oracleClarifier === true;
   return {
     tools: capability(config, [...activeTools], [...activeTools]),
     semanticSpec: capability(config, semanticSpecMode, semanticSpecMode),
     fanout: capability(config, fanoutEnabled, fanoutEnabled),
     delegation: capability(config, config.enableSubagents !== false, config.enableSubagents !== false),
-    clarification: capability(config, config.enableClarificationTool !== false, config.enableClarificationTool !== false),
+    clarification: {
+      ...capability(config, clarificationEnabled, clarificationEnabled),
+      oracleClarifier: oracleClarifierEnabled,
+      mode: !clarificationEnabled ? "disabled" : oracleClarifierEnabled ? "oracle_clarifier" : "interactive",
+    },
     widgets: capability(config, config.enableWidgets === true, config.enableWidgets === true),
     dashboards: capability(config, config.enableDashboards === true, config.enableDashboards === true),
   };
