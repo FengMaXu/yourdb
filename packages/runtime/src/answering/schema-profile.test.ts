@@ -4,7 +4,7 @@ import { InMemoryAnsweringStore } from "./answering-store.js";
 import { InMemoryResultStore } from "./result-store.js";
 import { ANSWERING_SNAPSHOT_VERSION, type AnsweringStoreSnapshot } from "./answering-store.js";
 import { parseFieldValue, FieldValueError } from "./fields.js";
-import { SchemaProfile, evaluatePhysicalCandidates } from "./schema-profile.js";
+import { SchemaProfile, evaluatePhysicalCandidates, extractSchemaTopology, SCHEMA_TOPOLOGY_MAX_CANDIDATES } from "./schema-profile.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
 import type { BusinessContext, SpecFields } from "./model.js";
 import type { FanoutSchema } from "./fanout-check.js";
@@ -105,6 +105,99 @@ describe("T5.3 Schema Profile", () => {
     // Opened or evidenced choices are not reminded of.
     const opened = { ...fields, "population.timeField": { state: "open", alternatives: [] }, "measure.formula": { ...fields["measure.formula"], basis: { kind: "evidence", evidenceIds: ["e"] } } } as unknown as SpecFields;
     expect((await evaluatePhysicalCandidates(opened, profile, context())).status).toBe("not_applicable");
+  });
+
+  it("extracts native FKs with implicit PK targets and exact shared-key candidates without noise", async () => {
+    const schema: FanoutSchema = {
+      dialect: "sqlite",
+      tables: [
+        {
+          name: "customers",
+          columns: ["customer_id", "tenant_key", "id", "email"],
+          primaryKey: ["customer_id"],
+          uniqueKeys: [["email"], ["id"]],
+        },
+        {
+          name: "orders",
+          columns: ["id", "order_id", "customer_id", "email"],
+          primaryKey: ["order_id"],
+          foreignKeys: [{ columns: ["customer_id"], references: { table: "customers", columns: [] } }],
+        },
+        {
+          name: "order_items",
+          columns: ["order_id", "sku", "id"],
+        },
+        {
+          name: "invoices",
+          columns: ["tenant_key", "id"],
+        },
+        {
+          name: "audit_logs",
+          columns: ["tenant_key", "id"],
+        },
+      ],
+    };
+
+    const topology = extractSchemaTopology(schema);
+    // Implicit FK target column resolved from parent PK, and generic bare `id` never emitted as shared_key.
+    expect(topology.foreignKeys).toEqual([
+      {
+        source: "foreign_key",
+        fromTable: "orders",
+        fromColumns: ["customer_id"],
+        toTable: "customers",
+        toColumns: ["customer_id"],
+      },
+    ]);
+    // orders <-> customers is not duplicated in sharedKeyCandidates because FK already covers customer_id.
+    expect(topology.sharedKeyCandidates).toEqual([
+      {
+        source: "shared_key",
+        fromTable: "order_items",
+        fromColumns: ["order_id"],
+        toTable: "orders",
+        toColumns: ["order_id"],
+      },
+      {
+        source: "shared_key",
+        fromTable: "orders",
+        fromColumns: ["email"],
+        toTable: "customers",
+        toColumns: ["email"],
+      },
+      {
+        source: "shared_key",
+        fromTable: "audit_logs",
+        fromColumns: ["tenant_key"],
+        toTable: "customers",
+        toColumns: ["tenant_key"],
+      },
+      {
+        source: "shared_key",
+        fromTable: "audit_logs",
+        fromColumns: ["tenant_key"],
+        toTable: "invoices",
+        toColumns: ["tenant_key"],
+      },
+      {
+        source: "shared_key",
+        fromTable: "customers",
+        fromColumns: ["tenant_key"],
+        toTable: "invoices",
+        toColumns: ["tenant_key"],
+      },
+    ]);
+
+    // Caps large candidate sets deterministically at SCHEMA_TOPOLOGY_MAX_CANDIDATES (each column in <= 6 tables).
+    const wideTables = Array.from({ length: 4 }, (_, index) => ({
+      name: `t${String(index).padStart(2, "0")}`,
+      columns: Array.from({ length: 8 }, (__, c) => `dim_${c}_id`),
+    }));
+    const capped = extractSchemaTopology({ dialect: "sqlite", tables: wideTables });
+    expect(capped.sharedKeyCandidates.length).toBe(SCHEMA_TOPOLOGY_MAX_CANDIDATES);
+
+    const profile = new SchemaProfile({ run: async () => { throw new Error("no SQL"); } }, async () => schema);
+    await expect(profile.topology(context())).resolves.toEqual(topology);
   });
 });
 

@@ -110,9 +110,19 @@ describe("Subagent delegation resolver", () => {
     expect(body.tables[0]).toMatchObject({ name: "orders", columns: [{ name: "order_id", type: "INTEGER" }, { name: "status", type: "TEXT" }], foreignKeys: [{ references: { table: "customers" } }] });
     expect(body.tables[1]).toMatchObject({ name: "customers", columns: [{ name: "customer_id", type: "INTEGER" }, { name: "name", type: "TEXT" }] });
     expect(body.tables[2]).toEqual({ name: "broken", columns: [{ name: "x" }] });
+    expect(body.joinTopology).toEqual({
+      foreignKeys: [{ source: "foreign_key", fromTable: "orders", fromColumns: ["customer_id"], toTable: "customers", toColumns: ["customer_id"] }],
+      sharedKeyCandidates: [],
+    });
     expect(body.notes).toEqual(["broken: column type lookup failed"]);
     // Only tables without executor-reported types trigger a catalog query.
     expect(queries).toEqual(["SELECT name, type FROM pragma_table_info('customers')", "SELECT name, type FROM pragma_table_info('broken')"]);
+
+    // Narrowing to a parent table still preserves incident FK and shared-key edges to neighbor tables.
+    const narrowedCustomers = await describe.execute("schema-customers", { tables: ["customers"] }, undefined, childContext, childInvocation("types-narrow"), TODO_CONTEXT);
+    const narrowedBody = JSON.parse(narrowedCustomers.content[0].text.replace(/^UNTRUSTED_TOOL_OUTPUT\n/, "").replace(/\nEND_UNTRUSTED_TOOL_OUTPUT$/, ""));
+    expect(narrowedBody.tables).toHaveLength(1);
+    expect(narrowedBody.joinTopology).toEqual(body.joinTopology);
   });
 
   it("notes that BigQuery column types need a dataset-qualified catalog", async () => {

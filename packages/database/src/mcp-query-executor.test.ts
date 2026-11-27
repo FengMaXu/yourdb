@@ -86,4 +86,24 @@ describe("MCP query executor connection lifecycle", () => {
       await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }, 15_000);
+
+  it("extracts columnTypes from both SQLite type and PG/MySQL dataType metadata", async () => {
+    const root = await mkdtemp(path.join(process.cwd(), ".tmp-mcp-schema-types-"));
+    const server = path.join(root, "server.mjs");
+    await writeFile(server, [
+      'import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";',
+      'import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";',
+      'const server = new McpServer({ name: "schema-types", version: "1.0.0" });',
+      'server.tool("get_schema", "schema", {}, async () => ({ content: [{ type: "text", text: JSON.stringify({ schema: [{ table: "events", columns: [{ name: "id", dataType: "integer" }, { name: "created_at", type: "TEXT" }] }] }) }] }));',
+      'await server.connect(new StdioServerTransport());',
+    ].join("\n"), "utf8");
+    const executor = createMcpQueryExecutor({ command: process.execPath, args: [server], reconnectDelaysMs: [] });
+    try {
+      const schema = await executor.getSchema();
+      expect(schema.tables[0]?.columnTypes).toEqual({ id: "integer", created_at: "TEXT" });
+    } finally {
+      await executor.close();
+      await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }, 15_000);
 });

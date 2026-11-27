@@ -77,4 +77,12 @@ export { renderActions, type AnsweringAction } from "./actions.js";
 export { renderEntityIdentity } from "./entity-identity.js";
 export { renderCalendarCoverage } from "./calendar-coverage.js";
 export { buildPhysicalProfile } from "./physical-profile.js";
-export { SCHEMA_PROFILE_MAX_ROWS, type SchemaProfileOptions, type TableProfile } from "./schema-profile.js";
+export {
+  extractSchemaTopology,
+  SCHEMA_PROFILE_MAX_ROWS,
+  SCHEMA_TOPOLOGY_MAX_CANDIDATES,
+  type SchemaJoinEdge,
+  type SchemaProfileOptions,
+  type SchemaTopology,
+  type TableProfile,
+} from "./schema-profile.js";

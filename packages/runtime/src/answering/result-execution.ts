@@ -439,8 +439,10 @@ export async function executeResult(
   }
 
   const fanout = await evaluateFanout(deps, taskId, revisionId, queryHash, input.sql.trim(), context);
-  // Plan T4.3: bounded SQL-vs-data probes; disclosed, never blocking.
-  const falsification = deps.semanticQualificationMode === "required" ? await evaluateDataFalsification(deps.sqlExecutor, input.sql, privateResult, context, deps.dataFalsification) : undefined;
+  // Plan T4.3 + T2.2: bounded SQL-vs-data probes and temporal anchor check; disclosed, never blocking.
+  const falsification = deps.semanticQualificationMode === "required"
+    ? await evaluateDataFalsification(deps.sqlExecutor, input.sql, privateResult, context, { ...deps.dataFalsification, schemaProfile: deps.schemaProfile })
+    : undefined;
   // Plan T5.3: several same-kind columns behind an assumed field; read from the schema only.
   const candidates = deps.semanticQualificationMode === "required" ? await evaluatePhysicalCandidates(sealed.fields, deps.schemaProfile, context) : undefined;
   // Entity identity and calendar coverage were read when the Revision committed; the sealed fields decide whether its findings still apply.

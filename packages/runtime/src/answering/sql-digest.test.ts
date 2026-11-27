@@ -64,6 +64,36 @@ describe("T5.1 Query Digest", () => {
     expect(digestSql("DELETE FROM t")).toMatchObject({ status: "unsupported", reason: "the statement is not a SELECT" });
   });
 
+  it("extracts multi-dialect current system time references without flagging literal dates or columns", () => {
+    expect(parsed("SELECT DATE('now'), DATETIME('now', '-7 day'), STRFTIME('%Y', 'now'), CURRENT_DATE, CURRENT_TIMESTAMP FROM orders", "sqlite").currentTimeExpressions).toEqual([
+      "CURRENT_DATE",
+      "CURRENT_TIMESTAMP",
+      "DATE('now')",
+      "DATETIME('now')",
+      "STRFTIME('now')",
+    ]);
+    expect(parsed("SELECT NOW(), CURRENT_DATE, LOCALTIMESTAMP, CLOCK_TIMESTAMP() FROM orders", "postgres").currentTimeExpressions).toEqual([
+      "CLOCK_TIMESTAMP",
+      "CURRENT_DATE",
+      "LOCALTIMESTAMP",
+      "NOW",
+    ]);
+    expect(parsed("SELECT NOW(), CURDATE(), SYSDATE() FROM orders", "mysql").currentTimeExpressions).toEqual([
+      "CURDATE",
+      "NOW",
+      "SYSDATE",
+    ]);
+    expect(parsed("SELECT CURRENT_DATE(), CURRENT_DATETIME() FROM orders", "bigquery").currentTimeExpressions).toEqual([
+      "CURRENT_DATE",
+      "CURRENT_DATETIME",
+    ]);
+    expect(parsed("SELECT GETDATE(), SYSDATE() FROM orders", "snowflake").currentTimeExpressions).toEqual([
+      "GETDATE",
+      "SYSDATE",
+    ]);
+    expect(parsed("SELECT DATE('2020-01-01'), STRFTIME('%Y', order_date) FROM orders WHERE note = 'now'", "sqlite").currentTimeExpressions).toEqual([]);
+  });
+
   it("keeps the parser and its AST types inside sql-digest.ts", () => {
     const dir = new URL(".", import.meta.url);
     const users = readdirSync(dir).filter((file) => file.endsWith(".ts") && !file.endsWith(".test.ts") && readFileSync(new URL(file, dir), "utf8").includes("node-sql-parser"));

@@ -2,7 +2,7 @@ import path from "node:path";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { withAbortSignal, type AgentToolResult, type Session } from "@earendil-works/pi-agent-core";
-import { isScopedReadOnlySql, type Answering, type BusinessContext, type FanoutSchema, type QueryExecutionScope } from "../answering/public.js";
+import { extractSchemaTopology, isScopedReadOnlySql, type Answering, type BusinessContext, type FanoutSchema, type QueryExecutionScope, type SchemaJoinEdge } from "../answering/public.js";
 import { DEFAULT_KNOWLEDGE_RESULTS, formatKnowledgeSearchResults, MAX_KNOWLEDGE_RESULTS, renderKnowledgeCatalog, type KnowledgeIndex } from "../knowledge.js";
 import type {
   ChildToolContext,
@@ -242,7 +242,7 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
         toolDefinitions.push(defineDataAgentTool({
           name: "describe_schema",
           label: "describe_schema",
-          description: "List tables with each column's name and declared type, plus primary, unique and foreign keys; pass table names to narrow the result.",
+          description: "List tables with each column's name and declared type, primary, unique and foreign keys, plus joinTopology (native foreign keys and candidate shared-key edges); pass table names to narrow the result.",
           replay: "safe",
           parameters: schemaParameters,
           async execute(_toolCallId, input, _onUpdate, _toolContext, invocation, childContext) {
@@ -251,10 +251,20 @@ export function createQueryTaskDelegationResolver(options: QueryTaskDelegationRe
             const schema = await getSchema(childContext.abortSignal);
             const tables = schema.tables.filter((table) => !wanted || wanted.includes(table.name.toLowerCase()));
             const typed = await withColumnTypes(sql, schema.dialect, tables, `${run.childSessionId}:${invocation.invocationId}`, childContext.abortSignal);
-            return untrustedText(bigintSafeJson({ dialect: schema.dialect, tables: typed.tables, ...(typed.notes.length > 0 ? { notes: typed.notes } : {}) }));
+            const fullTopology = extractSchemaTopology(schema);
+            const incident = (edge: SchemaJoinEdge) => !wanted || wanted.includes(edge.fromTable.toLowerCase()) || wanted.includes(edge.toTable.toLowerCase());
+            const foreignKeys = fullTopology.foreignKeys.filter(incident);
+            const sharedKeyCandidates = fullTopology.sharedKeyCandidates.filter(incident);
+            const hasTopology = foreignKeys.length > 0 || sharedKeyCandidates.length > 0;
+            return untrustedText(bigintSafeJson({
+              dialect: schema.dialect,
+              tables: typed.tables,
+              ...(hasTopology ? { joinTopology: { foreignKeys, sharedKeyCandidates } } : {}),
+              ...(typed.notes.length > 0 ? { notes: typed.notes } : {}),
+            }));
           },
         }, {
-          promptSnippet: "列出表、列名与类型及主键、唯一键、外键；可按表名缩小范围。",
+          promptSnippet: "列出表、列名与类型及主键、唯一键、外键与 joinTopology 关联边；可按表名缩小范围。",
           promptGuidelines: ["先列出相关表再按需查询；表结构只证明字段存在，不证明业务含义。"],
         }));
       }

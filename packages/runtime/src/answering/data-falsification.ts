@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { BusinessContext, CheckCoverage, Finding } from "./model.js";
 import { contentHash } from "./model.js";
+import { SchemaProfile } from "./schema-profile.js";
 import { maskSql } from "./sql-lex.js";
 import { degeneratedOuterJoins, digestSql, type QueryDigest } from "./sql-digest.js";
 import type { AnsweringSqlExecutor } from "./sql-execution.js";
@@ -18,19 +19,26 @@ import type { AnsweringSqlExecutor } from "./sql-execution.js";
  * 3. literal_not_matched: on an empty (or all-zero) result, `col = 'literal'`
  *    matches no row while the column has the value in another case or with
  *    surrounding spaces.
+ * 4. temporal_anchor_drift: the SQL reads the system clock (CURRENT_DATE,
+ *    NOW(), DATE('now'), ...), while all inspected table time columns end more
+ *    than TEMPORAL_ANCHOR_DRIFT_DAYS earlier than the system date.
  *
  * Findings are disclosed, never blocking, until offline replay calibrates
  * them (ADR-0003). A probe that cannot run makes the rule `unknown`, never
  * `clear`.
  */
 export const DATA_FALSIFICATION_CHECK_ID = "data_falsification";
-export const DATA_FALSIFICATION_RULE_VERSION = "data-falsification-v1";
+export const DATA_FALSIFICATION_RULE_VERSION = "data-falsification-v2";
 /** Probes per result query, over all rules. */
 export const DATA_FALSIFICATION_MAX_PROBES = 4;
 /** Each probe is abandoned after this long. */
 export const DATA_FALSIFICATION_TIMEOUT_MS = 3_000;
+/** Calendar-day gap above which current system clock references trigger a non-blocking drift notice. */
+export const TEMPORAL_ANCHOR_DRIFT_DAYS = 365;
+/** Cap on source tables profiled per result query for temporal anchor checks. */
+export const TEMPORAL_ANCHOR_MAX_TABLES = 5;
 
-export type DataFalsificationRule = "left_join_degenerated" | "date_upper_bound_truncated" | "literal_not_matched";
+export type DataFalsificationRule = "left_join_degenerated" | "date_upper_bound_truncated" | "literal_not_matched" | "temporal_anchor_drift";
 
 export interface DataFalsificationFinding {
   readonly rule: DataFalsificationRule;
@@ -300,6 +308,121 @@ async function literalFindings(text: Text, rels: Map<string, string>, probes: Pr
 export interface DataFalsificationOptions {
   readonly maxProbes?: number;
   readonly timeoutMs?: number;
+  readonly schemaProfile?: SchemaProfile;
+  readonly now?: () => Date;
+  readonly driftDays?: number;
+}
+
+const DIRECT_CLOCK_FALLBACK = /\b(now\s*\(\s*\)|current_timestamp(?:\s*\(\s*\d*\s*\))?|current_date(?:\s*\(\s*\))?|current_time(?:\s*\(\s*\d*\s*\))?|curdate\s*\(\s*\)|curtime\s*\(\s*\)|utc_date\s*\(\s*\)|utc_timestamp\s*\(\s*\)|utc_time\s*\(\s*\)|sysdate(?:\s*\(\s*\))?|getdate\s*\(\s*\)|current_datetime\s*\(\s*\)|localtimestamp(?:\s*\(\s*\d*\s*\))?|localtime(?:\s*\(\s*\d*\s*\))?|clock_timestamp\s*\(\s*\)|statement_timestamp\s*\(\s*\)|transaction_timestamp\s*\(\s*\))\b/g;
+const SQLITE_NOW_FALLBACK = /\b(date|datetime|time|julianday|unixepoch)\s*\(\s*'now'/g;
+const STRFTIME_NOW_FALLBACK = /\bstrftime\s*\(\s*'(?:[^']|'')*'\s*,\s*'now'/g;
+const CALENDAR_DATE = /^(\d{4})[-/](\d{2})[-/](\d{2})(?:$|[\sT]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?$)/;
+
+function parseTemporalDate(raw: string): { readonly dayMs: number; readonly isoDate: string } | undefined {
+  const match = CALENDAR_DATE.exec(raw.trim());
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return undefined;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return undefined;
+  return {
+    dayMs: date.getTime(),
+    isoDate: `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`,
+  };
+}
+
+function fallbackCurrentTimeExpressions(text: Text): readonly string[] {
+  const found = new Set<string>();
+  for (const match of text.masked.matchAll(DIRECT_CLOCK_FALLBACK)) {
+    found.add(match[1]!.replace(/\s+/g, "").replace(/\(\d*\)$/, "").toUpperCase());
+  }
+  for (const match of text.literals.matchAll(SQLITE_NOW_FALLBACK)) {
+    found.add(`${match[1]!.toUpperCase()}('now')`);
+  }
+  for (const _match of text.literals.matchAll(STRFTIME_NOW_FALLBACK)) {
+    found.add("STRFTIME('now')");
+  }
+  return [...found].sort();
+}
+
+async function temporalAnchorDriftFindings(
+  executor: AnsweringSqlExecutor,
+  digest: ReturnType<typeof digestSql>,
+  text: Text,
+  rels: Map<string, string>,
+  context: BusinessContext,
+  options: DataFalsificationOptions,
+  limitations: string[],
+): Promise<{ readonly applied: boolean; readonly findings: DataFalsificationFinding[] }> {
+  const exprs = digest.status === "parsed" ? digest.currentTimeExpressions : fallbackCurrentTimeExpressions(text);
+  const tables = [...new Set((digest.status === "parsed" ? digest.tables : [...rels.values()]).map((name) => name.trim().toLowerCase()).filter(Boolean))];
+  if (exprs.length === 0 || tables.length === 0) return { applied: false, findings: [] };
+
+  const profile = options.schemaProfile
+    ?? (executor.getSchema ? new SchemaProfile(executor, (ctx) => executor.getSchema!(ctx.signal), { ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}) }) : undefined);
+  if (!profile) {
+    limitations.push("no schema available to inspect table time ranges");
+    return { applied: true, findings: [] };
+  }
+
+  let incomplete = false;
+  const localLimitations: string[] = [];
+  if (tables.length > TEMPORAL_ANCHOR_MAX_TABLES) {
+    incomplete = true;
+    localLimitations.push(`more than ${TEMPORAL_ANCHOR_MAX_TABLES} tables queried; temporal range check incomplete`);
+  }
+
+  let latest: { readonly dayMs: number; readonly isoDate: string; readonly table: string; readonly column: string } | undefined;
+  for (const table of tables.slice(0, TEMPORAL_ANCHOR_MAX_TABLES)) {
+    let tableProfile;
+    try {
+      tableProfile = await profile.profile(table, context);
+    } catch {
+      incomplete = true;
+      localLimitations.push(`${table}: could not inspect table time columns`);
+      continue;
+    }
+    if (tableProfile.limitations.length > 0) {
+      incomplete = true;
+      for (const lim of tableProfile.limitations) localLimitations.push(`${table}: ${lim}`);
+    }
+    for (const tc of tableProfile.timeColumns) {
+      if (tc.max === undefined || tc.max.trim() === "") continue;
+      const parsed = parseTemporalDate(tc.max);
+      if (!parsed) {
+        incomplete = true;
+        localLimitations.push(`${tableProfile.table}.${tc.column} max value ${JSON.stringify(tc.max)} is not a calendar date`);
+        continue;
+      }
+      if (!latest || parsed.dayMs > latest.dayMs) latest = { ...parsed, table: tableProfile.table, column: tc.column };
+    }
+  }
+
+  const refDate = (options.now ?? (() => new Date()))();
+  const refDayMs = Date.UTC(refDate.getUTCFullYear(), refDate.getUTCMonth(), refDate.getUTCDate());
+  const refIsoDate = new Date(refDayMs).toISOString().slice(0, 10);
+  const driftDays = options.driftDays ?? TEMPORAL_ANCHOR_DRIFT_DAYS;
+
+  if (latest) {
+    const gapDays = Math.floor((refDayMs - latest.dayMs) / 86_400_000);
+    if (gapDays <= driftDays) return { applied: true, findings: [] };
+    if (!incomplete) {
+      return {
+        applied: true,
+        findings: [{
+          rule: "temporal_anchor_drift",
+          message: `The SQL reads current system time (${exprs.join(", ")}; system date ${refIsoDate}), while the latest date across queried tables is ${latest.isoDate} in ${latest.table}.${latest.column} (${gapDays} days earlier). Verify whether filtering or computing relative to the system clock vs. dataset time range is intended`,
+        }],
+      };
+    }
+    limitations.push(...localLimitations);
+    return { applied: true, findings: [] };
+  }
+
+  limitations.push(...(localLimitations.length > 0 ? localLimitations : ["queried tables have no parseable time column range to compare against current system time"]));
+  return { applied: true, findings: [] };
 }
 
 /** Whether a delivered result looks empty: no rows, or one row whose values are all NULL or zero. */
@@ -324,9 +447,14 @@ export async function evaluateDataFalsification(
   const join = digest.status === "parsed" ? digestJoinFindings(digest) : leftJoinFindings(text);
   const dates = await dateBoundFindings(text, rels, probes, limitations);
   const literals = looksEmpty(result.rows) ? await literalFindings(text, rels, probes, limitations) : { applied: false, findings: [] };
-  const findings = [...join.findings, ...dates.findings, ...literals.findings];
-  const applied = ([["left_join_degenerated", join.applied], ["date_upper_bound_truncated", dates.applied], ["literal_not_matched", literals.applied]] as const)
-    .filter(([, used]) => used).map(([rule]) => rule);
+  const temporal = await temporalAnchorDriftFindings(executor, digest, text, rels, context, options, limitations);
+  const findings = [...join.findings, ...dates.findings, ...literals.findings, ...temporal.findings];
+  const applied = ([
+    ["left_join_degenerated", join.applied],
+    ["date_upper_bound_truncated", dates.applied],
+    ["literal_not_matched", literals.applied],
+    ["temporal_anchor_drift", temporal.applied],
+  ] as const).filter(([, used]) => used).map(([rule]) => rule);
   const status = findings.length > 0 ? "finding" : applied.length === 0 ? "not_applicable" : limitations.length > 0 ? "unknown" : "clear";
   return { ruleVersion: DATA_FALSIFICATION_RULE_VERSION, status, findings, limitations: [...new Set(limitations)], applied };
 }
