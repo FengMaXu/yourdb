@@ -135,7 +135,7 @@ export function evaluateEntityIdentity(fields: SpecFields, observations: readonl
   const counts = countLayers(settledField(fields, "measure.formula"));
   for (const item of observations) {
     if (item.rows === undefined) continue;
-    if (item.keyColumns && item.distinctKeys !== undefined && item.distinctKeys < item.rows) {
+    if (item.keyColumns && item.distinctKeys !== undefined && item.distinctKeys < (item.distinctRows ?? item.rows)) {
       if (counts.some((layer) => typeof layer.of === "string" && item.keyColumns!.some((key) => names(layer.of as string, key)))) {
         const key = item.keyColumns.join(", ");
         findings.push({
@@ -151,8 +151,7 @@ export function evaluateEntityIdentity(fields: SpecFields, observations: readonl
         code: "duplicate_rows",
         paths: ["population.entity", "population.joinMultiplicity"],
         table: item.table,
-        // A data-quality fact, not a Spec instruction: deduplicating on this count alone turned a correct local041 answer wrong.
-        message: `${item.table} has ${item.rows} rows but ${item.distinctRows} distinct rows (${item.rows - item.distinctRows} exact duplicates). This is a data-quality fact, not a reason to deduplicate: count the rows as stored unless the request or a business document says a repeated row is the same entity`,
+        message: `${item.table} has ${item.rows} rows but ${item.distinctRows} distinct rows (${item.rows - item.distinctRows} exact duplicates). This is a data-quality fact, not a reason to deduplicate on its own; unless the request or a business document specifies whether repeated rows are the same entity or separate records, treat this as an open grain ambiguity or disclose it`,
       });
     }
   }

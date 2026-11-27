@@ -46,6 +46,21 @@ describe("entity identity rules", () => {
     expect(report.findings[0]!.message).toContain("not a reason to deduplicate");
   });
 
+  it("emits only neutral duplicate_rows when whole rows duplicate and distinctRows equals distinctKeys", () => {
+    const report = evaluateEntityIdentity(users, [{ table: "mst_users", keyColumns: ["user_id"], rows: 100, distinctRows: 95, distinctKeys: 95 }]);
+    expect(report.status).toBe("finding");
+    expect(report.findings).toHaveLength(1);
+    expect(report.findings[0]).toMatchObject({ code: "duplicate_rows" });
+    expect(report.findings[0]!.message).toContain("not a reason to deduplicate");
+    expect(report.findings[0]!.message).not.toContain("count the rows as stored");
+  });
+
+  it("emits both key_not_unique and duplicate_rows when key varies across distinct rows alongside exact duplicates", () => {
+    const report = evaluateEntityIdentity(users, [{ table: "mst_users", keyColumns: ["user_id"], rows: 100, distinctRows: 95, distinctKeys: 40 }]);
+    expect(report.status).toBe("finding");
+    expect(report.findings.map((item) => item.code)).toEqual(["key_not_unique", "duplicate_rows"]);
+  });
+
   it("is not applicable without a settled entity and source, and unknown when counts are missing", () => {
     expect(evaluateEntityIdentity(fieldsOf({ "population.entity": "user" }), []).status).toBe("not_applicable");
     expect(evaluateEntityIdentity(users, [{ table: "mst_users", keyColumns: ["user_id"], limitation: "the table could not be counted" }]).status).toBe("unknown");

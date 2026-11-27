@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DatabaseSync } from "node:sqlite";
-import { diffProbeSamples, sampleProbeOutput, witnessText, PROBE_SAMPLE_MAX_ROWS, WITNESS_CELL_CHARS } from "./probe-diff.js";
+import { diffProbeSamples, formatProbeNullCounts, probeNullCounts, sampleProbeOutput, witnessText, PROBE_SAMPLE_MAX_ROWS, WITNESS_CELL_CHARS } from "./probe-diff.js";
 import { evaluateResultDomain } from "./result-domain.js";
 import { evaluateDataFalsification, dataFalsificationCoverage } from "./data-falsification.js";
 import { evaluateCandidateCheckReport } from "./candidate-checks.js";
@@ -85,6 +85,54 @@ describe("T4.1 probe witness rows", () => {
     ]);
     const refreshed = await answering.set({ taskId: view.taskId, requestId: "noop", fields: {} }, context("noop"));
     expect(refreshed.fields.find((item) => item.path === "population.timeField")?.witnesses).toEqual(last.probe?.witnesses);
+  });
+
+  it("counts full-output NULLs across all rows even when the sample is truncated, keeping byte bounds", async () => {
+    const rows = Array.from({ length: 500 }, (_, index) => [
+      `k${String(index).padStart(4, "0")}`,
+      index >= 250 && index < 262 ? null : index === 499 ? undefined : "v",
+    ]);
+    const sample = sampleProbeOutput(["key", "metric"], rows);
+    expect(sample.complete).toBe(false);
+    expect(sample.totalRows).toBe(500);
+    expect(sample.rows.length).toBe(PROBE_SAMPLE_MAX_ROWS);
+    expect(JSON.stringify(sample).length).toBeLessThanOrEqual(16_384 + 200);
+    expect(probeNullCounts(sample)).toEqual([
+      { column: "key", count: 0 },
+      { column: "metric", count: 13 },
+    ]);
+    expect(formatProbeNullCounts(probeNullCounts(sample))).toBe("nulls=[metric:13]");
+    expect(formatProbeNullCounts([{ column: "a", count: 0 }, { column: "b", count: 0 }])).toBe("nulls=none");
+    expect(formatProbeNullCounts(Array.from({ length: 12 }, (_, index) => ({ column: `c${index}`, count: index + 1 })))).toBe(
+      "nulls=[c0:1, c1:2, c2:3, c3:4, c4:5, c5:6, c6:7, c7:8, c8:9, c9:10, +2 more]",
+    );
+    expect(formatProbeNullCounts(undefined)).toBeUndefined();
+    expect(formatProbeNullCounts([])).toBeUndefined();
+
+    const outputs: Record<string, { columns: string[]; rows: unknown[][]; truncated: boolean }> = {
+      "SELECT dense": { columns: ["id", "val"], rows: [[1, 10], [2, null]], truncated: false },
+      "SELECT huge": { columns: ["id", "val"], rows: [[1, 10]], truncated: true },
+    };
+    const answering = new InMemoryAnswering({
+      store: new InMemoryAnsweringStore(),
+      resultStore: new InMemoryResultStore(),
+      sqlExecutor: { run: async (sql) => outputs[sql]! },
+      fieldProbes: true,
+    });
+    const spec = { "population.entity": "orders", "population.eligibility": "n/a", "population.conditions": "n/a", "population.time": "n/a", "measure.formula": { op: "count", of: "orders" }, "measure.countGrain": { grain: "row", note: "one row per order" }, grouping: ["id"], selection: "n/a", output: { rowMode: "grouped" }, "population.timeField": { open: ["dense", "huge"] } };
+    const begun = await answering.set({ requestMessageId: "m", requestId: "begin", fields: spec }, context("begin"));
+    const [denseAlt, hugeAlt] = begun.fields.find((item) => item.path === "population.timeField")!.alternatives!.map((item) => item.id as string);
+    const denseProbe = await answering.execute({ kind: "exploration", taskId: begun.taskId, sql: "SELECT dense", probe: { path: "population.timeField", alternativeId: denseAlt! } }, context("p1"));
+    const hugeProbe = await answering.execute({ kind: "exploration", taskId: begun.taskId, sql: "SELECT huge", probe: { path: "population.timeField", alternativeId: hugeAlt! } }, context("p2"));
+    expect(denseProbe.probe?.rowCount).toBe(2);
+    expect(denseProbe.probe?.nullCounts).toEqual([{ column: "id", count: 0 }, { column: "val", count: 1 }]);
+    expect(hugeProbe.probe?.state).toBe("unavailable");
+    expect(hugeProbe.probe?.nullCounts).toBeUndefined();
+
+    const refreshed = await answering.set({ taskId: begun.taskId, requestId: "refresh", fields: {} }, context("refresh"));
+    const alternatives = refreshed.fields.find((item) => item.path === "population.timeField")!.alternatives!;
+    expect(alternatives[0]?.probe?.nullCounts).toEqual([{ column: "id", count: 0 }, { column: "val", count: 1 }]);
+    expect(alternatives[1]?.probe?.nullCounts).toBeUndefined();
   });
 });
 

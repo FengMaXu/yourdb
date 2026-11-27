@@ -2,7 +2,7 @@
 import type { FieldValue, SpecPath } from "./fields.js";
 import type { EntityIdentityReport } from "./entity-identity.js";
 import type { CalendarCoverageReport } from "./calendar-coverage.js";
-import type { WitnessRow } from "./probe-diff.js";
+import type { ProbeColumnNullCount, WitnessRow } from "./probe-diff.js";
 import type { TaskId, RevisionId, EvidenceId, AlternativeId, CandidateId } from "./ids.js";
 import type { QueryAttemptRecord, CheckCoverage, FanoutReport, BoundedResult, QueryArtifact, Finding, QueryTaskRecord, ParentBinding, Deviation, AnswerRevisionRecord, ResultCandidateRecord, PublicationReceipt } from "./records.js";
 
@@ -28,6 +28,8 @@ export interface ProbeView {
   readonly rowCount?: number;
   /** Short fingerprint prefix; equal prefixes mean equal outputs. */
   readonly output?: string;
+  /** Full-output per-column NULL counts, present when the probe is available. */
+  readonly nullCounts?: readonly ProbeColumnNullCount[];
   readonly reason?: string;
 }
 

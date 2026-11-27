@@ -72,7 +72,7 @@ export {
   isEvidenceKind,
   isScopedReadOnlySql,
 } from "./model.js";
-export { witnessText, type ProbeSample, type WitnessRow } from "./probe-diff.js";
+export { formatProbeNullCounts, probeNullCounts, PROBE_NULL_SUMMARY_MAX_COLUMNS, witnessText, type ProbeColumnNullCount, type ProbeSample, type WitnessRow } from "./probe-diff.js";
 export { renderActions, type AnsweringAction } from "./actions.js";
 export { renderEntityIdentity } from "./entity-identity.js";
 export { renderCalendarCoverage } from "./calendar-coverage.js";

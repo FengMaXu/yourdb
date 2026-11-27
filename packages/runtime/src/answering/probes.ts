@@ -1,4 +1,4 @@
-import { diffProbeSamples, WITNESS_MAX, type WitnessRow } from "./probe-diff.js";
+import { diffProbeSamples, probeNullCounts, WITNESS_MAX, type WitnessRow } from "./probe-diff.js";
 import { contentHash, type FieldAlternative, type FieldProbeRecord, type FieldRecord, type ProbeOutputs, type ProbeView, type ProbeWaiver, type SpecFields } from "./model.js";
 import { valueKey, type SpecPath } from "./fields.js";
 
@@ -63,7 +63,14 @@ export function summarizeProbes(path: SpecPath, alternatives: readonly FieldAlte
     }
     if (probe?.outcome.state === "available") {
       fingerprints.set(alternative.id, probe.outcome.fingerprint);
-      return { alternativeId: alternative.id, state: "available", rowCount: probe.rowCount, output: probe.outcome.fingerprint.slice(0, 12) };
+      const nullCounts = probeNullCounts(probe.sample);
+      return {
+        alternativeId: alternative.id,
+        state: "available",
+        rowCount: probe.rowCount,
+        output: probe.outcome.fingerprint.slice(0, 12),
+        ...(nullCounts ? { nullCounts } : {}),
+      };
     }
     if (probe) return { alternativeId: alternative.id, state: "unavailable", rowCount: probe.rowCount, reason: probe.outcome.reason };
     const waiver = waived.get(alternative.id);

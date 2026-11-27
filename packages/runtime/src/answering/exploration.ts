@@ -16,7 +16,7 @@ import { boundedResult } from "./sql-execution.js";
 import { asRecord, now } from "./support.js";
 import type { AnsweringDeps } from "./deps.js";
 import { PROBE_ROW_LIMIT, probeContext, summarizeProbes } from "./probes.js";
-import { sampleProbeOutput } from "./probe-diff.js";
+import { probeNullCounts, sampleProbeOutput } from "./probe-diff.js";
 import type { SpecPath } from "./fields.js";
 import { resultFingerprint } from "./result-fingerprint.js";
 
@@ -111,6 +111,8 @@ export async function executeExploration(
     const result = boundedResult(shown, input.maxPreviewBytes);
     const evidenceId = makeInternalId("evidence") as unknown as Evidence["id"];
     const observation: Evidence = { id: evidenceId, kind: "query_observation", authority: "observation", sourceRef: context.invocationId, preview: result, queryHash, contentHash: contentHash(result), observedAt: now() };
+    const probeSample = probe && !raw.truncated ? sampleProbeOutput(raw.columns, raw.rows) : undefined;
+    const probeFingerprint = probe && !raw.truncated ? resultFingerprint(raw.columns, raw.rows) : undefined;
     const postExecution = await deps.store.transact((tx) => {
       const current = tx.getTask(taskId);
       assertTaskAccess(current, context);
@@ -135,10 +137,10 @@ export async function executeExploration(
         evidenceId,
         context: probeContext(tx.getRevision(revisionId)?.fields ?? {}, probe.path),
         rowCount: raw.rows.length,
-        ...(raw.truncated ? {} : { sample: sampleProbeOutput(raw.columns, raw.rows) }),
+        ...(probeSample ? { sample: probeSample } : {}),
         outcome: raw.truncated
           ? { state: "unavailable", reason: `output exceeds ${PROBE_ROW_LIMIT} rows` }
-          : { state: "available", fingerprint: resultFingerprint(raw.columns, raw.rows) },
+          : { state: "available", fingerprint: probeFingerprint! },
         probedAt: now(),
       } : undefined;
       const fieldProbes = probeRecord
@@ -158,13 +160,14 @@ export async function executeExploration(
       throw new AnsweringError("IMPLEMENTATION_BUDGET_EXHAUSTED", postExecution.message, obstacleDetails(undefined, postExecution));
     }
     await context.memo?.set("answering.exploration-execution", { state: "settled", taskId: input.taskId, queryHash, evidenceId });
+    const nullCounts = probeNullCounts(probeSample);
     const probeView = probe ? {
       path: probe.path,
       alternativeId: probe.alternativeId as FieldProbeRecord["alternativeId"],
       rowCount: raw.rows.length,
       ...(raw.truncated
         ? { state: "unavailable" as const, reason: `output exceeds ${PROBE_ROW_LIMIT} rows` }
-        : { state: "available" as const, output: resultFingerprint(raw.columns, raw.rows).slice(0, 12) }),
+        : { state: "available" as const, output: probeFingerprint!.slice(0, 12), ...(nullCounts ? { nullCounts } : {}) }),
       ...(postExecution.witnesses.length > 0 ? { witnesses: postExecution.witnesses } : {}),
     } : undefined;
     return { kind: "exploration", artifact: { kind: "exploration", evidenceId, preview: result }, preview: result, findings: [], attemptId: attempt.attemptId, ...(probeView ? { probe: probeView } : {}) };
